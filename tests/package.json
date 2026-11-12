@@ -1,0 +1,10 @@
+{
+  "name": "makuta-links-center-tests",
+  "private": true,
+  "scripts": {
+    "test": "node test.js"
+  },
+  "devDependencies": {
+    "puppeteer-core": "23.11.1"
+  }
+}

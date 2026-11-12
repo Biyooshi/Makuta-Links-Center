@@ -1,0 +1,1233 @@
+<script>
+  const STATUSES = ["Draft", "In Progress", "In Review", "Revision", "Done"];
+  const STATUS_INFO = {
+    "Draft": "Still being drafted, not ready to share yet.",
+    "In Progress": "Actively being worked on.",
+    "In Review": "Waiting for feedback or approval.",
+    "Revision": "Needs changes after feedback.",
+    "Done": "Finished and approved.",
+  };
+  const REFERENCE_PROJECT = "REFERENCE";
+  const CATEGORY_ICONS = { "Google Docs": "📄", "Google Spreadsheets": "📈", "Google Slide": "📊", "Drive Folder": "📁", "CTC-Video": "🎬", "Reference": "🔖", "Other": "📌" };
+  const $ = id => document.getElementById(id);
+  const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  // "CTC-Video [VG-Arif]" -> { base: "CTC-Video", source: "VG-Arif" }
+  function splitCategory(c) {
+    const m = String(c).match(/^(CTC-Video) \[(.+)\]$/);
+    return m ? { base: m[1], source: m[2] } : { base: c, source: "" };
+  }
+  const categoryLabel = c => `${CATEGORY_ICONS[splitCategory(c).base] || "📌"} ${c}`;
+  const state = { links: [], tasks: [], cfg: null, app: {}, loaded: false, editingId: null, dupId: null, view: "table", editingTaskId: null, openHistory: new Set(), justMoved: null, justTicked: null };
+
+  const SORTERS = {
+    newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
+    oldest: (a, b) => a.createdAt.localeCompare(b.createdAt),
+    deadline: (a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"),
+    az: (a, b) => a.title.localeCompare(b.title),
+    za: (a, b) => b.title.localeCompare(a.title),
+  };
+
+  /* ---------- Server calls ---------- */
+  function api(fn, ...args) {
+    return new Promise((resolve, reject) =>
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args));
+  }
+
+  /* ---------- Helpers ---------- */
+  function escapeHtml(str) {
+    return String(str ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  const pad = n => String(n).padStart(2, "0");
+  const dayStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const today = () => dayStr(new Date());
+  const parseDay = day => { const [y, m, d] = day.split("-").map(Number); return new Date(y, m - 1, d); };
+  const daysAgo = n => dayStr(new Date(Date.now() - n * 864e5));
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  function formatDate(iso) {
+    const d = new Date(iso);
+    return !iso || isNaN(d) ? "-" : d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  // Local "yyyy-mm-dd" of when a link was added ("" if the date is missing/invalid)
+  function addedDay(l) {
+    const d = new Date(l.createdAt);
+    return !l.createdAt || isNaN(d) ? "" : dayStr(d);
+  }
+  function formatDay(day) {
+    return parseDay(day).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+  function daysUntil(day) {
+    const now = new Date();
+    return Math.round((parseDay(day) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
+  }
+  const isOverdue = l => !!l.deadline && l.status !== "Done" && l.deadline < today();
+
+  // Add https:// when the protocol is missing
+  function normalizeUrl(url) {
+    url = url.trim();
+    if (url && !/^[a-z][a-z0-9+.-]*:/i.test(url)) url = "https://" + url;
+    return url;
+  }
+  function isValidUrl(url) {
+    if (!/^https?:\/\/[^\s/.]+\.[^\s/]+\S*$/i.test(url)) return false;
+    try { return ["http:", "https:"].includes(new URL(url).protocol); } catch (e) { return false; }
+  }
+  // Only http(s) links are clickable (protects against odd values typed into the sheet)
+  const safeHref = url => /^https?:\/\//i.test(url) ? escapeHtml(url) : "#";
+  // Comparable form of a URL, so ".../edit?usp=sharing" and ".../view" count as the same link
+  function urlKey(url) {
+    try {
+      const u = new URL(normalizeUrl(url));
+      [...u.searchParams.keys()].forEach(k => { if (k === "usp" || k.startsWith("utm_")) u.searchParams.delete(k); });
+      const path = u.pathname.replace(/\/(edit|view|preview)$/i, "").replace(/\/+$/, "");
+      return (u.hostname.replace(/^www\./, "") + path + u.search).toLowerCase();
+    } catch (e) { return ""; }
+  }
+
+  function toggleTheme() {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("makutaTheme", next); } catch (e) {}
+  }
+
+  function toast(msg, isError) {
+    const el = $("toast");
+    el.textContent = (isError ? "⚠️ " : "✅ ") + msg;
+    el.classList.toggle("error", !!isError);
+    el.classList.add("show");
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => el.classList.remove("show"), isError ? 4000 : 2000);
+  }
+
+  /* ---------- Modals ---------- */
+  function openModal(id) { $(id).classList.add("show"); }
+  function closeModal(id) { $(id).classList.remove("show"); }
+
+  function confirmDialog({ emoji = "🗑️", title = "Delete this link?", message = "", ok = "Delete" } = {}) {
+    return new Promise(resolve => {
+      $("confirmEmoji").textContent = emoji;
+      $("confirmTitle").textContent = title;
+      $("confirmText").textContent = message;
+      $("confirmOk").textContent = ok;
+      openModal("confirmModal");
+      const done = result => {
+        closeModal("confirmModal");
+        $("confirmOk").onclick = $("confirmCancel").onclick = null;
+        resolve(result);
+      };
+      $("confirmOk").onclick = () => done(true);
+      $("confirmCancel").onclick = () => done(false);
+    });
+  }
+
+  document.querySelectorAll(".modal-bg").forEach(bg => bg.addEventListener("click", e => {
+    if (e.target !== bg) return;
+    if (bg.id === "confirmModal") $("confirmCancel").click(); else closeModal(bg.id);
+  }));
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    const open = document.querySelector(".modal-bg.show");
+    if (!open) return;
+    if (open.id === "confirmModal") $("confirmCancel").click(); else closeModal(open.id);
+  });
+
+  /* ---------- Clipboard (with fallback for the Apps Script iframe) ---------- */
+  function legacyCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+    return ok;
+  }
+  function copyText(text) {
+    const done = ok => ok ? toast("Link copied") : toast("Could not copy - please copy it manually", true);
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => done(true), () => done(legacyCopy(text)));
+    } else {
+      done(legacyCopy(text));
+    }
+  }
+
+  /* ---------- Views ---------- */
+  function showView(name) {
+    const views = { submit: "Submit", links: "Links", tasks: "Tasks" };
+    Object.keys(views).forEach(v => {
+      $("view" + views[v]).hidden = name !== v;
+      $("tab" + views[v]).classList.toggle("active", name === v);
+    });
+    $("container").classList.toggle("wide", name !== "submit");
+    if (name === "links") render();
+    if (name === "tasks") renderTasks();
+    // Restart the fade-in of the view that just opened
+    const view = $("view" + views[name]);
+    view.classList.remove("view-in");
+    void view.offsetWidth;
+    view.classList.add("view-in");
+  }
+
+  /* ---------- Data loading ---------- */
+  function loadData() {
+    $("results").innerHTML = `<div class="loading"><div class="spinner"></div>Loading your links...</div>`;
+    return api("getInitialData").then(data => {
+      state.links = data.links;
+      state.tasks = data.tasks;
+      state.cfg = data.taskConfig;
+      state.app = data;
+      state.loaded = true;
+      if (data.sheetUrl) $("sheetLink").href = data.sheetUrl;
+      setupBookmarklet();
+      refreshOptions();
+      setupTaskOptions();
+      render();
+      renderTasks();
+      checkDuplicate();
+    }).catch(err => {
+      const msg = `<div class="empty">Could not load data: ${escapeHtml(err.message)}<br><br><button class="btn-soft btn-sm" onclick="loadData()">Try again</button></div>`;
+      $("results").innerHTML = $("taskResults").innerHTML = msg;
+    });
+  }
+
+  function uniqueValues(key) {
+    return [...new Set(state.links.map(l => l[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  }
+
+  function fillSelect(id, values, allLabel, label = v => v) {
+    const sel = $(id), current = sel.value;
+    sel.innerHTML = `<option value="">${allLabel}</option>` +
+      values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(label(v))}</option>`).join("");
+    sel.value = values.includes(current) ? current : "";
+  }
+
+  function refreshOptions() {
+    updateProjectOrder();
+    const projects = uniqueValues("project");
+    $("projectList").innerHTML = projects.map(p => `<option value="${escapeHtml(p)}">`).join("");
+    fillSelect("fCategory", uniqueValues("category"), "All categories", categoryLabel);
+    fillSelect("fProject", projects, "All projects", p => `${projectIcon(p)} ${p}`);
+  }
+
+  function upsertLocal(link) {
+    const i = state.links.findIndex(l => l.id === link.id);
+    if (i >= 0) state.links[i] = link; else state.links.push(link);
+    refreshOptions();
+    render();
+  }
+
+  /* ---------- Form ---------- */
+  function showError(id, show) { $(id + "Err").hidden = !show; }
+
+  function updateStatusHint() {
+    const s = $("status").value;
+    $("statusHint").innerHTML = `${statusBadge(s)} ${escapeHtml(STATUS_INFO[s] || "")}`;
+  }
+
+  function addVersionRow(v) {
+    v = v || {};
+    const row = document.createElement("div");
+    row.className = "version-row";
+    row.innerHTML = `<input class="v-label" placeholder="Label, e.g. Part 2 / Assets"><input class="v-url" placeholder="https://..."><button type="button" class="btn-danger btn-sm" title="Remove">&#10005;</button>`;
+    row.querySelector(".v-label").value = v.label || "";
+    row.querySelector(".v-url").value = v.url || "";
+    row.querySelector("button").onclick = () => row.remove();
+    $("versionList").appendChild(row);
+  }
+
+  // Rows that are completely empty are ignored; a row with only a label is kept so it fails validation
+  function readVersions() {
+    return [...document.querySelectorAll(".version-row")].map(r => ({
+      label: r.querySelector(".v-label").value.trim(),
+      url: normalizeUrl(r.querySelector(".v-url").value),
+    })).filter(v => v.url || v.label);
+  }
+
+  function findDuplicate(url) {
+    const key = urlKey(url);
+    if (!key) return null;
+    return state.links.find(l => l.id !== state.editingId &&
+      [l.url, ...l.versions.map(v => v.url)].some(u => urlKey(u) === key));
+  }
+
+  function checkDuplicate() {
+    const dup = findDuplicate($("url").value);
+    state.dupId = dup ? dup.id : null;
+    $("dupWarning").hidden = !dup;
+    if (dup) {
+      $("dupText").innerHTML = `Saved as <strong>${escapeHtml(dup.title)}</strong>${dup.project ? ` (${escapeHtml(dup.project)})` : ""} on ${formatDate(dup.createdAt)}. You can still submit if this is intentional.`;
+    }
+  }
+
+  function viewDuplicate() {
+    const dup = state.links.find(l => l.id === state.dupId);
+    if (!dup) return;
+    resetFilters(false);
+    $("search").value = dup.title;
+    showView("links");
+  }
+
+  function ensureOption(select, value) {
+    if (value && ![...select.options].some(o => o.value === value)) select.add(new Option(value, value));
+  }
+
+  function resetForm() {
+    $("linkForm").reset();
+    $("versionList").innerHTML = "";
+    state.editingId = null;
+    $("editBanner").hidden = true;
+    $("submitLabel").textContent = "Submit Link";
+    ["title", "url", "category", "videoSource", "versions"].forEach(k => showError(k, false));
+    $("dupWarning").hidden = true;
+    updateStatusHint();
+    updateCategoryFields();
+  }
+
+  // CTC-Video needs a second choice: whose edit the video is.
+  // A Reference always belongs to the project "REFERENCE" (mirrors clean_ in Code.gs).
+  function updateCategoryFields() {
+    const isVideo = $("category").value === "CTC-Video";
+    $("videoSourceField").hidden = !isVideo;
+    if (!isVideo) {
+      $("videoSource").value = "";
+      showError("videoSource", false);
+    }
+    const isRef = $("category").value === "Reference";
+    $("project").readOnly = isRef;
+    if (isRef) $("project").value = REFERENCE_PROJECT;
+    else if ($("project").value === REFERENCE_PROJECT) $("project").value = "";
+  }
+
+  // True when the form has unsaved input (so we don't silently throw it away)
+  function formIsDirty() {
+    return ["title", "url", "project", "purpose", "deadline"].some(id => $(id).value.trim()) ||
+      document.querySelectorAll(".version-row").length > 0;
+  }
+
+  async function startEdit(link) {
+    if (state.editingId !== link.id && formIsDirty() && !await confirmDialog({
+      emoji: "📝", title: "Discard unsaved changes?",
+      message: "The form has text you haven't saved yet. Continue and replace it with this link?", ok: "Discard & Edit",
+    })) return;
+    resetForm();
+    state.editingId = link.id;
+    const cat = splitCategory(link.category);
+    ensureOption($("category"), cat.base);
+    ensureOption($("videoSource"), cat.source);
+    $("title").value = link.title;
+    $("url").value = link.url;
+    $("category").value = cat.base;
+    $("project").value = link.project;
+    updateCategoryFields();
+    $("videoSource").value = cat.source;
+    $("status").value = STATUSES.includes(link.status) ? link.status : "Draft";
+    updateStatusHint();
+    $("deadline").value = link.deadline;
+    $("purpose").value = link.purpose;
+    $("pinned").checked = link.pinned;
+    link.versions.forEach(v => addVersionRow(v));
+    $("editTitle").textContent = link.title;
+    $("editBanner").hidden = false;
+    $("submitLabel").textContent = "Save Changes";
+    showView("submit");
+    window.scrollTo(0, 0);
+    checkDuplicate();
+  }
+
+  function setBusy(busy) {
+    $("submitBtn").disabled = busy;
+    $("submitLabel").textContent = busy ? "Saving..." : (state.editingId ? "Save Changes" : "Submit Link");
+  }
+
+  async function submitForm(e) {
+    e.preventDefault();
+    const isVideo = $("category").value === "CTC-Video";
+    const source = $("videoSource").value;
+    const data = {
+      title: $("title").value.trim(),
+      url: normalizeUrl($("url").value),
+      category: isVideo && source ? `CTC-Video [${source}]` : $("category").value,
+      project: $("project").value.trim(),
+      status: $("status").value,
+      deadline: $("deadline").value,
+      purpose: $("purpose").value.trim(),
+      pinned: $("pinned").checked,
+      versions: readVersions(),
+    };
+    const ok = {
+      title: !!data.title,
+      url: isValidUrl(data.url),
+      category: !!data.category,
+      videoSource: !isVideo || !!source,
+      versions: data.versions.every(v => isValidUrl(v.url)),
+    };
+    Object.keys(ok).forEach(k => showError(k, !ok[k]));
+    const firstError = Object.keys(ok).find(k => !ok[k]);
+    if (firstError) {
+      // Bring the first problem into view so it can't be missed
+      const el = firstError === "versions" ? $("versionList") : $(firstError);
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (el.focus) el.focus({ preventScroll: true });
+      return;
+    }
+
+    const editing = state.editingId;
+    setBusy(true);
+    try {
+      const saved = editing ? await api("updateLink", editing, data) : await api("addLink", data);
+      upsertLocal(saved);
+      resetForm();
+      $("successTitle").textContent = editing ? "Changes Saved! ✨" : "Successfully Submitted! 🎉";
+      $("successText").textContent = `"${saved.title}" has been ${editing ? "updated" : "saved"}.`;
+      openModal("successModal");
+      if (saved.warning) toast(saved.warning, true);
+    } catch (err) {
+      toast("Save failed: " + err.message, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* ---------- All Links: filtering ---------- */
+  function resetFilters(rerender = true) {
+    ["search", "fCategory", "fProject", "fStatus", "dateFrom", "dateTo"].forEach(id => $(id).value = "");
+    $("sort").value = "newest";
+    $("pinnedOnly").checked = false;
+    if (rerender) render();
+  }
+
+  function applyStat(kind) {
+    resetFilters(false);
+    if (kind === "week") $("dateFrom").value = daysAgo(6);
+    if (kind === "open" || kind === "overdue") $("fStatus").value = kind;
+    render();
+  }
+
+  function getFiltered() {
+    const q = $("search").value.trim().toLowerCase();
+    const cat = $("fCategory").value, proj = $("fProject").value, status = $("fStatus").value;
+    const from = $("dateFrom").value, to = $("dateTo").value, pinnedOnly = $("pinnedOnly").checked;
+
+    return state.links.filter(l => {
+      if (cat && l.category !== cat) return false;
+      if (proj && l.project !== proj) return false;
+      if (status === "open" && l.status === "Done") return false;
+      if (status === "overdue" && !isOverdue(l)) return false;
+      if (STATUSES.includes(status) && l.status !== status) return false;
+      if (pinnedOnly && !l.pinned) return false;
+      const day = addedDay(l);
+      if (from && (!day || day < from)) return false;
+      if (to && (!day || day > to)) return false;
+      if (q) {
+        const haystack = [l.title, l.url, l.category, l.project, l.status, l.purpose, ...l.versions.flatMap(v => [v.label, v.url])].join(" ").toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    }).sort((a, b) => (b.pinned - a.pinned) || SORTERS[$("sort").value](a, b));
+  }
+
+  /* ---------- All Links: rendering ---------- */
+  function statusBadge(s) {
+    return `<span class="status status-${slug(s)}" title="${escapeHtml(STATUS_INFO[s] || "")}"><i></i>${escapeHtml(s)}</span>`;
+  }
+
+  function categoryBadge(c) {
+    const base = splitCategory(c).base;
+    return `<span class="cat cat-${base in CATEGORY_ICONS ? slug(base) : "other"}">${escapeHtml(categoryLabel(c))}</span>`;
+  }
+
+  // Each project gets its own color. Projects are numbered by when they first appeared,
+  // so a new project never changes the color of an existing one.
+  const PROJECT_HUES = [212, 145, 28, 280, 350, 185, 48, 320, 100, 250, 5, 165];
+  let projectOrder = {};
+  function updateProjectOrder() {
+    projectOrder = {};
+    [...state.links].sort(SORTERS.oldest).forEach(l => {
+      if (l.project && !(l.project in projectOrder)) projectOrder[l.project] = Object.keys(projectOrder).length;
+    });
+  }
+  function projectHue(name) {
+    const i = projectOrder[name];
+    if (i !== undefined) return PROJECT_HUES[i % PROJECT_HUES.length] + Math.floor(i / PROJECT_HUES.length) * 15;
+    let h = 0;
+    for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    return h;
+  }
+  // Emoji for a project (set in Code.gs), matched without caring about upper/lower case
+  function projectIcon(name) {
+    const projects = (state.cfg && state.cfg.projects) || {};
+    const key = Object.keys(projects).find(p => p.toLowerCase() === String(name || "").trim().toLowerCase());
+    return key ? projects[key].icon : name === REFERENCE_PROJECT ? CATEGORY_ICONS.Reference : "📁";
+  }
+  const projectAvatar = name => name
+    ? `<span class="avatar" style="--h:${projectHue(name)}">${projectIcon(name)}</span>`
+    : `<span class="avatar avatar-none">?</span>`;
+  function projectChip(name) {
+    if (!name) return `<span class="muted">-</span>`;
+    return `<span class="proj" style="--h:${projectHue(name)}">${projectIcon(name)} ${escapeHtml(name)}</span>`;
+  }
+
+  function deadlineText(l) {
+    if (!l.deadline) return `<span class="muted">-</span>`;
+    const date = formatDay(l.deadline);
+    if (l.status === "Done") return `<span class="due due-done">📅 ${date}</span>`;
+    const d = daysUntil(l.deadline);
+    if (d < 0) return `<span class="due due-overdue">⚠️ Overdue · ${plural(-d, "day")}</span><small class="due-date">${date}</small>`;
+    if (d <= 3) return `<span class="due due-soon">⏰ ${d === 0 ? "Due today" : d === 1 ? "Due tomorrow" : `In ${d} days`}</span><small class="due-date">${date}</small>`;
+    return `<span class="due">📅 ${date}</span>`;
+  }
+
+  const rowClass = l => [isOverdue(l) ? "row-overdue" : "", l.pinned ? "row-pinned" : ""].join(" ").trim();
+
+  function titleBlock(l) {
+    const versions = l.versions.length
+      ? `<div class="chips">${l.versions.map(v => `<a class="chip" href="${safeHref(v.url)}" target="_blank" rel="noopener" title="${escapeHtml(v.url)}">${escapeHtml(v.label || "Link")}</a>`).join("")}</div>`
+      : "";
+    return `<strong>${escapeHtml(l.title) || "(untitled)"}</strong><a class="main-link" href="${safeHref(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.url)}">${escapeHtml(l.url)}</a>${versions}`;
+  }
+
+  function pinButton(l) {
+    return `<button class="pin${l.pinned ? " on" : ""}" data-act="pin" data-id="${escapeHtml(l.id)}" title="${l.pinned ? "Unpin" : "Pin to top"}">&#9733;</button>`;
+  }
+
+  function actionButtons(l) {
+    const id = escapeHtml(l.id);
+    return `<div class="row-actions">
+      <button class="btn-sm btn-soft" data-act="copy" data-id="${id}">Copy</button>
+      <button class="btn-sm btn-soft" data-act="edit" data-id="${id}">Edit</button>
+      <button class="btn-sm btn-danger" data-act="delete" data-id="${id}">Delete</button>
+    </div>`;
+  }
+
+  // Fixed column widths so the table always fits; on narrow screens each row becomes a card (see Styles)
+  function renderTable(list) {
+    return `<div class="table-wrap"><table class="links-table">
+      <colgroup><col class="c-pin"><col class="c-date"><col><col class="c-cat"><col class="c-proj"><col class="c-status"><col class="c-due"><col class="c-desc"><col class="c-act"></colgroup>
+      <thead><tr><th>Pin</th><th>Date Added</th><th>Title &amp; Link</th><th>Category</th><th>Project</th><th>Status</th><th>Deadline</th><th>Description</th><th>Actions</th></tr></thead>
+      <tbody>${list.map(l => `
+        <tr class="${rowClass(l)}">
+          <td class="pin-cell">${pinButton(l)}</td>
+          <td data-label="Date Added" title="${formatDate(l.createdAt)}">${addedDay(l) ? formatDay(addedDay(l)) : "-"}</td>
+          <td class="title-cell">${titleBlock(l)}</td>
+          <td data-label="Category">${categoryBadge(l.category)}</td>
+          <td data-label="Project">${projectChip(l.project)}</td>
+          <td data-label="Status">${statusBadge(l.status)}</td>
+          <td data-label="Deadline">${deadlineText(l)}</td>
+          <td data-label="Description" class="desc">${escapeHtml(l.purpose) || "-"}</td>
+          <td class="act-cell">${actionButtons(l)}</td>
+        </tr>`).join("")}
+      </tbody></table></div>`;
+  }
+
+  function renderGroups(list) {
+    const groups = {};
+    list.forEach(l => (groups[l.project] = groups[l.project] || []).push(l));
+    // Projects A-Z, links without a project last
+    return Object.keys(groups).sort((a, b) => (!a - !b) || a.localeCompare(b)).map(name => {
+      const items = groups[name];
+      const notDone = items.filter(l => l.status !== "Done").length;
+      const overdue = items.filter(isOverdue).length;
+      return `<section class="group">
+        <div class="group-head">
+          <h3>${projectAvatar(name)}${escapeHtml(name) || "No Project"}</h3>
+          <span>${plural(items.length, "link")} &middot; ${notDone} not done${overdue ? ` &middot; <b class="text-danger">${overdue} overdue</b>` : ""}</span>
+        </div>
+        ${items.map(l => `
+          <div class="group-item ${rowClass(l)}">
+            ${pinButton(l)}
+            <div class="main">
+              ${titleBlock(l)}
+              <div class="meta-line">
+                ${categoryBadge(l.category)}
+                ${statusBadge(l.status)}
+                ${l.deadline ? deadlineText(l) : ""}
+                <span>Added ${formatDate(l.createdAt)}</span>
+              </div>
+              ${l.purpose ? `<p class="desc">${escapeHtml(l.purpose)}</p>` : ""}
+            </div>
+            <div class="group-actions">${actionButtons(l)}</div>
+          </div>`).join("")}
+      </section>`;
+    }).join("");
+  }
+
+  function renderStats() {
+    const weekStart = daysAgo(6);
+    $("stat-all").textContent = state.links.length;
+    $("stat-week").textContent = state.links.filter(l => addedDay(l) >= weekStart).length;
+    $("stat-open").textContent = state.links.filter(l => l.status !== "Done").length;
+    $("stat-overdue").textContent = state.links.filter(isOverdue).length;
+  }
+
+  // Highlight filters that are in use, so it's obvious why the list is shorter
+  function markActiveFilters() {
+    const ids = ["search", "fCategory", "fProject", "fStatus", "dateFrom", "dateTo"];
+    let active = 0;
+    ids.forEach(id => {
+      const on = !!$(id).value;
+      $(id).classList.toggle("is-active", on);
+      if (on) active++;
+    });
+    if ($("pinnedOnly").checked) active++;
+    const status = $("fStatus").value;
+    $("card-open").classList.toggle("active", status === "open");
+    $("card-overdue").classList.toggle("active", status === "overdue");
+    $("card-week").classList.toggle("active", $("dateFrom").value === daysAgo(6) && !status);
+    return active;
+  }
+
+  function render() {
+    if (!state.loaded) return;
+    renderStats();
+    const active = markActiveFilters();
+    const list = getFiltered();
+    const total = state.links.length;
+    $("count").innerHTML = `Showing <b>${list.length}</b> of ${plural(total, "link")}` +
+      (active ? ` <span class="filter-note">${plural(active, "filter")} active</span>` : "");
+    if (!list.length) {
+      $("results").innerHTML = `<div class="empty">${total
+        ? `<div class="empty-emoji">🔍</div><strong>No links match your search or filters.</strong><br><a href="#" onclick="resetFilters(); return false;">Reset filters</a>`
+        : `<div class="empty-emoji">📭</div><strong>No links yet.</strong><br><a href="#" onclick="showView('submit'); return false;">Submit your first link</a>`}</div>`;
+      return;
+    }
+    $("results").innerHTML = state.view === "table" ? renderTable(list) : renderGroups(list);
+  }
+
+  /* ---------- All Links: actions ---------- */
+  function togglePin(link) {
+    link.pinned = !link.pinned;
+    render();
+    api("setPinned", link.id, link.pinned).catch(err => {
+      link.pinned = !link.pinned;
+      render();
+      toast("Could not update pin: " + err.message, true);
+    });
+  }
+
+  async function handleAction(e) {
+    const btn = e.target.closest("[data-act]");
+    if (!btn) return;
+    const link = state.links.find(l => l.id === btn.dataset.id);
+    if (!link) return;
+    const act = btn.dataset.act;
+
+    if (act === "copy") copyText(link.url);
+    else if (act === "edit") startEdit(link);
+    else if (act === "pin") togglePin(link);
+    else if (act === "delete" && await confirmDialog({ message: `"${link.title}" will be permanently removed, including from the Google Sheet.` })) {
+      try {
+        await api("deleteLink", link.id);
+        state.links = state.links.filter(l => l.id !== link.id);
+        if (state.editingId === link.id) resetForm();
+        refreshOptions();
+        render();
+        toast("Link deleted");
+      } catch (err) {
+        toast("Delete failed: " + err.message, true);
+      }
+    }
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("Could not load the Excel library. Check your internet connection."));
+      document.head.appendChild(s);
+    });
+  }
+
+  // Exports exactly what is currently shown (search + filters applied)
+  async function exportExcel() {
+    const list = getFiltered();
+    if (!list.length) return toast("Nothing to export", true);
+    try {
+      if (!window.XLSX) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+      const rows = list.map(l => ({
+        "Date Added": formatDate(l.createdAt),
+        "Title": l.title,
+        "Main Link": l.url,
+        "Category": l.category,
+        "Project": l.project,
+        "Status": l.status,
+        "Deadline": l.deadline ? formatDay(l.deadline) : "",
+        "Pinned": l.pinned ? "Yes" : "No",
+        "Description": l.purpose,
+        "Related Links": l.versions.map(v => `${v.label || "Link"}: ${v.url}`).join("\n"),
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [18, 40, 50, 16, 16, 14, 14, 8, 50, 50].map(wch => ({ wch }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Links");
+      XLSX.writeFile(wb, `makuta-links-${today()}.xlsx`);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  /* ---------- Milestones: setup ---------- */
+  // Step dropdown: groups that follow the workflow (whose turn it is); exact steps are listed after these
+  const STEP_GROUPS = {
+    active: { label: "All active tasks", test: t => t.stage !== "done" },
+    obi: { label: "My to-do (Obi)", test: t => ["brief", "revision", "shoot", "post"].includes(t.stage) },
+    qc: { label: "Waiting QC Internal", test: t => ["qcBrief", "qcCut", "qcContent"].includes(t.stage) },
+    production: { label: "In production (VO / CTC / design / ToV)", test: t => ["vo", "video", "design", "motion"].includes(t.stage) },
+    client: { label: "At client", test: t => ["toClient", "qcClient"].includes(t.stage) },
+    ready: { label: "Approved by client", test: t => ["post", "ads"].includes(t.stage) },
+    done: { label: "Done", test: t => t.stage === "done" },
+    all: { label: "All tasks", test: () => true },
+  };
+  const isVideoType = type => /^Video/.test(type);
+  const isEventType = type => type === state.cfg.eventType;
+  const TYPE_ICONS = { video: "🎬", event: "🎪", static: "🖼️" };
+  const typeKind = type => isVideoType(type) ? "video" : isEventType(type) ? "event" : "static";
+  const stageOf = key => state.cfg.stages.find(s => s.key === key) || { key, name: key, role: "" };
+  // Who does this step for this task (mirrors stageOwner_ in Code.gs)
+  function stageOwner(s, t) {
+    if (s.key === "shoot") return `Obi & ${t.videographer || "Videographer"}`;
+    return s.person || (s.role === "Graphic Designer" ? t.designer : s.role === "Videographer" ? t.videographer : "") || s.role;
+  }
+  const doneLabel = t => t.channel === "ADS" ? "Live on Ads" : "Scheduled / Posted";
+  // Mirrors channelFromTitle_ in Code.gs: "BRIEF ORG NOV KRR" -> "ORG" ("" when neither or both)
+  function channelFromTitle(title) {
+    const found = Object.keys(state.cfg.channels).filter(c => new RegExp(`(^|[^A-Za-z])${c}([^A-Za-z]|$)`, "i").test(title));
+    return found.length === 1 ? found[0] : "";
+  }
+  // The project code written in the title, e.g. "KRR" in "BRIEF ORG NOV KRR"
+  function projectFromTitle(title) {
+    const words = title.toUpperCase().split(/[^A-Z0-9]+/);
+    return Object.keys(state.cfg.projects).find(p => words.includes(p.toUpperCase())) || "";
+  }
+  // Steps that can fix a client revision (mirrors fixSteps_ in Code.gs)
+  const fixSteps = t => t.steps.filter(k => ["video", "design", "motion"].includes(k));
+
+  function setupTaskOptions() {
+    const cfg = state.cfg;
+    const types = cfg.contentTypes.map(v => `<option>${escapeHtml(v)}</option>`).join("");
+    $("tType").innerHTML = `<option value="">All types</option>` + types;
+    $("tfVideographer").innerHTML = `<option value="">-- Select --</option>` + cfg.videographers.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)} (VG-${escapeHtml(v)})</option>`).join("");
+    $("tfProject").innerHTML = `<option value="">-- Select --</option>` +
+      Object.keys(cfg.projects).map(p => `<option value="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}</option>`).join("");
+    $("tStep").innerHTML =
+      `<optgroup label="Quick filters">${Object.keys(STEP_GROUPS).map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("")}</optgroup>` +
+      `<optgroup label="Exact step">${cfg.stages.map(s => `<option value="${s.key}">${escapeHtml(s.name)} (${escapeHtml(s.person || s.role)})</option>`).join("")}</optgroup>`;
+    $("tStep").value = "active";
+    refreshTaskProjects();
+  }
+
+  // Configured projects first (VTB, KRR, ...), then any other project used in a task
+  function taskProjects() {
+    const known = Object.keys(state.cfg.projects);
+    const extra = [...new Set(state.tasks.map(t => t.project))].filter(p => p && !known.includes(p)).sort((a, b) => a.localeCompare(b));
+    return known.concat(extra);
+  }
+  function refreshTaskProjects() {
+    const projects = taskProjects();
+    fillSelect("tProject", projects, "All projects", p => `${projectIcon(p)} ${p}`);
+  }
+
+  function upsertTask(task) {
+    const i = state.tasks.findIndex(t => t.id === task.id);
+    if (i >= 0) state.tasks[i] = task; else state.tasks.push(task);
+    refreshTaskProjects();
+    renderTasks();
+  }
+
+  /* ---------- Milestones: new / edit task form ---------- */
+  // Content types a project makes (Event Attribute only where the project lists it)
+  const projectTypes = p => (p && p.types) || state.cfg.contentTypes.filter(v => !isEventType(v));
+
+  function fillTaskTypes() {
+    const types = projectTypes(state.cfg.projects[$("tfProject").value]);
+    const current = $("tfType").value;
+    $("tfType").innerHTML = `<option value="">-- Select --</option>` + types.map(v => `<option>${escapeHtml(v)}</option>`).join("");
+    $("tfType").value = types.includes(current) ? current : "";
+  }
+
+  function openTaskForm(t) {
+    if (!state.loaded) return toast("Still loading, please try again in a moment.", true);
+    state.editingTaskId = t ? t.id : null;
+    $("taskForm").reset();
+    $("taskModalTitle").textContent = t ? "Edit Task" : "New Task";
+    $("taskSaveBtn").textContent = t ? "Save Changes" : "Create Task";
+    $("taskFormErr").hidden = true;
+    $("tfProject").dataset.auto = "";
+    $("tfType").value = "";
+    fillTaskTypes();
+    if (t) {
+      $("tfTitle").value = t.title;
+      ensureOption($("tfProject"), t.project);
+      $("tfProject").value = t.project;
+      fillTaskTypes();
+      ensureOption($("tfType"), t.type);
+      $("tfType").value = t.type;
+      $("tfDeadline").value = t.deadline;
+      ensureOption($("tfVideographer"), t.videographer);
+      $("tfVideographer").value = t.videographer;
+      $("tfLink").value = t.link;
+      $("tfNotes").value = t.notes;
+    }
+    updateTaskForm();
+    openModal("taskModal");
+    $("tfTitle").focus();
+  }
+
+  // Typing the title picks the project when it names one (until the project is chosen by hand)
+  function onTaskTitleInput() {
+    const p = projectFromTitle($("tfTitle").value);
+    if (p && (!$("tfProject").value || $("tfProject").dataset.auto)) {
+      $("tfProject").value = p;
+      $("tfProject").dataset.auto = "1";
+      fillTaskTypes();
+    }
+    updateTaskForm();
+  }
+
+  function updateTaskForm() {
+    const type = $("tfType").value, title = $("tfTitle").value, channel = channelFromTitle(title);
+    const p = state.cfg.projects[$("tfProject").value];
+    // New tasks get the project's videographer; another one can only be picked when editing.
+    // Projects without a fixed videographer (Makuta) choose one for every video task.
+    $("tfVideographerField").hidden = !(isVideoType(type) && (state.editingTaskId || (p && !p.videographer)));
+    $("tfDetected").innerHTML = channel
+      ? `Detected: <span class="chan chan-${channel.toLowerCase()}">${channel}</span> ${channel === "ADS" ? "Ads Manager (Musthofa)" : "client's social media"}`
+      : title.trim() ? `<span class="text-danger">Write ORG or ADS in the title.</span>` : "Format: [BRIEF / VIDEO CTC / EVENT] [ORG / ADS] [MONTH] [PROJECT]";
+    // "VIDEO CTC" in the title but a Static type (or the other way round) is probably a mistake
+    const saysVideo = /\bVIDEO\s+CTC\b/i.test(title);
+    if (type && saysVideo !== isVideoType(type) && (saysVideo || /\bBRIEF\b/i.test(title))) {
+      $("tfDetected").innerHTML += `<br><span class="text-danger">The title says ${saysVideo ? "VIDEO CTC" : "BRIEF"} but the content type is ${escapeHtml(type)}. Please double-check.</span>`;
+    }
+    $("tfDesigner").innerHTML = !p ? ""
+      : p.orgOnly && channel === "ADS" ? `<span class="text-danger">${escapeHtml($("tfProject").value)} is organic only. Use ORG in the title.</span>`
+      : `Graphic Designer: ${escapeHtml(p.designer)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "chosen per video"}${p.orgOnly ? " · Organic only" : ""}`;
+    // Event Attribute: the deadline is the event day, and the countdown posts are counted back from it
+    const event = isEventType(type);
+    $("tfDeadlineLabel").innerHTML = event ? `Event Date (D-Day) <span class="req">*</span>` : "Deadline";
+    $("tfEventItems").hidden = !event;
+    if (event) $("tfEventItems").innerHTML = `Included in this task: ${state.cfg.eventItems.map(i => escapeHtml(eventItemLabel(i, $("tfDeadline").value))).join(" · ")}`;
+    $("tfSteps").innerHTML = type && channel
+      ? `Timeline: ${previewSteps(type, channel).map(escapeHtml).join(" → ")}`
+      : "Write ORG / ADS in the title and choose the content type to see the timeline.";
+  }
+
+  // "Countdown H-5 (10 Dec)" once the event date is known
+  function eventItemLabel(item, day) {
+    if (item.days === undefined || !day) return item.name;
+    const d = parseDay(day);
+    d.setDate(d.getDate() - item.days);
+    return `${item.name} (${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })})`;
+  }
+
+  // Step names for the form preview (the server decides the real steps)
+  function previewSteps(type, channel) {
+    const keys = state.cfg.stages.filter(s => !s.extra).map(s => s.key).filter(k =>
+      k === "vo" ? type === "Video (Non-Shooting)" :
+      k === "shoot" ? type === "Video (Shooting)" :
+      k === "video" || k === "qcCut" || k === "motion" ? isVideoType(type) :
+      k === "design" ? !isVideoType(type) :
+      k === "post" ? channel !== "ADS" :
+      k === "ads" ? channel === "ADS" : true);
+    return keys.map(k => stageOf(k).name);
+  }
+
+  async function submitTaskForm(e) {
+    e.preventDefault();
+    const data = {
+      title: $("tfTitle").value.trim(),
+      project: $("tfProject").value,
+      type: $("tfType").value,
+      deadline: $("tfDeadline").value,
+      videographer: $("tfVideographerField").hidden ? "" : $("tfVideographer").value,
+      link: $("tfLink").value.trim() ? normalizeUrl($("tfLink").value) : "",
+      notes: $("tfNotes").value.trim(),
+    };
+    const problem = !data.title ? ["tfTitle", "Title is required."]
+      : !channelFromTitle(data.title) ? ["tfTitle", 'Write either ORG or ADS in the title, e.g. "BRIEF ORG DECEMBER KRR".']
+      : !data.project ? ["tfProject", "Please choose the project."]
+      : (state.cfg.projects[data.project] || {}).orgOnly && channelFromTitle(data.title) !== "ORG" ? ["tfTitle", `${data.project} is organic only. Use ORG in the title.`]
+      : !data.type ? ["tfType", "Please choose the content type."]
+      : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]
+      : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
+      : isEventType(data.type) && !data.deadline ? ["tfDeadline", "Please fill in the event date (D-Day)."]
+      : data.link && !isValidUrl(data.link) ? ["tfLink", "Please enter a valid link, or leave it empty."]
+      : null;
+    $("taskFormErr").hidden = !problem;
+    if (problem) {
+      $("taskFormErr").textContent = problem[1];
+      $(problem[0]).focus();
+      return;
+    }
+    const editing = state.editingTaskId;
+    $("taskSaveBtn").disabled = true;
+    try {
+      const saved = editing ? await api("updateTask", editing, data) : await api("addTask", data);
+      upsertTask(saved);
+      closeModal("taskModal");
+      toast(editing ? "Task updated" : `Task created: now at "${stageOf(saved.stage).name}"`);
+    } catch (err) {
+      $("taskFormErr").textContent = "Save failed: " + err.message;
+      $("taskFormErr").hidden = false;
+    } finally {
+      $("taskSaveBtn").disabled = false;
+    }
+  }
+
+  /* ---------- Milestones: filtering ---------- */
+  function resetTaskFilters(rerender = true) {
+    ["tSearch", "tProject", "tType", "tChannel"].forEach(id => $(id).value = "");
+    $("tStep").value = "active";
+    if (rerender) renderTasks();
+  }
+
+  function applyTaskStat(kind) {
+    resetTaskFilters(false);
+    $("tStep").value = kind;
+    renderTasks();
+  }
+
+  function getFilteredTasks() {
+    const q = $("tSearch").value.trim().toLowerCase();
+    const proj = $("tProject").value, type = $("tType").value, channel = $("tChannel").value, step = $("tStep").value || "active";
+    return state.tasks.filter(t => {
+      if (proj && t.project !== proj) return false;
+      if (type && t.type !== type) return false;
+      if (channel && t.channel !== channel) return false;
+      if (STEP_GROUPS[step] ? !STEP_GROUPS[step].test(t) : t.stage !== step) return false;
+      if (q) {
+        const people = t.steps.map(k => stageOwner(stageOf(k), t));
+        const haystack = [t.title, t.project, t.type, t.channel, t.notes, t.link, ...people].join(" ").toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  /* ---------- Milestones: rendering ---------- */
+  const shortDate = iso => new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  // How long a task has been at its current step: "today", "1 day", "4 days"
+  function sinceText(iso) {
+    const d = Math.floor((Date.now() - new Date(iso)) / 864e5);
+    return d <= 0 ? "today" : plural(d, "day");
+  }
+  // The newest history entry matching fn
+  const lastEntry = (t, fn) => [...t.history].reverse().find(fn);
+
+  // Deadline as one pill (date included), so nothing under the title is left without a background
+  function taskDue(t) {
+    if (!t.deadline) return "";
+    const date = formatDay(t.deadline);
+    if (t.stage === "done") return `<span class="due due-done">📅 ${date}</span>`;
+    const d = daysUntil(t.deadline);
+    if (d < 0) return `<span class="due due-overdue">⚠️ Overdue ${plural(-d, "day")} · ${date}</span>`;
+    if (d <= 3) return `<span class="due due-soon">⏰ ${d === 0 ? "Due today" : d === 1 ? "Due tomorrow" : `In ${d} days`} · ${date}</span>`;
+    return `<span class="due">📅 ${date}</span>`;
+  }
+
+  // The revision still being worked on: from the latest revision request until that QC step approves again
+  function openRevision(t) {
+    const i = t.history.map(e => e.action).lastIndexOf("revision");
+    if (i < 0) return null;
+    const r = t.history[i];
+    return t.history.slice(i + 1).some(e => e.from === r.from && e.action === "approved") ? null : r;
+  }
+
+  function stepper(t) {
+    // Once the client has asked for a revision, Obi's "Client Revision" step stays in the timeline,
+    // just before the step it was passed on to (or the first step that could fix it)
+    const shown = [...t.steps];
+    if (t.history.some(e => e.action === "revision" && e.to === "revision")) {
+      const assigned = t.stage === "revision" ? null : lastEntry(t, e => e.action === "assign");
+      shown.splice(shown.indexOf(assigned ? assigned.to : fixSteps(t)[0]), 0, "revision");
+    }
+    const cur = shown.indexOf(t.stage);
+    const finished = t.stage === "done";
+    const entered = lastEntry(t, e => e.to === t.stage);
+    // While a revision is open, every step from where it was sent back up to the QC that asked for it is red
+    const rev = openRevision(t);
+    const redFrom = rev ? shown.indexOf(rev.to) : -1, redTo = rev ? shown.indexOf(rev.from) : -1;
+    const steps = shown.map((k, i) => {
+      const s = stageOf(k);
+      const st = finished || i < cur ? "done" : i === cur ? "current" : "todo";
+      const red = rev && i >= redFrom && i <= redTo;
+      const doneAt = st === "done" && lastEntry(t, e => e.from === k && ["done", "approved", "assign"].includes(e.action));
+      const revs = t.history.filter(e => (k === "revision" ? e.to : e.from) === k && e.action === "revision").length;
+      const when = doneAt ? shortDate(doneAt.at) : st === "current" ? `Now${entered ? ` · ${sinceText(entered.at)}` : ""}` : "";
+      return `<li class="ms-step ms-${st}${s.qc ? " ms-qc" : ""}${red ? " ms-red" : ""}${red && i === redFrom ? " ms-red-start" : ""}">
+        <span class="dot">${st === "done" ? "✓" : s.qc ? "QC" : i + 1}</span>
+        <span class="ms-name">${escapeHtml(s.name)}</span>
+        <span class="ms-owner">${escapeHtml(stageOwner(s, t))}</span>
+        <span class="ms-date">${when}${revs ? ` <b class="rev">↺ ${revs}</b>` : ""}</span>
+      </li>`;
+    }).join("");
+    const end = finished ? lastEntry(t, e => e.to === "done") : null;
+    return `<ol class="stepper">${steps}
+      <li class="ms-step ms-${finished ? "done" : "todo"} ms-finish">
+        <span class="dot">🏁</span><span class="ms-name">${doneLabel(t)}</span><span class="ms-date">${end ? shortDate(end.at) : ""}</span>
+      </li></ol>`;
+  }
+
+  function historyList(t) {
+    const text = e => {
+      const from = escapeHtml(stageOf(e.from).name), to = e.to === "done" ? doneLabel(t) : escapeHtml(stageOf(e.to).name);
+      if (e.action === "created") return "Task created";
+      if (e.action === "approved") return `✅ <b>${from}</b> approved → ${to}`;
+      if (e.action === "revision") return `↺ <b>${from}</b> asked for a revision → back to ${to}`;
+      if (e.action === "assign") return `↪ <b>${from}</b> passed to ${to} (${escapeHtml(stageOwner(stageOf(e.to), t))})`;
+      return `✔ <b>${from}</b> done → ${to}`;
+    };
+    const open = state.openHistory.has(t.id) ? " open" : "";
+    return `<details class="history" data-id="${escapeHtml(t.id)}"${open}>
+      <summary>History (${t.history.length})</summary>
+      <ul>${[...t.history].reverse().map(e => `<li><span class="muted">${formatDate(e.at)}</span> ${text(e)}${e.note ? `<div class="note">"${escapeHtml(e.note)}"</div>` : ""}</li>`).join("")}</ul>
+    </details>`;
+  }
+
+  function taskCard(t) {
+    const id = escapeHtml(t.id);
+    const done = t.stage === "done";
+    const s = stageOf(t.stage);
+    // While a revision is open, keep showing what was asked
+    const rev = openRevision(t);
+    const revisionNote = rev
+      ? `<div class="rev-banner">↺ Revision requested at <b>${escapeHtml(stageOf(rev.from).name)}</b>${rev.note ? `: "${escapeHtml(rev.note)}"` : ""}</div>` : "";
+    const totalRevs = t.history.filter(e => e.action === "revision").length;
+    const FIX_LABELS = { video: "Videographer (CTC)", design: "Graphic Designer", motion: "Graphic Designer (Motion / ToV)" };
+    const main = done ? ""
+      : t.stage === "revision"
+      ? fixSteps(t).map(k => `<button class="btn-sm btn-accent" data-tact="assign" data-to="${k}" data-id="${id}">Send to ${FIX_LABELS[k]}: ${escapeHtml(stageOwner(stageOf(k), t))} →</button>`).join("")
+      : s.qc
+      ? `<button class="btn-sm btn-ok" data-tact="advance" data-id="${id}">✓ Approve</button>
+         <button class="btn-sm btn-danger" data-tact="revise" data-id="${id}">↺ Request Revision</button>`
+      : `<button class="btn-sm btn-accent" data-tact="advance" data-id="${id}">${escapeHtml(s.action || "Mark as Done")} →</button>`;
+    const overdue = t.deadline && !done && t.deadline < today();
+    // The task that was just moved animates its new step once
+    return `<article class="task${overdue ? " row-overdue" : ""}${done ? " task-done" : ""}${t.id === state.justMoved ? " task-moved" : ""}">
+      <div class="task-head">
+        <div class="task-title">
+          <strong>${escapeHtml(t.title)}</strong>
+          <div class="meta-line">
+            <span class="chan chan-${t.channel === "ADS" ? "ads" : "org"}">${escapeHtml(t.channel)}</span>
+            <span class="cat cat-type-${typeKind(t.type)}">${TYPE_ICONS[typeKind(t.type)]} ${escapeHtml(t.type)}</span>
+            ${t.videographer ? `<span class="tag">🎥 VG-${escapeHtml(t.videographer)}</span>` : ""}
+            ${taskDue(t)}
+            ${totalRevs ? `<span class="tag tag-rev">↺ ${plural(totalRevs, "revision")}</span>` : ""}
+            ${t.link ? `<a class="tag tag-link" href="${safeHref(t.link)}" target="_blank" rel="noopener">🔗 Brief / file ↗</a>` : ""}
+          </div>
+        </div>
+      </div>
+      ${revisionNote}
+      <div class="stepper-wrap">${stepper(t)}</div>
+      ${isEventType(t.type) ? eventChecklist(t) : ""}
+      ${t.notes ? `<p class="desc task-notes">${escapeHtml(t.notes)}</p>` : ""}
+      <div class="task-actions">
+        <div class="row-actions">${main}</div>
+        <div class="row-actions">
+          ${t.history.length > 1 ? `<button class="btn-sm btn-soft" data-tact="undo" data-id="${id}" title="Take back the last step">Undo</button>` : ""}
+          <button class="btn-sm btn-soft" data-tact="edit" data-id="${id}">Edit</button>
+          <button class="btn-sm btn-danger" data-tact="delete" data-id="${id}">Delete</button>
+        </div>
+      </div>
+      ${historyList(t)}
+    </article>`;
+  }
+
+  // Event Attribute deliverables, ticked off one by one (saved right away)
+  function eventChecklist(t) {
+    const items = state.cfg.eventItems;
+    const done = items.filter(i => t.checklist.includes(i.name)).length;
+    return `<div class="checklist">
+      <span class="checklist-head">Event deliverables · ${done}/${items.length}</span>
+      ${items.map(i => `<label class="check-item${t.checklist.includes(i.name) ? " on" : ""}${state.justTicked === t.id + "|" + i.name ? " just-ticked" : ""}">
+        <input type="checkbox" data-titem="${escapeHtml(i.name)}" data-id="${escapeHtml(t.id)}"${t.checklist.includes(i.name) ? " checked" : ""}>${escapeHtml(eventItemLabel(i, t.deadline))}</label>`).join("")}
+    </div>`;
+  }
+
+  function renderTaskStats() {
+    ["active", "qc", "client", "ready"].forEach(k => {
+      $("tstat-" + k).textContent = state.tasks.filter(STEP_GROUPS[k].test).length;
+      $("tcard-" + k).classList.toggle("active", $("tStep").value === k && !$("tProject").value && !$("tType").value && !$("tChannel").value && !$("tSearch").value);
+    });
+  }
+
+  function renderTasks() {
+    if (!state.loaded) return;
+    renderTaskStats();
+    ["tSearch", "tProject", "tType", "tChannel"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
+    $("tStep").classList.toggle("is-active", $("tStep").value !== "active");
+    const list = getFilteredTasks();
+    $("taskCount").innerHTML = `Showing <b>${list.length}</b> of ${plural(state.tasks.length, "task")}`;
+    if (!list.length) {
+      $("taskResults").innerHTML = `<div class="empty">${state.tasks.length
+        ? `<div class="empty-emoji">🔍</div><strong>No tasks match these filters.</strong><br><a href="#" onclick="resetTaskFilters(); return false;">Reset filters</a>`
+        : `<div class="empty-emoji">🗂️</div><strong>No tasks yet.</strong><br><a href="#" onclick="openTaskForm(); return false;">Create your first task</a>`}</div>`;
+      return;
+    }
+    const groups = {};
+    list.forEach(t => (groups[t.project] = groups[t.project] || []).push(t));
+    const order = taskProjects();
+    // Inside a project: unfinished first, then nearest deadline, then oldest
+    const sorter = (a, b) => ((a.stage === "done") - (b.stage === "done")) ||
+      (a.deadline || "9999").localeCompare(b.deadline || "9999") || a.createdAt.localeCompare(b.createdAt);
+    $("taskResults").innerHTML = order.filter(p => groups[p]).map(name => {
+      const items = groups[name].sort(sorter);
+      const active = items.filter(t => t.stage !== "done").length;
+      const p = state.cfg.projects[name] || {};
+      return `<section class="group">
+        <div class="group-head">
+          <h3>${projectAvatar(name)}${escapeHtml(name)}</h3>
+          <span>${plural(items.length, "task")} &middot; ${active} active${p.designer ? ` &middot; Graphic Designer: ${escapeHtml(p.designer)}` : ""}${p.orgOnly ? " &middot; Organic only" : ""}</span>
+        </div>
+        ${items.map(taskCard).join("")}
+      </section>`;
+    }).join("");
+  }
+
+  /* ---------- Milestones: actions ---------- */
+  function moveTask(t, action, opts, btn) {
+    if (btn) btn.disabled = true;
+    return api("moveTask", t.id, action, Object.assign({ from: t.stage }, opts))
+      .then(saved => {
+        state.justMoved = saved.id;
+        upsertTask(saved);
+        state.justMoved = null;
+        toast(saved.stage === "done" ? `"${saved.title}" is done 🎉` : `Moved to "${stageOf(saved.stage).name}"`);
+        return true;
+      })
+      .catch(err => {
+        if (btn) btn.disabled = false;
+        toast(err.message, true);
+        return false;
+      });
+  }
+
+  function openRevise(t) {
+    const i = t.steps.indexOf(t.stage);
+    // Revisions go back to the people who make the work (not to QC or to sending)
+    const targets = t.steps.slice(0, i).filter(k => !stageOf(k).qc && k !== "toClient");
+    // QC Client always sends the revision back to Obi, who then passes it on
+    const fromClient = t.stage === "qcClient";
+    $("reviseToField").hidden = fromClient;
+    $("reviseText").textContent = fromClient
+      ? `"${t.title}": the client's revision goes back to ${stageOf("revision").person} first, who then sends it to ${fixSteps(t).includes("video") ? "the videographer (CTC) or the graphic designer" : "the graphic designer"}. After the fix it goes through QC Internal again, then Kak Faza sends it to the client.`
+      : `"${t.title}" at ${stageOf(t.stage).name}. Which step has to fix it? After the fix, it goes straight back to QC.`;
+    $("reviseTo").innerHTML = targets.map(k => `<option value="${k}">${escapeHtml(stageOf(k).name)} (${escapeHtml(stageOwner(stageOf(k), t))})</option>`).join("");
+    $("reviseTo").value = targets[targets.length - 1];
+    $("reviseNote").value = "";
+    $("reviseOk").disabled = false;
+    $("reviseOk").onclick = () => moveTask(t, "revise", { to: $("reviseTo").value, note: $("reviseNote").value }, $("reviseOk"))
+      .then(ok => ok && closeModal("reviseModal"));
+    openModal("reviseModal");
+  }
+
+  function toggleTaskItem(e) {
+    const box = e.target;
+    if (!box.matches("[data-titem]")) return;
+    const t = state.tasks.find(x => x.id === box.dataset.id);
+    if (!t) return;
+    box.disabled = true;
+    api("setTaskItem", t.id, box.dataset.titem, box.checked)
+      .then(saved => {
+        state.justTicked = box.checked ? `${saved.id}|${box.dataset.titem}` : null;
+        upsertTask(saved);
+        state.justTicked = null;
+      })
+      .catch(err => {
+        box.checked = !box.checked;
+        box.disabled = false;
+        toast(err.message, true);
+      });
+  }
+
+  async function handleTaskAction(e) {
+    const btn = e.target.closest("[data-tact]");
+    if (!btn) return;
+    const t = state.tasks.find(x => x.id === btn.dataset.id);
+    if (!t) return;
+    const act = btn.dataset.tact;
+    if (act === "advance") moveTask(t, "advance", {}, btn);
+    else if (act === "assign") moveTask(t, "assign", { to: btn.dataset.to }, btn);
+    else if (act === "revise") openRevise(t);
+    else if (act === "edit") openTaskForm(t);
+    else if (act === "undo") {
+      const last = t.history[t.history.length - 1];
+      if (await confirmDialog({ emoji: "↩️", title: "Undo the last step?", ok: "Undo",
+        message: `"${t.title}" goes back to "${stageOf(last.from).name}".` })) moveTask(t, "undo", {}, btn);
+    } else if (act === "delete" && await confirmDialog({ message: `"${t.title}" and its timeline will be permanently removed, including from the Google Sheet.` })) {
+      try {
+        await api("deleteTask", t.id);
+        state.tasks = state.tasks.filter(x => x.id !== t.id);
+        refreshTaskProjects();
+        renderTasks();
+        toast("Task deleted");
+      } catch (err) {
+        toast("Delete failed: " + err.message, true);
+      }
+    }
+  }
+
+  /* ---------- Quick Save (bookmarklet) ---------- */
+  function setupBookmarklet() {
+    const appUrl = state.app.appUrl;
+    if (!appUrl) return;
+    const code = `javascript:(function(){window.open('${appUrl}?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'_blank');})();`;
+    $("bookmarklet").setAttribute("href", code);
+    $("bookmarkletCode").value = code;
+  }
+
+  // Prefill the form when opened from the Quick Save button
+  function prefillFromUrl() {
+    google.script.url.getLocation(loc => {
+      const p = loc.parameter || {};
+      if (p.title) $("title").value = p.title.replace(/\s+[-–|]\s+(Google (Docs|Sheets|Slides|Drive)|Figma|Canva)$/i, "").trim();
+      if (p.url) {
+        $("url").value = p.url;
+        checkDuplicate();
+        $("category").focus();
+      }
+    });
+  }
+
+  /* ---------- Init ---------- */
+  $("linkForm").addEventListener("submit", submitForm);
+  $("url").addEventListener("input", checkDuplicate);
+  $("status").addEventListener("change", updateStatusHint);
+  $("category").addEventListener("change", updateCategoryFields);
+  $("videoSource").addEventListener("change", () => showError("videoSource", false));
+  updateStatusHint();
+  ["search", "fCategory", "fProject", "fStatus", "dateFrom", "dateTo", "sort", "pinnedOnly"]
+    .forEach(id => $(id).addEventListener("input", render));
+  $("results").addEventListener("click", handleAction);
+  $("taskResults").addEventListener("click", handleTaskAction);
+  $("taskResults").addEventListener("change", toggleTaskItem);
+  // Remember which History panels are open, so they stay open when the list is redrawn
+  $("taskResults").addEventListener("toggle", e => {
+    if (!e.target.matches("details.history")) return;
+    state.openHistory[e.target.open ? "add" : "delete"](e.target.dataset.id);
+  }, true);
+  $("taskForm").addEventListener("submit", submitTaskForm);
+  $("tfType").addEventListener("change", updateTaskForm);
+  $("tfDeadline").addEventListener("input", updateTaskForm);
+  $("tfTitle").addEventListener("input", onTaskTitleInput);
+  $("tfProject").addEventListener("change", () => {
+    $("tfProject").dataset.auto = "";
+    fillTaskTypes();
+    updateTaskForm();
+  });
+  ["tSearch", "tProject", "tType", "tChannel", "tStep"].forEach(id => $(id).addEventListener("input", renderTasks));
+  $("sheetLink").addEventListener("click", e => {
+    if (state.app.sheetUrl) return;
+    e.preventDefault();
+    toast(state.loaded ? "The Google Sheet link isn't available here." : "Still loading, please try again in a moment.", true);
+  });
+  document.querySelectorAll(".segmented button").forEach(btn => btn.addEventListener("click", () => {
+    state.view = btn.dataset.view;
+    document.querySelectorAll(".segmented button").forEach(b => b.classList.toggle("active", b === btn));
+    render();
+  }));
+
+  prefillFromUrl();
+  loadData();
+</script>
