@@ -78,7 +78,6 @@ const mockCache = {};
 const CacheService = { getScriptCache: () => ({ get: k => mockCache[k] || null, put: (k, v) => { mockCache[k] = v; } }) };
 SpreadsheetApp.ProtectionType = { RANGE: "RANGE" };
 const LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
-const ScriptApp = { getService: () => ({ getUrl: () => location.href.split("?")[0] }) };
 const HtmlService = {};
 // Pretend calendar: reminder events are only logged to the browser console
 const mockEvents = {};
@@ -113,7 +112,6 @@ const google = { script: {
     } });
     return runner[fn];
   } }),
-  url: { getLocation: cb => cb({ parameter: Object.fromEntries(new URLSearchParams(location.search)) }) },
 } };
 
 function previewClear() {

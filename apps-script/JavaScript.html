@@ -232,7 +232,6 @@
       state.app = data;
       state.loaded = true;
       if (data.sheetUrl) $("sheetLink").href = data.sheetUrl;
-      setupBookmarklet();
       refreshOptions();
       setupTaskOptions();
       render();
@@ -1220,28 +1219,6 @@
     }
   }
 
-  /* ---------- Quick Save (bookmarklet) ---------- */
-  function setupBookmarklet() {
-    const appUrl = state.app.appUrl;
-    if (!appUrl) return;
-    const code = `javascript:(function(){window.open('${appUrl}?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'_blank');})();`;
-    $("bookmarklet").setAttribute("href", code);
-    $("bookmarkletCode").value = code;
-  }
-
-  // Prefill the form when opened from the Quick Save button
-  function prefillFromUrl() {
-    google.script.url.getLocation(loc => {
-      const p = loc.parameter || {};
-      if (p.title) $("title").value = p.title.replace(/\s+[-–|]\s+(Google (Docs|Sheets|Slides|Drive)|Figma|Canva)$/i, "").trim();
-      if (p.url) {
-        $("url").value = p.url;
-        checkDuplicate();
-        $("category").focus();
-      }
-    });
-  }
-
   /* ---------- Init ---------- */
   $("linkForm").addEventListener("submit", submitForm);
   $("url").addEventListener("input", checkDuplicate);
@@ -1281,6 +1258,5 @@
   }));
 
   $("lockForm").addEventListener("submit", unlock);
-  prefillFromUrl();
   if (passcode) loadData(); else showLock();
 </script>

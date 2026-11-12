@@ -126,8 +126,7 @@ function getInitialData_() {
     links: getLinks_(),
     tasks: getTasks_(),
     taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS },
-    sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl(),
-    appUrl: ScriptApp.getService().getUrl()
+    sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl()
   };
 }
 

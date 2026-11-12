@@ -89,12 +89,7 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 5. Buka URL-nya → masukkan passcode → aplikasi terbuka.
 6. Salin **Web app URL** (berakhiran `/exec`). Inilah alamat website kamu: **bookmark** URL ini, dan buka juga di HP (login akun pribadi yang sama) kalau mau.
 
-### 6. Pasang tombol Quick Save (opsional, sangat disarankan)
-1. Buka Web app URL → klik **Quick Save Button**.
-2. Tampilkan bookmarks bar (Ctrl + Shift + B), lalu drag tombol **+ Save to Makuta** ke bookmarks bar.
-3. Saat sedang membuka Figma / Canva / Google Drive / dll., klik bookmark itu → form terbuka dengan link & judul sudah terisi.
-
-### 7. Cek cepat setelah setup
+### 6. Cek cepat setelah setup
 - [ ] Submit 1 link percobaan dengan deadline 3 hari lagi → muncul popup ceklis hijau.
 - [ ] Buka Google Sheet → sheet **Links** berisi link tadi.
 - [ ] Buka Google Calendar → ada event `[MAKUTA] Due in 2 days: ...` dan `[MAKUTA] Due tomorrow: ...` jam 09:00.
@@ -189,5 +184,4 @@ Tab **Milestones** berisi setiap task konten, dikelompokkan per project, lengkap
 ## Troubleshooting
 - **"Sorry, unable to open the file at present"** → biasanya karena login lebih dari 1 akun Google di browser. Buka URL-nya di jendela Incognito / profil Chrome yang hanya login ke akun pemilik.
 - **Export to Excel tidak mengunduh apa-apa** → butuh koneksi internet (library Excel dimuat saat tombol diklik). Alternatif: buka Google Sheet → File → Download → Microsoft Excel.
-- **Quick Save membuka URL yang berakhiran `/dev`** → buka popup Quick Save Button lagi dari URL `/exec`, lalu pasang ulang bookmark-nya.
 - **Perubahan kode tidak muncul** → pastikan sudah membuat **New version** di Manage deployments (lihat bagian update).
