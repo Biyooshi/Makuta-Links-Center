@@ -118,6 +118,21 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     GAS.moveTask(os, "advance");
     out.designAlone = st();
     out.single = GAS.addTask({ title: "BRIEF ORG DEC GTR", project: "GTR", type: "Static" }).workMonth;
+    // Tasks made one by one before Monthly Brief are upgraded once: working month from the title, standard title
+    const old = [["BRIEF ORG DES KRR", "KRR", "Static"], ["VIDEO ORG DES GTR", "GTR", "Video (Non-Shooting)"], ["VIDEO CTC ADS Nov KRR", "KRR", "Video (Shooting)"],
+      ["EVENT ORG KRR Countdown", "KRR", "Event Attribute"], ["KRR moodboard ORG", "KRR", "Static"], ["BRIEF ORG JAN VTB", "VTB", "Static"], ["BRIEF ORG NOV MAKUTA", "Makuta", "Static"]]
+      .map(([title, project, type]) => GAS.addTask({ title, project, type, deadline: "2026-12-20" }).id);
+    const oldRow = id => mockSheet("Tasks").data.find(row => row[0] === id);
+    old.forEach((id, i) => oldRow(id)[1] = i === 5 ? "2026-12-10T03:00:00.000Z" : "2026-11-12T03:00:00.000Z");
+    mockSheet("Tasks").save();
+    const upgraded = () => old.map(id => { const t = GAS.getTasks().find(x => x.id === id); return [t.title, t.workMonth, t.forMonth].join("|"); });
+    delete mockProps.UPGRADED_MONTHLY_BRIEF;
+    GAS.getInitialData();
+    out.upgraded = upgraded();
+    out.upgradeFlag = mockProps.UPGRADED_MONTHLY_BRIEF;
+    const later = GAS.addTask({ title: "BRIEF ORG DES GTR", project: "GTR", type: "Static" });
+    GAS.getInitialData();
+    out.upgradeOnce = GAS.getTasks().find(x => x.id === later.id).title;
     // Links
     const l = GAS.addLink({ title: "=SUM(1)", url: "https://a.com/x", category: "Google Docs", project: "KRR", deadline: "2026-12-20", versions: [{ label: "P2", url: "https://a.com/y" }] });
     out.formulaSafe = GAS.getLinks()[0].title;
@@ -169,6 +184,12 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(r.shoot === "design,video,design,video", "one Shooting Done moves the ORG and ADS videos");
   ok(r.designAlone === "qcContent,video,design,video", "after the shared steps each task moves on its own");
   ok(r.single === "", "a single task is not linked to anything");
+  ok(r.upgraded.join(" ; ") === [
+    "BRIEF ORG DECEMBER KRR|2026-11|2026-12", "VIDEO CTC ORG DECEMBER GTR|2026-11|2026-12", "VIDEO CTC ADS NOVEMBER KRR|2026-11|2026-11",
+    "EVENT ORG KRR Countdown||", "KRR moodboard ORG||", "BRIEF ORG JANUARY VTB|2026-12|2027-01", "BRIEF ORG NOVEMBER MAKUTA|2026-10|2026-11"].join(" ; "),
+    "old tasks upgraded to Monthly Brief (Event and free-form titles untouched) -> " + r.upgraded.join(" ; "));
+  ok(/\(\d+ tasks\)$/.test(r.upgradeFlag), "upgrade records how many tasks changed -> " + r.upgradeFlag);
+  ok(r.upgradeOnce === "BRIEF ORG DES GTR", "upgrade runs only once");
   ok(r.formulaSafe === "=SUM(1)", "text starting with = is stored as text, not a formula");
   ok(!!r.ctcNoSource && !!r.badUrl, "link validation");
   ok(r.pinned === true && r.linksLeft === 0, "link update / pin / delete");

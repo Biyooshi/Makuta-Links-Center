@@ -125,6 +125,7 @@ function setup() {
 /* ---------- Server functions used by the page (through api) ---------- */
 
 function getInitialData_() {
+  upgradeTasks_();
   return {
     links: getLinks_(),
     tasks: getTasks_(),
@@ -347,6 +348,52 @@ function linkedTasks_(t, all) {
   if (!t.workMonth || ['brief', 'qcBrief', 'shoot'].indexOf(t.stage) < 0) return [];
   return all.filter(o => o.id !== t.id && o.project === t.project && o.workMonth === t.workMonth &&
     o.stage === t.stage && (t.stage !== 'brief' || o.channel === t.channel));
+}
+
+const MONTH_NAMES = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+// Month words in titles written by hand, English or Indonesian, full or short ("DES", "Desember", "OKT")
+const MONTH_WORDS = { JAN: 1, FEB: 2, PEB: 2, MAR: 3, APR: 4, MAY: 5, MEI: 5, JUN: 6, JUL: 7, AUG: 8, AGU: 8, AGS: 8, SEP: 9, OCT: 10, OKT: 10, NOV: 11, DEC: 12, DES: 12 };
+
+// Monthly Brief title (mirrors batchTitle in JavaScript.html): "BRIEF ORG DECEMBER KRR",
+// "VIDEO CTC ADS NOVEMBER KRR"; "NON-SHOOTING" is added when the project makes both video types
+function briefTitle_(project, type, channel, forMonth) {
+  const videos = (PROJECTS[project].types || CONTENT_TYPES).filter(v => /^Video/.test(v)).length;
+  const kind = !/^Video/.test(type) ? 'BRIEF' : videos > 1 && type === 'Video (Non-Shooting)' ? 'VIDEO CTC NON-SHOOTING' : 'VIDEO CTC';
+  return kind + ' ' + channel + ' ' + MONTH_NAMES[Number(forMonth.slice(5, 7)) - 1] + ' ' + project.toUpperCase();
+}
+
+// Tasks made one by one before Monthly Brief existed (e.g. "BRIEF ORG DES KRR", "VIDEO ORG DES GTR")
+// become Monthly Brief tasks: their working month is filled in from the title (the year from when
+// the task was made) and the title is written the standard way. Runs once; Event Attribute tasks and
+// titles that don't follow the format are left as they are.
+const UPGRADE_PROPERTY = 'UPGRADED_MONTHLY_BRIEF';
+function upgradeTasks_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(UPGRADE_PROPERTY)) return;
+  withLock_(() => {
+    if (props.getProperty(UPGRADE_PROPERTY)) return;
+    const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
+    const last = sheet.getLastRow();
+    let changed = 0;
+    if (last >= 2) sheet.getRange(2, 1, last - 1, TASK_HEADERS.length).getValues().forEach((r, i) => {
+      if (r[0] === '') return;
+      const t = rowToTask_(r);
+      const m = t.title.trim().match(/^(BRIEF|VIDEO(?: CTC)?(?: NON-SHOOTING)?)\s+(ORG|ADS)\s+([A-Za-z]+)\s+(\S+)$/i);
+      const month = m && MONTH_WORDS[m[3].slice(0, 3).toUpperCase()];
+      if (t.workMonth || t.type === EVENT_TYPE || !PROJECTS.hasOwnProperty(t.project) || !m || !month ||
+        m[3].length < 3 || m[2].toUpperCase() !== t.channel || m[4].toUpperCase() !== t.project.toUpperCase()) return;
+      // The year that puts the content month closest to when the task was made
+      const made = new Date(t.createdAt || Date.now());
+      const year = [made.getFullYear() - 1, made.getFullYear(), made.getFullYear() + 1].sort((a, b) =>
+        Math.abs(new Date(a, month - 1, 15) - made) - Math.abs(new Date(b, month - 1, 15) - made))[0];
+      t.forMonth = year + '-' + ('0' + month).slice(-2);
+      t.workMonth = addMonths_(t.forMonth, -(BRIEF_MONTHS_AHEAD[t.channel] || 0));
+      t.title = briefTitle_(t.project, t.type, t.channel, t.forMonth);
+      writeTask_(sheet, i + 2, t);
+      changed++;
+    });
+    props.setProperty(UPGRADE_PROPERTY, new Date().toISOString() + ' (' + changed + ' tasks)');
+  });
 }
 
 // "2026-11" + 1 -> "2026-12"
