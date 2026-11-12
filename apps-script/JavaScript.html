@@ -27,10 +27,49 @@
     za: (a, b) => b.title.localeCompare(a.title),
   };
 
-  /* ---------- Server calls ---------- */
+  /* ---------- Server calls (each one carries the passcode) ---------- */
+  const PASSCODE_KEY = "makutaPasscode";
+  let passcode = "";
+  try { passcode = localStorage.getItem(PASSCODE_KEY) || ""; } catch (e) {}
+
   function api(fn, ...args) {
     return new Promise((resolve, reject) =>
-      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args));
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(err => {
+        const locked = String(err && err.message).match(/LOCKED:\s*(.*)$/);
+        if (locked) showLock(locked[1]);
+        reject(locked ? new Error("Locked: " + locked[1]) : err);
+      }).api(passcode, fn, args));
+  }
+
+  /* ---------- Passcode screen ---------- */
+  function showLock(message) {
+    state.loaded = false;
+    $("lockErr").textContent = message || "";
+    $("lockErr").hidden = !message;
+    $("lockInput").value = "";
+    document.querySelectorAll(".modal-bg.show").forEach(m => m.classList.remove("show"));
+    openModal("lockModal");
+    setTimeout(() => $("lockInput").focus(), 50);
+  }
+
+  function unlock(e) {
+    e.preventDefault();
+    const value = $("lockInput").value;
+    if (!value) return;
+    passcode = value;
+    try { localStorage.setItem(PASSCODE_KEY, passcode); } catch (err) {}
+    closeModal("lockModal");
+    loadData();
+  }
+
+  // Forget the passcode on this device (e.g. on a shared computer)
+  function lockApp() {
+    passcode = "";
+    try { localStorage.removeItem(PASSCODE_KEY); } catch (e) {}
+    state.links = [];
+    state.tasks = [];
+    $("results").innerHTML = $("taskResults").innerHTML = "";
+    showLock();
   }
 
   /* ---------- Helpers ---------- */
@@ -122,12 +161,13 @@
 
   document.querySelectorAll(".modal-bg").forEach(bg => bg.addEventListener("click", e => {
     if (e.target !== bg) return;
+    if (bg.id === "lockModal") return;
     if (bg.id === "confirmModal") $("confirmCancel").click(); else closeModal(bg.id);
   }));
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
     const open = document.querySelector(".modal-bg.show");
-    if (!open) return;
+    if (!open || open.id === "lockModal") return;
     if (open.id === "confirmModal") $("confirmCancel").click(); else closeModal(open.id);
   });
 
@@ -1228,6 +1268,7 @@
     render();
   }));
 
+  $("lockForm").addEventListener("submit", unlock);
   prefillFromUrl();
-  loadData();
+  if (passcode) loadData(); else showLock();
 </script>

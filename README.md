@@ -64,12 +64,16 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 > Nama file harus persis: `Code`, `Index`, `Styles`, `JavaScript` (huruf besar/kecil berpengaruh).
 > Pastikan seluruh isi file ter-copy: buka file aslinya (misalnya di Notepad / VS Code) → Ctrl + A → Ctrl + C. Cek bahwa baris terakhir di Apps Script sama dengan baris terakhir file aslinya.
 
-### 4. Beri izin (authorize) dan buat sheet-nya
-1. Di editor, buka **Code.gs**. Di toolbar atas, pada dropdown fungsi pilih **getInitialData** → klik **Run**.
+### 4. Beri izin (authorize), buat sheet, dan pasang passcode
+1. Di editor, buka **Code.gs**. Di toolbar atas, pada dropdown fungsi pilih **setup** → klik **Run**.
 2. Muncul "Authorization required" → **Review permissions** → pilih akun pribadimu.
 3. Muncul "Google hasn't verified this app" → klik **Advanced → Go to Makuta Links Center (unsafe)** → **Allow**. (Ini normal, karena aplikasinya buatan kamu sendiri. Izin yang diminta: Google Sheets dan Google Calendar untuk reminder deadline.)
 4. Tunggu sampai **Execution log** menulis "Execution completed".
 5. Kembali ke tab spreadsheet: sekarang ada sheet **Links** dan **Tasks** dengan judul kolom (masih kosong). Sheet bawaan "Sheet1" boleh dihapus (klik kanan tab → Delete).
+6. Pasang passcode: di Apps Script klik **Project Settings** (ikon roda gigi) → scroll ke **Script Properties** → **Add script property** → Property: `APP_PASSCODE`, Value: passcode pilihanmu (minimal 8 karakter, campur huruf & angka; jangan dibagikan) → **Save script properties**.
+   - Passcode ini diminta sekali di setiap perangkat/browser, lalu diingat. Tombol **Lock** di aplikasi membuat perangkat itu lupa passcode-nya.
+   - Mengganti passcode: ubah value di Script Properties (tidak perlu deploy ulang). Semua perangkat akan diminta passcode baru.
+   - Salah passcode 10 kali → aplikasi terkunci 15 menit.
 
 ### 5. Deploy sebagai Web App
 1. Di Apps Script, klik **Deploy → New deployment**.
@@ -77,9 +81,10 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 3. Isi:
    - Description: `v1`
    - Execute as: **Me (email pribadimu)**
-   - Who has access: **Only myself** (supaya hanya kamu yang bisa membuka)
+   - Who has access: **Anyone** (wajib, supaya bisa tampil di halaman Vercel; datanya tetap dikunci passcode dari langkah 4)
 4. Klik **Deploy**. (Kalau diminta authorize lagi, ulangi langkah 4.2–4.3.)
-5. Salin **Web app URL** (berakhiran `/exec`). Inilah alamat website kamu: **bookmark** URL ini, dan buka juga di HP (login akun pribadi yang sama) kalau mau.
+5. Buka URL-nya → masukkan passcode → aplikasi terbuka.
+6. Salin **Web app URL** (berakhiran `/exec`). Inilah alamat website kamu: **bookmark** URL ini, dan buka juga di HP (login akun pribadi yang sama) kalau mau.
 
 ### 6. Pasang tombol Quick Save (opsional, sangat disarankan)
 1. Buka Web app URL → klik **Quick Save Button**.
@@ -100,8 +105,8 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 ## GitHub & Vercel
 - Kode disimpan di GitHub: https://github.com/Biyooshi/Makuta-Links-Center
 - Alamat aplikasi: **https://makuta-links-center.vercel.app**. Vercel tidak menjalankan aplikasinya; `web/index.html` hanya menampilkan Web app Apps Script (`/exec`) di dalam halaman Vercel (iframe), jadi alamat di browser tetap `vercel.app`. Data tetap di Google Sheet.
-- Supaya bisa ditampilkan di Vercel, `doGet` di `Code.gs` memakai `setXFrameOptionsMode(ALLOWALL)`.
-- Harus login akun Google pribadi di browser yang sama. Kalau halaman Vercel kosong/error (biasanya karena browser memblokir cookie pihak ketiga, misalnya di Incognito), buka langsung URL `/exec`, atau izinkan cookie untuk `makuta-links-center.vercel.app`.
+- Supaya bisa ditampilkan di Vercel, `doGet` di `Code.gs` memakai `setXFrameOptionsMode(ALLOWALL)`, dan Web app diatur **Who has access: Anyone**. Akses "Only myself" tidak bisa dipakai di Vercel (Google menolak dengan error 401 karena cookie login diblokir di dalam halaman lain).
+- Karena itu aplikasi dikunci **passcode** (Setup langkah 4.6): server menolak semua baca/tulis data tanpa passcode yang benar. Tidak perlu login Google untuk membukanya.
 - Kalau Web app URL berubah (membuat *New deployment* baru, bukan *New version*), ganti `APP_URL` di `web/index.html`, lalu push ke GitHub. Vercel otomatis memperbarui.
 - Mengubah kode di GitHub **tidak** otomatis mengubah Apps Script. Kode tetap perlu di-paste ke Apps Script (lihat di bawah).
 
@@ -112,7 +117,7 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 
 > Tanpa langkah 2, website tetap menjalankan kode versi lama.
 
-> Kalau update-nya butuh izin baru (misalnya akses **Google Calendar** untuk reminder deadline), Google akan minta **Authorize access** lagi. Cara paling gampang: di editor Apps Script pilih fungsi `getInitialData` → klik **Run** → ikuti langkah authorize seperti di Setup langkah 4.
+> Kalau update-nya butuh izin baru (misalnya akses **Google Calendar** untuk reminder deadline), Google akan minta **Authorize access** lagi. Cara paling gampang: di editor Apps Script pilih fungsi `setup` → klik **Run** → ikuti langkah authorize seperti di Setup langkah 4.
 
 ## Reminder deadline (Google Calendar)
 - Setiap link yang punya **Deadline** otomatis dibuatkan 2 event di Google Calendar utama kamu: **H-2** dan **H-1**, jam **09:00**, dengan notifikasi popup.

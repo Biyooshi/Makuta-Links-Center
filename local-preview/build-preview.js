@@ -66,6 +66,11 @@ const SpreadsheetApp = { getActiveSpreadsheet: () => ({
   getUrl: () => "",  // no real sheet in the preview; the page shows a notice instead
   getSpreadsheetTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
 }) };
+// The preview's passcode is "preview" (filled in automatically the first time)
+const PropertiesService = { getScriptProperties: () => ({ getProperty: k => k === "APP_PASSCODE" ? "preview" : null }) };
+try { if (localStorage.getItem("makutaPasscode") === null) localStorage.setItem("makutaPasscode", "preview"); } catch (e) {}
+const mockCache = {};
+const CacheService = { getScriptCache: () => ({ get: k => mockCache[k] || null, put: (k, v) => { mockCache[k] = v; } }) };
 const LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
 const ScriptApp = { getService: () => ({ getUrl: () => location.href.split("?")[0] }) };
 const HtmlService = {};
@@ -87,7 +92,7 @@ const Utilities = {
 </script>
 <script>const GAS = (function () {
 ${read("Code.gs")}
-return { getInitialData, getLinks, addLink, updateLink, setPinned, deleteLink, getTasks, addTask, updateTask, moveTask, setTaskItem, deleteTask };
+return Object.assign({ api }, API);
 })();</script>
 <script>
 const google = { script: {

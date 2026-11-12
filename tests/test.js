@@ -281,6 +281,33 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   // Footer credit opens Instagram in a new tab
   ok(await page.$eval(".credit a", a => a.textContent.trim() === "Made by Muhammad Nurul Qolbi" && a.href === "https://www.instagram.com/biyoosh.i/" && a.target === "_blank" && a.rel === "noopener"), "footer: Made by Muhammad Nurul Qolbi -> Instagram (new tab)");
 
+  // Passcode: the server refuses every call without the right passcode
+  const lockErr = await page.evaluate(() => {
+    const err = fn => { try { fn(); return ""; } catch (e) { return e.message; } };
+    return {
+      wrong: err(() => GAS.api("nope", "getLinks", [])),
+      empty: err(() => GAS.api("", "deleteLink", ["x"])),
+      unknown: err(() => GAS.api("preview", "getSheet_", [])),
+      ok: Array.isArray(GAS.api("preview", "getLinks", [])),
+    };
+  });
+  ok(/^LOCKED: Wrong passcode/.test(lockErr.wrong) && /^LOCKED/.test(lockErr.empty), "server: wrong / empty passcode refused");
+  ok(lockErr.unknown === "Unknown action." && lockErr.ok, "server: only listed actions can be called, right passcode works");
+  // Passcode screen: Lock, wrong passcode, then the right one
+  await page.evaluate(() => lockApp());
+  ok(await page.$eval("#lockModal", e => e.classList.contains("show")) && !(await page.evaluate(() => state.links.length)), "Lock button shows the passcode screen and hides the data");
+  await page.keyboard.press("Escape");
+  await page.mouse.click(5, 5);
+  ok(await page.$eval("#lockModal", e => e.classList.contains("show")), "passcode screen cannot be closed with Esc or a click outside");
+  await page.type("#lockInput", "salah");
+  await page.click(".lock-btn");
+  await page.waitForFunction(() => !document.getElementById("lockErr").hidden);
+  ok(await page.$eval("#lockErr", e => e.textContent.includes("Wrong passcode")), "wrong passcode shows an error");
+  await page.type("#lockInput", "preview");
+  await page.click(".lock-btn");
+  await page.waitForFunction(() => state.loaded && state.links.length > 0);
+  ok(await page.evaluate(() => localStorage.getItem("makutaPasscode") === "preview"), "right passcode opens the app and is remembered on this device");
+
   // Layout: no sideways scroll on a phone, and screenshots for a visual check
   for (const [w, name] of [[1300, "desktop"], [390, "phone"]]) {
     await page.setViewport({ width: w, height: 900 });

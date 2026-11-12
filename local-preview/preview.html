@@ -200,6 +200,9 @@
   .modal.modal-left { text-align: left; max-width: 520px; }
   .modal .check { font-size: 60px; color: var(--success); line-height: 1; margin-bottom: 14px; }
   .modal-emoji { font-size: 40px; margin-bottom: 8px; }
+  .modal-lock { background: rgba(5, 10, 25, .85); }
+  .modal-lock .error { text-align: left; }
+  .lock-btn { margin-top: 14px; }
   .modal h3 { color: var(--heading); font-size: 20px; margin-bottom: 8px; }
   .modal p { color: var(--muted); font-size: 14px; margin-bottom: 20px; word-break: break-word; }
   .modal p.small { font-size: 12px; margin: 16px 0 6px; }
@@ -527,6 +530,9 @@
         <a class="btn btn-soft" id="sheetLink" href="#" target="_blank" rel="noopener">
           <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Open Google Sheet
         </a>
+        <button type="button" class="btn-soft" onclick="lockApp()" title="Lock the app and forget the passcode on this device">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Lock
+        </button>
         <button type="button" class="btn-soft theme-toggle" onclick="toggleTheme()" title="Toggle dark / light mode">
           <svg class="icon moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
           <svg class="icon sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
@@ -908,6 +914,20 @@
     </div>
   </div>
 
+  <!-- Passcode screen (cannot be closed until the right passcode is entered) -->
+  <div class="modal-bg modal-lock" id="lockModal">
+    <div class="modal">
+      <div class="modal-emoji">🔒</div>
+      <h3>Makuta Links Center</h3>
+      <p>Enter your passcode to open the app.</p>
+      <form id="lockForm" novalidate>
+        <input id="lockInput" type="password" autocomplete="current-password" placeholder="Passcode">
+        <div class="error" id="lockErr" hidden></div>
+        <button type="submit" class="btn-accent btn-block lock-btn">Unlock</button>
+      </form>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   
@@ -959,6 +979,11 @@ const SpreadsheetApp = { getActiveSpreadsheet: () => ({
   getUrl: () => "",  // no real sheet in the preview; the page shows a notice instead
   getSpreadsheetTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
 }) };
+// The preview's passcode is "preview" (filled in automatically the first time)
+const PropertiesService = { getScriptProperties: () => ({ getProperty: k => k === "APP_PASSCODE" ? "preview" : null }) };
+try { if (localStorage.getItem("makutaPasscode") === null) localStorage.setItem("makutaPasscode", "preview"); } catch (e) {}
+const mockCache = {};
+const CacheService = { getScriptCache: () => ({ get: k => mockCache[k] || null, put: (k, v) => { mockCache[k] = v; } }) };
 const LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
 const ScriptApp = { getService: () => ({ getUrl: () => location.href.split("?")[0] }) };
 const HtmlService = {};
@@ -1058,19 +1083,60 @@ function include(name) {
   return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
-/* ---------- Public API (called from the page via google.script.run) ---------- */
+/* ---------- Passcode: the web app is open to "Anyone" (so it also works inside the Vercel page), ----------
+   so every call from the page carries the passcode, checked here before anything is read or changed. */
+const PASSCODE_PROPERTY = 'APP_PASSCODE';  // set in Project Settings > Script Properties
+const MAX_WRONG_PASSCODES = 10;            // then everything stays locked for 15 minutes
 
-function getInitialData() {
+// What the page may do. Every other function ends in "_", so google.script.run cannot call it.
+const API = {
+  getInitialData: getInitialData_, getLinks: getLinks_, addLink: addLink_, updateLink: updateLink_,
+  setPinned: setPinned_, deleteLink: deleteLink_, getTasks: getTasks_, addTask: addTask_,
+  updateTask: updateTask_, setTaskItem: setTaskItem_, moveTask: moveTask_, deleteTask: deleteTask_
+};
+
+// The only entry point for the page: api(passcode, "addLink", [data])
+function api(passcode, fn, args) {
+  checkPasscode_(passcode);
+  if (!API.hasOwnProperty(fn)) throw new Error('Unknown action.');
+  return API[fn].apply(null, Array.isArray(args) ? args : []);
+}
+
+// Errors starting with "LOCKED:" make the page show the passcode screen
+function checkPasscode_(passcode) {
+  const real = PropertiesService.getScriptProperties().getProperty(PASSCODE_PROPERTY);
+  if (!real) throw new Error('LOCKED: No passcode is set up yet. Add ' + PASSCODE_PROPERTY + ' in Apps Script > Project Settings > Script Properties.');
+  const cache = CacheService.getScriptCache();
+  const wrong = Number(cache.get('wrongPasscodes') || 0);
+  if (wrong >= MAX_WRONG_PASSCODES) throw new Error('LOCKED: Too many wrong passcodes. Please try again in 15 minutes.');
+  if (String(passcode == null ? '' : passcode) !== real) {
+    cache.put('wrongPasscodes', String(wrong + 1), 15 * 60);
+    throw new Error('LOCKED: Wrong passcode.');
+  }
+}
+
+// Run once from the Apps Script editor: asks for the permissions and creates the Links and Tasks sheets
+function setup() {
+  getSheet_();
+  getSheet_(TASK_SHEET, TASK_HEADERS);
+  CalendarApp.getDefaultCalendar();
+  const ready = !!PropertiesService.getScriptProperties().getProperty(PASSCODE_PROPERTY);
+  Logger.log(ready ? 'Setup done. The passcode is set.' : 'Setup done. Now add ' + PASSCODE_PROPERTY + ' in Project Settings > Script Properties.');
+}
+
+/* ---------- Server functions used by the page (through api) ---------- */
+
+function getInitialData_() {
   return {
-    links: getLinks(),
-    tasks: getTasks(),
+    links: getLinks_(),
+    tasks: getTasks_(),
     taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS },
     sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl(),
     appUrl: ScriptApp.getService().getUrl()
   };
 }
 
-function getLinks() {
+function getLinks_() {
   const sheet = getSheet_();
   const last = sheet.getLastRow();
   if (last < 2) return [];
@@ -1079,7 +1145,7 @@ function getLinks() {
     .map(r => publicLink_(rowToLink_(r)));
 }
 
-function addLink(data) {
+function addLink_(data) {
   return withLock_(() => {
     const sheet = getSheet_();
     const now = new Date().toISOString();
@@ -1090,7 +1156,7 @@ function addLink(data) {
   });
 }
 
-function updateLink(id, data) {
+function updateLink_(id, data) {
   return withLock_(() => {
     const sheet = getSheet_();
     const row = findRow_(sheet, id);
@@ -1102,7 +1168,7 @@ function updateLink(id, data) {
   });
 }
 
-function setPinned(id, pinned) {
+function setPinned_(id, pinned) {
   return withLock_(() => {
     const sheet = getSheet_();
     const row = findRow_(sheet, id);
@@ -1112,7 +1178,7 @@ function setPinned(id, pinned) {
   });
 }
 
-function deleteLink(id) {
+function deleteLink_(id) {
   return withLock_(() => {
     const sheet = getSheet_();
     const row = findRow_(sheet, id);
@@ -1124,7 +1190,7 @@ function deleteLink(id) {
 
 /* ---------- Milestones: content tasks and their step-by-step timeline ---------- */
 
-function getTasks() {
+function getTasks_() {
   const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
   const last = sheet.getLastRow();
   if (last < 2) return [];
@@ -1133,7 +1199,7 @@ function getTasks() {
     .map(rowToTask_);
 }
 
-function addTask(data) {
+function addTask_(data) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const now = new Date().toISOString();
@@ -1143,7 +1209,7 @@ function addTask(data) {
   });
 }
 
-function updateTask(id, data) {
+function updateTask_(id, data) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const row = findRow_(sheet, id);
@@ -1155,7 +1221,7 @@ function updateTask(id, data) {
 }
 
 // Ticks (or unticks) one Event Attribute deliverable, e.g. "Flyer Cetak"
-function setTaskItem(id, item, checked) {
+function setTaskItem_(id, item, checked) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const row = findRow_(sheet, id);
@@ -1172,7 +1238,7 @@ function setTaskItem(id, item, checked) {
 // back to opts.to (QC Client always sends it back to Obi first), "assign" = Obi passes a client
 // revision on to opts.to, "undo" = take back the last move. opts.from is the step the page showed,
 // so a double click (or a change made on another device) can't move the task twice.
-function moveTask(id, action, opts) {
+function moveTask_(id, action, opts) {
   opts = opts || {};
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
@@ -1215,7 +1281,7 @@ function moveTask(id, action, opts) {
   });
 }
 
-function deleteTask(id) {
+function deleteTask_(id) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     sheet.deleteRow(findRow_(sheet, id));
@@ -1569,7 +1635,7 @@ function rowToLink_(r) {
   };
 }
 
-return { getInitialData, getLinks, addLink, updateLink, setPinned, deleteLink, getTasks, addTask, updateTask, moveTask, setTaskItem, deleteTask };
+return Object.assign({ api }, API);
 })();</script>
 <script>
 const google = { script: {
@@ -1622,10 +1688,49 @@ function previewClear() {
     za: (a, b) => b.title.localeCompare(a.title),
   };
 
-  /* ---------- Server calls ---------- */
+  /* ---------- Server calls (each one carries the passcode) ---------- */
+  const PASSCODE_KEY = "makutaPasscode";
+  let passcode = "";
+  try { passcode = localStorage.getItem(PASSCODE_KEY) || ""; } catch (e) {}
+
   function api(fn, ...args) {
     return new Promise((resolve, reject) =>
-      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args));
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(err => {
+        const locked = String(err && err.message).match(/LOCKED:\s*(.*)$/);
+        if (locked) showLock(locked[1]);
+        reject(locked ? new Error("Locked: " + locked[1]) : err);
+      }).api(passcode, fn, args));
+  }
+
+  /* ---------- Passcode screen ---------- */
+  function showLock(message) {
+    state.loaded = false;
+    $("lockErr").textContent = message || "";
+    $("lockErr").hidden = !message;
+    $("lockInput").value = "";
+    document.querySelectorAll(".modal-bg.show").forEach(m => m.classList.remove("show"));
+    openModal("lockModal");
+    setTimeout(() => $("lockInput").focus(), 50);
+  }
+
+  function unlock(e) {
+    e.preventDefault();
+    const value = $("lockInput").value;
+    if (!value) return;
+    passcode = value;
+    try { localStorage.setItem(PASSCODE_KEY, passcode); } catch (err) {}
+    closeModal("lockModal");
+    loadData();
+  }
+
+  // Forget the passcode on this device (e.g. on a shared computer)
+  function lockApp() {
+    passcode = "";
+    try { localStorage.removeItem(PASSCODE_KEY); } catch (e) {}
+    state.links = [];
+    state.tasks = [];
+    $("results").innerHTML = $("taskResults").innerHTML = "";
+    showLock();
   }
 
   /* ---------- Helpers ---------- */
@@ -1717,12 +1822,13 @@ function previewClear() {
 
   document.querySelectorAll(".modal-bg").forEach(bg => bg.addEventListener("click", e => {
     if (e.target !== bg) return;
+    if (bg.id === "lockModal") return;
     if (bg.id === "confirmModal") $("confirmCancel").click(); else closeModal(bg.id);
   }));
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
     const open = document.querySelector(".modal-bg.show");
-    if (!open) return;
+    if (!open || open.id === "lockModal") return;
     if (open.id === "confirmModal") $("confirmCancel").click(); else closeModal(open.id);
   });
 
@@ -2823,8 +2929,9 @@ function previewClear() {
     render();
   }));
 
+  $("lockForm").addEventListener("submit", unlock);
   prefillFromUrl();
-  loadData();
+  if (passcode) loadData(); else showLock();
 </script>
 
 </body>

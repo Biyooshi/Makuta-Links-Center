@@ -77,19 +77,60 @@ function include(name) {
   return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
-/* ---------- Public API (called from the page via google.script.run) ---------- */
+/* ---------- Passcode: the web app is open to "Anyone" (so it also works inside the Vercel page), ----------
+   so every call from the page carries the passcode, checked here before anything is read or changed. */
+const PASSCODE_PROPERTY = 'APP_PASSCODE';  // set in Project Settings > Script Properties
+const MAX_WRONG_PASSCODES = 10;            // then everything stays locked for 15 minutes
 
-function getInitialData() {
+// What the page may do. Every other function ends in "_", so google.script.run cannot call it.
+const API = {
+  getInitialData: getInitialData_, getLinks: getLinks_, addLink: addLink_, updateLink: updateLink_,
+  setPinned: setPinned_, deleteLink: deleteLink_, getTasks: getTasks_, addTask: addTask_,
+  updateTask: updateTask_, setTaskItem: setTaskItem_, moveTask: moveTask_, deleteTask: deleteTask_
+};
+
+// The only entry point for the page: api(passcode, "addLink", [data])
+function api(passcode, fn, args) {
+  checkPasscode_(passcode);
+  if (!API.hasOwnProperty(fn)) throw new Error('Unknown action.');
+  return API[fn].apply(null, Array.isArray(args) ? args : []);
+}
+
+// Errors starting with "LOCKED:" make the page show the passcode screen
+function checkPasscode_(passcode) {
+  const real = PropertiesService.getScriptProperties().getProperty(PASSCODE_PROPERTY);
+  if (!real) throw new Error('LOCKED: No passcode is set up yet. Add ' + PASSCODE_PROPERTY + ' in Apps Script > Project Settings > Script Properties.');
+  const cache = CacheService.getScriptCache();
+  const wrong = Number(cache.get('wrongPasscodes') || 0);
+  if (wrong >= MAX_WRONG_PASSCODES) throw new Error('LOCKED: Too many wrong passcodes. Please try again in 15 minutes.');
+  if (String(passcode == null ? '' : passcode) !== real) {
+    cache.put('wrongPasscodes', String(wrong + 1), 15 * 60);
+    throw new Error('LOCKED: Wrong passcode.');
+  }
+}
+
+// Run once from the Apps Script editor: asks for the permissions and creates the Links and Tasks sheets
+function setup() {
+  getSheet_();
+  getSheet_(TASK_SHEET, TASK_HEADERS);
+  CalendarApp.getDefaultCalendar();
+  const ready = !!PropertiesService.getScriptProperties().getProperty(PASSCODE_PROPERTY);
+  Logger.log(ready ? 'Setup done. The passcode is set.' : 'Setup done. Now add ' + PASSCODE_PROPERTY + ' in Project Settings > Script Properties.');
+}
+
+/* ---------- Server functions used by the page (through api) ---------- */
+
+function getInitialData_() {
   return {
-    links: getLinks(),
-    tasks: getTasks(),
+    links: getLinks_(),
+    tasks: getTasks_(),
     taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS },
     sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl(),
     appUrl: ScriptApp.getService().getUrl()
   };
 }
 
-function getLinks() {
+function getLinks_() {
   const sheet = getSheet_();
   const last = sheet.getLastRow();
   if (last < 2) return [];
@@ -98,7 +139,7 @@ function getLinks() {
     .map(r => publicLink_(rowToLink_(r)));
 }
 
-function addLink(data) {
+function addLink_(data) {
   return withLock_(() => {
     const sheet = getSheet_();
     const now = new Date().toISOString();
@@ -109,7 +150,7 @@ function addLink(data) {
   });
 }
 
-function updateLink(id, data) {
+function updateLink_(id, data) {
   return withLock_(() => {
     const sheet = getSheet_();
     const row = findRow_(sheet, id);
@@ -121,7 +162,7 @@ function updateLink(id, data) {
   });
 }
 
-function setPinned(id, pinned) {
+function setPinned_(id, pinned) {
   return withLock_(() => {
     const sheet = getSheet_();
     const row = findRow_(sheet, id);
@@ -131,7 +172,7 @@ function setPinned(id, pinned) {
   });
 }
 
-function deleteLink(id) {
+function deleteLink_(id) {
   return withLock_(() => {
     const sheet = getSheet_();
     const row = findRow_(sheet, id);
@@ -143,7 +184,7 @@ function deleteLink(id) {
 
 /* ---------- Milestones: content tasks and their step-by-step timeline ---------- */
 
-function getTasks() {
+function getTasks_() {
   const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
   const last = sheet.getLastRow();
   if (last < 2) return [];
@@ -152,7 +193,7 @@ function getTasks() {
     .map(rowToTask_);
 }
 
-function addTask(data) {
+function addTask_(data) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const now = new Date().toISOString();
@@ -162,7 +203,7 @@ function addTask(data) {
   });
 }
 
-function updateTask(id, data) {
+function updateTask_(id, data) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const row = findRow_(sheet, id);
@@ -174,7 +215,7 @@ function updateTask(id, data) {
 }
 
 // Ticks (or unticks) one Event Attribute deliverable, e.g. "Flyer Cetak"
-function setTaskItem(id, item, checked) {
+function setTaskItem_(id, item, checked) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const row = findRow_(sheet, id);
@@ -191,7 +232,7 @@ function setTaskItem(id, item, checked) {
 // back to opts.to (QC Client always sends it back to Obi first), "assign" = Obi passes a client
 // revision on to opts.to, "undo" = take back the last move. opts.from is the step the page showed,
 // so a double click (or a change made on another device) can't move the task twice.
-function moveTask(id, action, opts) {
+function moveTask_(id, action, opts) {
   opts = opts || {};
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
@@ -234,7 +275,7 @@ function moveTask(id, action, opts) {
   });
 }
 
-function deleteTask(id) {
+function deleteTask_(id) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     sheet.deleteRow(findRow_(sheet, id));
