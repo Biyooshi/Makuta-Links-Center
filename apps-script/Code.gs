@@ -110,6 +110,7 @@ function checkPasscode_(passcode) {
 }
 
 // Run once from the Apps Script editor: asks for the permissions and creates the Links and Tasks sheets
+// (with the edit warnings on their protected columns, see protectSheet_)
 function setup() {
   getSheet_();
   getSheet_(TASK_SHEET, TASK_HEADERS);
@@ -421,11 +422,38 @@ function getSheet_(name, headers) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   // (Re)create the header row if the sheet is new or was emptied by hand
-  if (sheet.getLastRow() === 0) {
+  const fresh = sheet.getLastRow() === 0;
+  if (fresh) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
     sheet.setFrozenRows(1);
   }
+  protectSheet_(sheet, headers, fresh);
   return sheet;
+}
+
+// Columns only the website should change. Editing them by hand in the sheet shows an
+// "Are you sure?" warning; the website itself still writes to them as usual.
+const PROTECTED_COLUMNS = {
+  'Links': ['ID', 'Reminder IDs'],
+  'Tasks': ['ID', 'Stage', 'Current Step', 'Revisions', 'History', 'Checklist']
+};
+
+// Adds the warnings once per sheet (again if the sheet was recreated); existing ones are kept
+function protectSheet_(sheet, headers, force) {
+  const props = PropertiesService.getScriptProperties();
+  const flag = 'PROTECTED_' + sheet.getName();
+  if (!force && props.getProperty(flag)) return;
+  const have = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE).map(p => p.getDescription());
+  const warn = (a1, label) => {
+    const description = 'Makuta: ' + label + ' (changed by the website only)';
+    if (have.indexOf(description) < 0) sheet.getRange(a1).protect().setDescription(description).setWarningOnly(true);
+  };
+  warn('1:1', 'column titles');
+  (PROTECTED_COLUMNS[sheet.getName()] || []).forEach(name => {
+    const letter = String.fromCharCode(65 + headers.indexOf(name));
+    warn(letter + ':' + letter, name);
+  });
+  props.setProperty(flag, new Date().toISOString());
 }
 
 // Writes rows as plain text, so Sheets never turns "001" into 1, "50%" into 0.5,

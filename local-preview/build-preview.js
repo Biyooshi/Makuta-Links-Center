@@ -37,8 +37,12 @@ function mockSheet(name) {
   insertRowsAfter() {},
   deleteRow(r) { this.data.splice(r - 1, 1); this.save(); },
   setFrozenRows() {},
+  // Edit warnings on columns: only recorded, so the tests can check them
+  protections: [],
+  getProtections() { return this.protections.map(d => ({ getDescription: () => d })); },
   getRange(r, c, nr = 1, nc = 1) {
     const sheet = this;
+    if (typeof r === "string") return { protect: () => ({ setDescription(d) { sheet.protections.push(d); return { setWarningOnly: () => this }; } }) };
     return {
       getValues() {
         const out = [];
@@ -67,10 +71,12 @@ const SpreadsheetApp = { getActiveSpreadsheet: () => ({
   getSpreadsheetTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
 }) };
 // The preview's passcode is "preview" (filled in automatically the first time)
-const PropertiesService = { getScriptProperties: () => ({ getProperty: k => k === "APP_PASSCODE" ? "preview" : null }) };
+const mockProps = { APP_PASSCODE: "preview" };
+const PropertiesService = { getScriptProperties: () => ({ getProperty: k => mockProps[k] || null, setProperty: (k, v) => { mockProps[k] = v; } }) };
 try { if (localStorage.getItem("makutaPasscode") === null) localStorage.setItem("makutaPasscode", "preview"); } catch (e) {}
 const mockCache = {};
 const CacheService = { getScriptCache: () => ({ get: k => mockCache[k] || null, put: (k, v) => { mockCache[k] = v; } }) };
+SpreadsheetApp.ProtectionType = { RANGE: "RANGE" };
 const LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
 const ScriptApp = { getService: () => ({ getUrl: () => location.href.split("?")[0] }) };
 const HtmlService = {};

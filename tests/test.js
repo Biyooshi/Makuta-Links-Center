@@ -104,6 +104,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     GAS.deleteLink(l.id);
     out.linksLeft = GAS.getLinks().length;
     out.missingLink = tryErr(() => GAS.deleteLink(l.id));
+    out.protect = { Links: mockSheet("Links").protections.slice(), Tasks: mockSheet("Tasks").protections.slice() };
     return out;
   });
   const flow = (p, type, ch) => r.flows.find(f => f.p === p && f.type === type && f.ch === ch);
@@ -136,6 +137,9 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(r.formulaSafe === "=SUM(1)", "text starting with = is stored as text, not a formula");
   ok(!!r.ctcNoSource && !!r.badUrl, "link validation");
   ok(r.pinned === true && r.linksLeft === 0, "link update / pin / delete");
+  const prot = n => r.protect[n].map(d => d.replace(/^Makuta: | \(changed by the website only\)$/g, "")).join(",");
+  ok(prot("Links") === "column titles,ID,Reminder IDs", "Links sheet: edit warnings on titles, ID, Reminder IDs (added once) -> " + prot("Links"));
+  ok(prot("Tasks") === "column titles,ID,Stage,Current Step,Revisions,History,Checklist", "Tasks sheet: edit warnings on titles, ID, Stage, Current Step, Revisions, History, Checklist (added once) -> " + prot("Tasks"));
 
   /* ---------- 2. Page: sample data (fixtures.js) + buttons ---------- */
   console.log("Page");
