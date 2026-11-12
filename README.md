@@ -12,6 +12,7 @@ Website untuk menyimpan semua link pekerjaan di satu tempat. Datanya tersimpan p
 | `apps-script/JavaScript.html` | Logika halaman (form, filter, pencarian, dll.) |
 | `local-preview/preview.html` | Untuk mencoba website secara lokal sebelum setup Google Sheets. Data hanya tersimpan di browser. |
 | `local-preview/build-preview.js` | Membuat ulang `preview.html` kalau kode di `apps-script/` diubah: `node build-preview.js` |
+| `web/index.html` | Halaman Vercel yang menampilkan aplikasi di alamat makuta-links-center.vercel.app |
 | `tests/` | Tes otomatis (Chrome headless) untuk semua alur dan tombol. Lihat bagian **Tes otomatis**. |
 
 > **`apps-script/` adalah sumber utama.** `preview.html` dibuat dari file-file itu, jadi jangan edit `preview.html` langsung — edit `apps-script/`, lalu jalankan `node build-preview.js`.
@@ -97,9 +98,11 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 ---
 
 ## GitHub & Vercel
-- Kode disimpan di GitHub: https://github.com/Biyooshi/Makuta-All-Links
-- Vercel **tidak menjalankan** aplikasinya (aplikasi tetap berjalan di Google Apps Script, data tetap di Google Sheet). `vercel.json` hanya membuat alamat Vercel **langsung diarahkan** ke Web app URL (`/exec`), supaya punya alamat yang lebih mudah diingat.
-- Kalau Web app URL berubah (misalnya membuat *New deployment* baru, bukan *New version*), ganti `destination` di `vercel.json`, lalu push ke GitHub. Vercel otomatis memperbarui.
+- Kode disimpan di GitHub: https://github.com/Biyooshi/Makuta-Links-Center
+- Alamat aplikasi: **https://makuta-links-center.vercel.app**. Vercel tidak menjalankan aplikasinya; `web/index.html` hanya menampilkan Web app Apps Script (`/exec`) di dalam halaman Vercel (iframe), jadi alamat di browser tetap `vercel.app`. Data tetap di Google Sheet.
+- Supaya bisa ditampilkan di Vercel, `doGet` di `Code.gs` memakai `setXFrameOptionsMode(ALLOWALL)`.
+- Harus login akun Google pribadi di browser yang sama. Kalau halaman Vercel kosong/error (biasanya karena browser memblokir cookie pihak ketiga, misalnya di Incognito), buka langsung URL `/exec`, atau izinkan cookie untuk `makuta-links-center.vercel.app`.
+- Kalau Web app URL berubah (membuat *New deployment* baru, bukan *New version*), ganti `APP_URL` di `web/index.html`, lalu push ke GitHub. Vercel otomatis memperbarui.
 - Mengubah kode di GitHub **tidak** otomatis mengubah Apps Script. Kode tetap perlu di-paste ke Apps Script (lihat di bawah).
 
 ## Kalau nanti kode diubah / di-update

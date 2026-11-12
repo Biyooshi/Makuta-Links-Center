@@ -1046,10 +1046,12 @@ const STAGES = [
   { key: 'ads', name: 'Run Ads', role: 'Ads Team', person: 'Musthofa', action: 'Mark as Live on Ads' }
 ];
 
+// ALLOWALL lets the Vercel page (makuta-links-center.vercel.app) show the app inside its own address
 function doGet() {
   return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle('Makuta Links Center')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function include(name) {

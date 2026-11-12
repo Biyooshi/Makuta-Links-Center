@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Makuta Links Center</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👑</text></svg>">
+  <style>
+    html, body { margin: 0; height: 100%; background: #1f2f4f; }
+    iframe { display: block; width: 100%; height: 100%; border: 0; }
+  </style>
+</head>
+<body>
+  <!-- The app runs on Google Apps Script; this page only shows it under the Vercel address -->
+  <iframe id="app" title="Makuta Links Center" allow="clipboard-read; clipboard-write"></iframe>
+  <script>
+    const APP_URL = "https://script.google.com/macros/s/AKfycbxtAnUeT0JJgAzp5dj418s1kDTWvvNxKIPPVYY5qFBqxyPSispJbsoSA-QsoWXdmMOL/exec";
+    // Pass ?url=...&title=... on (used by the Quick Save button)
+    document.getElementById("app").src = APP_URL + location.search;
+  </script>
+</body>
+</html>
