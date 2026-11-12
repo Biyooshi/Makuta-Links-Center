@@ -277,7 +277,8 @@
 
         <div class="meta-bar">
           <div class="meta-left">
-            <button type="button" class="btn-accent btn-sm" onclick="openTaskForm()">+ New Task</button>
+            <button type="button" class="btn-accent btn-sm" onclick="openBatchForm()" title="Create all tasks for one month at once">+ Monthly Brief</button>
+            <button type="button" class="btn-soft btn-sm" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single Task</button>
             <span id="taskCount"></span>
           </div>
           <div class="actions">
@@ -342,6 +343,42 @@
     </div>
   </div>
 
+  <!-- Monthly Brief popup: every task of one month at once, titles written automatically -->
+  <div class="modal-bg" id="batchModal">
+    <div class="modal modal-left modal-wide modal-batch">
+      <h3>Monthly Brief</h3>
+      <p class="help help-top">Creates all of this month's tasks in one go. Titles are written for you; untick what you don't need.</p>
+      <form id="batchForm" novalidate>
+        <div class="grid-2">
+          <div class="field">
+            <label for="bfProject">Project <span class="req">*</span></label>
+            <select id="bfProject"></select>
+            <div class="help" id="bfTeam"></div>
+          </div>
+          <div class="field">
+            <label for="bfMonth">Working Month <span class="req">*</span></label>
+            <input id="bfMonth" type="month">
+            <div class="help">ORG is for the next month, ADS for this month.</div>
+          </div>
+          <div class="field">
+            <label for="bfDeadline">Deadline (all tasks)</label>
+            <input id="bfDeadline" type="date">
+          </div>
+          <div class="field" id="bfVideographerField" hidden>
+            <label for="bfVideographer">Videographer <span class="req">*</span></label>
+            <select id="bfVideographer"></select>
+          </div>
+        </div>
+        <div id="bfRows"></div>
+        <div class="error" id="batchFormErr" hidden></div>
+        <div class="actions" style="margin-top:16px">
+          <button type="button" class="btn-soft" onclick="closeModal('batchModal')">Cancel</button>
+          <button type="submit" class="btn-accent" id="batchSaveBtn">Create Tasks</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Request revision popup -->
   <div class="modal-bg" id="reviseModal">
     <div class="modal modal-left">
@@ -350,6 +387,11 @@
       <div class="field" id="reviseToField">
         <label for="reviseTo">Send back to</label>
         <select id="reviseTo"></select>
+      </div>
+      <div class="field" id="reviseChannelsField" hidden>
+        <label>Which brief needs a revision?</label>
+        <div id="reviseChannels" class="revise-channels"></div>
+        <div class="help">Briefs not ticked are approved.</div>
       </div>
       <div class="field">
         <label for="reviseNote">What needs to change?</label>

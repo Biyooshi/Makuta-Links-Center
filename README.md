@@ -140,7 +140,13 @@ Hasilnya bisa dilihat di tab **Actions** di GitHub (centang hijau = sudah live).
 ## Milestones (timeline pekerjaan konten)
 Tab **Milestones** berisi setiap task konten, dikelompokkan per project, lengkap dengan timeline step-nya. Datanya tersimpan di sheet **Tasks** (dibuat otomatis). Untuk sementara Milestones terpisah dari Links Center.
 
-- **+ New Task** → isi judul, project, content type, deadline.
+- **+ Monthly Brief** (cara utama) → pilih project dan **Working Month** (bulan brief dikerjakan), semua task bulan itu dibuat sekaligus dengan judul otomatis.
+  - Brief yang dikerjakan di suatu bulan: **ORG untuk bulan berikutnya, ADS untuk bulan itu sendiri**. Contoh dikerjakan November → `BRIEF ORG DECEMBER KRR`, `VIDEO CTC ORG DECEMBER KRR`, `BRIEF ADS NOVEMBER KRR`, `VIDEO CTC ADS NOVEMBER KRR`. Diatur di `BRIEF_MONTHS_AHEAD` (`Code.gs`).
+  - Isinya semua content type project (kecuali Event Attribute) untuk ORG dan ADS (Makuta: ORG saja). Task yang sudah ada ditandai **Already exists** dan tidak dibuat lagi; judul dan centang masih bisa diubah.
+  - Satu **link brief per channel** (spreadsheet ORG dan spreadsheet ADS terpisah), otomatis masuk ke semua task di channel itu. **Deadline (all tasks)** mengisi semua task, bisa diubah satu per satu.
+  - Di Milestones, task-nya tampil per **section** (project + channel + bulan): Static di atas, Video di bawah, masing-masing dengan timeline sendiri.
+  - Step yang dikerjakan bersama cukup diklik **sekali**: **Drafting Brief** (Static + Video satu channel), **QC Internal: Brief** (brief ORG + ADS sekaligus; Request Revision → centang ORG / ADS yang revisi, yang tidak dicentang otomatis di-approve), dan **Shooting** (satu shooting per bulan untuk video ORG + ADS). Setelah itu tiap task jalan sendiri. **Undo** pada langkah bersama membatalkannya untuk semua task yang ikut bergerak.
+- **+ Single Task** → satu task saja (misalnya Event Attribute): isi judul, project, content type, deadline.
   - Format judul: `[BRIEF / VIDEO CTC / EVENT] [ORG / ADS] [BULAN] [PROJECT]`, contoh `BRIEF ADS NOVEMBER KRR`, `VIDEO CTC ORG NOVEMBER VTB`, atau `EVENT ORG DECEMBER KRR`.
   - **ORG / ADS dibaca dari judul** (wajib salah satu). Project otomatis terpilih kalau kodenya ada di judul. Kalau judul bilang VIDEO CTC tapi content type Static (atau sebaliknya), form memberi peringatan.
   - Content type per project:
@@ -166,8 +172,9 @@ Tab **Milestones** berisi setiap task konten, dikelompokkan per project, lengkap
   - **QC Client → Request Revision** selalu kembali ke **Obi** dulu (step "Client Revision"). Obi lalu klik **Send to Videographer (CTC)** atau **Send to Graphic Designer** (Motion / ToV / design). Setelah dikerjakan → QC Internal → Kak Faza → QC Client lagi.
   - Selama revisi berjalan, step dari titik revisi sampai QC yang meminta revisi berwarna **merah**. Setelah QC itu approve lagi, timeline kembali hijau. Step "Client Revision" tetap tampil di timeline sebagai catatan.
   - **Undo** membatalkan langkah terakhir kalau salah klik. **History** menampilkan semua langkah + tanggal + catatan revisi.
+- Task yang sudah selesai tetap tampil (abu-abu, di bawah, tidak bisa di-Edit; step terakhir **Live on Ads / Scheduled / Posted** tetap hijau) selama 30 hari setelah selesai (`RECENT_DONE_DAYS` di `JavaScript.html`). Setelah itu hanya tampil lewat filter Step **Done** / **All tasks**.
 - Nama orang, emoji, content type, dan organic only per project diatur di bagian atas `Code.gs` (`PROJECTS`, `VIDEOGRAPHERS`, `STAGES`). Edit di sana kalau tim berubah, lalu deploy **New version**.
-- Di sheet **Tasks**, kolom **Current Step** dan **Revisions** hanya untuk dibaca; perubahan step dilakukan lewat tombol di website (kolom **History** dan **Checklist** jangan diedit manual).
+- Di sheet **Tasks**, kolom **Current Step** dan **Revisions** hanya untuk dibaca; perubahan step dilakukan lewat tombol di website (kolom **History** dan **Checklist** jangan diedit manual). Kolom **Work Month** dan **For Month** diisi oleh Monthly Brief dan menghubungkan task-task satu bulan; jangan diubah manual.
 
 ## Tentang data di Google Sheet
 - Data ada di sheet **Links**. Kamu boleh melihat/mengedit langsung di sana, tapi:

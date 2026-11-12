@@ -93,6 +93,31 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     e = GAS.updateTask(e.id, { title: "BRIEF ORG DECEMBER KRR", project: "KRR", type: "Static", deadline: "2026-12-20" });
     out.checklistAfterTypeChange = e.checklist.length;
     out.missingTask = tryErr(() => GAS.moveTask("Tnope", "advance"));
+    // Monthly Brief: linked tasks move together at Drafting Brief (per channel), QC Brief and Shooting
+    const b = GAS.addTasks([
+      { title: "BRIEF ORG DECEMBER VTB", project: "VTB", type: "Static" },
+      { title: "VIDEO CTC ORG DECEMBER VTB", project: "VTB", type: "Video (Shooting)" },
+      { title: "BRIEF ADS NOVEMBER VTB", project: "VTB", type: "Static" },
+      { title: "VIDEO CTC ADS NOVEMBER VTB", project: "VTB", type: "Video (Shooting)" }], "2026-11");
+    const [os, ov, as, av] = b.map(x => x.id);
+    const st = () => { const all = GAS.getTasks(); return [os, ov, as, av].map(id => all.find(x => x.id === id).stage).join(","); };
+    out.batchMonths = b.map(x => x.workMonth + ">" + x.forMonth).join(",");
+    let m = GAS.moveTask(os, "advance", { from: "brief" });
+    out.briefOrg = st(); out.briefLinked = m.linked.length;
+    GAS.moveTask(av, "advance");
+    out.briefAds = st();
+    m = GAS.moveTask(ov, "revise", { channels: ["ADS"], note: "fix ads" });
+    out.qcSplit = st(); out.qcLinked = m.linked.length;
+    out.qcNone = tryErr(() => GAS.moveTask(os, "revise", { channels: ["ADS"] }));
+    GAS.moveTask(as, "undo");
+    out.qcUndo = st();
+    GAS.moveTask(os, "advance");
+    out.qcAll = st();
+    GAS.moveTask(av, "advance");
+    out.shoot = st();
+    GAS.moveTask(os, "advance");
+    out.designAlone = st();
+    out.single = GAS.addTask({ title: "BRIEF ORG DEC GTR", project: "GTR", type: "Static" }).workMonth;
     // Links
     const l = GAS.addLink({ title: "=SUM(1)", url: "https://a.com/x", category: "Google Docs", project: "KRR", deadline: "2026-12-20", versions: [{ label: "P2", url: "https://a.com/y" }] });
     out.formulaSafe = GAS.getLinks()[0].title;
@@ -134,6 +159,16 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(!!r.badItem && !!r.nonEventItem, "checklist rejects unknown items and non-event tasks");
   ok(r.checklistAfterTypeChange === 0, "changing away from Event Attribute clears the checklist");
   ok(/^Task not found/.test(r.missingTask) && /^Link not found/.test(r.missingLink), "not-found errors name the right thing");
+  ok(r.batchMonths === "2026-11>2026-12,2026-11>2026-12,2026-11>2026-11,2026-11>2026-11", "Monthly Brief written in Nov: ORG for Dec, ADS for Nov");
+  ok(r.briefOrg === "qcBrief,qcBrief,brief,brief" && r.briefLinked === 1, "Submit Brief moves the channel's Static + Video together (other channel stays)");
+  ok(r.briefAds === "qcBrief,qcBrief,qcBrief,qcBrief", "ADS brief submitted on its own");
+  ok(r.qcSplit === "design,shoot,brief,brief" && r.qcLinked === 3, "one QC Brief for ORG + ADS: ADS sent back, ORG approved -> " + r.qcSplit);
+  ok(!!r.qcNone, "QC Brief revision must name a channel that is waiting");
+  ok(r.qcUndo === "qcBrief,qcBrief,qcBrief,qcBrief", "Undo takes back the shared QC decision for all 4 tasks -> " + r.qcUndo);
+  ok(r.qcAll === "design,shoot,design,shoot", "Approve at QC Brief approves ORG + ADS");
+  ok(r.shoot === "design,video,design,video", "one Shooting Done moves the ORG and ADS videos");
+  ok(r.designAlone === "qcContent,video,design,video", "after the shared steps each task moves on its own");
+  ok(r.single === "", "a single task is not linked to anything");
   ok(r.formulaSafe === "=SUM(1)", "text starting with = is stored as text, not a formula");
   ok(!!r.ctcNoSource && !!r.badUrl, "link validation");
   ok(r.pinned === true && r.linksLeft === 0, "link update / pin / delete");
@@ -221,6 +256,23 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   }
   ok(seen.join(">") === "brief>qcBrief>design>qcContent>toClient>qcClient>design>qcContent>toClient>qcClient>post>done", "buttons walk the event task to Done: " + seen.join(">"));
   ok(await page.evaluate(id => document.querySelector(`[data-id="${id}"]`).closest("article").querySelectorAll(".ms-red").length === 0, evId), "timeline green again after the client approved");
+  // Finished: still shown in the default view, greyed out at the bottom of its project, no Edit, last step green
+  await page.evaluate(() => resetTaskFilters());
+  ok(await page.$eval("#tStep", s => s.value) === "current", "default Step filter: active + recently done");
+  const doneCard = await page.evaluate(id => {
+    const a = document.querySelector(`[data-id="${id}"]`)?.closest("article");
+    if (!a) return null;
+    const cards = [...a.closest("section.group").querySelectorAll("article.task")];
+    return { dim: a.classList.contains("task-done"), edit: !!a.querySelector('[data-tact="edit"]'), undo: !!a.querySelector('[data-tact="undo"]'),
+      finish: !!a.querySelector(".ms-finish.ms-done"), badge: !!a.querySelector(".tag-finished"), last: cards.slice(cards.indexOf(a)).every(c => c.classList.contains("task-done")),
+      checks: [...a.querySelectorAll(".checklist input")].every(i => i.disabled) };
+  }, evId);
+  ok(!!doneCard && doneCard.dim && doneCard.finish && doneCard.badge, "finished task stays visible, greyed out, last step green, Completed badge");
+  ok(!!doneCard && !doneCard.edit && doneCard.undo && doneCard.checks, "finished task: no Edit, checklist locked, Undo still there");
+  ok(!!doneCard && doneCard.last, "finished task sits below the unfinished ones");
+  await page.select("#tStep", "active");
+  ok(await page.evaluate(id => !document.querySelector(`[data-id="${id}"]`), evId), "Active Tasks filter hides finished tasks");
+  await page.select("#tStep", "all");
   await clickIn('[data-tact="undo"]');
   await page.click("#confirmOk");
   await waitStage("post");
@@ -238,6 +290,64 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.click("#taskSaveBtn");
   await page.waitForFunction(id => state.tasks.find(t => t.id === id).videographer === "Arif", {}, vtbId);
   ok(true, "Edit: VTB video switched to VG Arif");
+
+  // Monthly Brief: written in December: ORG January + ADS December, Static + Video (Shooting) for ORG and ADS, titles written automatically
+  const before = await page.evaluate(() => state.tasks.length);
+  await page.evaluate(() => openBatchForm());
+  await page.waitForSelector("#batchModal.show");
+  await page.select("#bfProject", "KRR");
+  await page.$eval("#bfMonth", e => { e.value = "2026-12"; e.dispatchEvent(new Event("input")); });
+  const batchTitles = () => page.$$eval("#bfRows [data-btitle]", a => a.map(i => i.value));
+  ok((await batchTitles()).join() === "BRIEF ORG JANUARY KRR,VIDEO CTC ORG JANUARY KRR,BRIEF ADS DECEMBER KRR,VIDEO CTC ADS DECEMBER KRR", "Monthly Brief KRR (written in Dec): ORG for January, ADS for December, no Event Attribute");
+  ok(await page.$$eval("#bfRows .batch-for", a => a.map(e => e.textContent).join()) === "for JANUARY 2027,for DECEMBER 2026", "Monthly Brief: each channel shows the month it is for (year rolls over)");
+  ok(await page.$eval("#bfVideographerField", e => e.hidden), "Monthly Brief KRR: videographer hidden (auto Anno)");
+  await page.$eval("#bfDeadline", e => { e.value = "2026-11-28"; e.dispatchEvent(new Event("input")); });
+  ok(await page.$$eval("#bfRows [data-bdeadline]", a => a.every(i => i.value === "2026-11-28")), "Monthly Brief: shared deadline fills every task");
+  await page.type('#bfRows [data-blink="ORG"]', "docs.google.com/spreadsheets/d/brief-org");
+  await page.click("#batchSaveBtn");
+  await page.waitForFunction(() => !document.querySelector("#batchModal.show"));
+  const made = await page.evaluate(n => state.tasks.slice(n), before);
+  ok(made.length === 4 && made.every(t => t.project === "KRR" && t.stage === "brief" && t.deadline === "2026-11-28"), "Monthly Brief: 4 KRR tasks created at Drafting Brief");
+  ok(made.filter(t => t.channel === "ORG").every(t => t.link === "https://docs.google.com/spreadsheets/d/brief-org") && made.filter(t => t.channel === "ADS").every(t => !t.link), "Monthly Brief: brief link goes to its channel only");
+  ok(made.filter(t => /^Video/.test(t.type)).every(t => t.videographer === "Anno"), "Monthly Brief: KRR videos get VG Anno");
+  // Shown per brief: ORG JANUARY section with Static on top and the video below, shared buttons
+  await page.select("#tStep", "all");
+  const sections = await page.$$eval(".brief-section", a => a.map(s => s.querySelector(".brief-head").textContent.replace(/\s+/g, " ").trim() + " | " + [...s.querySelectorAll("article strong")].map(e => e.textContent).join(" / ")));
+  ok(sections.some(s => /^ORG JANUARY 2027 brief written in December 2026 📄 Brief ORG ↗ 0\/2 done \| BRIEF ORG JANUARY KRR \/ VIDEO CTC ORG JANUARY KRR$/.test(s)), "ORG brief section: Static on top, video below -> " + sections.join(" || "));
+  ok(sections.some(s => s.startsWith("ADS DECEMBER 2026") && s.endsWith("BRIEF ADS DECEMBER KRR / VIDEO CTC ADS DECEMBER KRR")), "ADS brief section");
+  const madeId = (ch, video) => made.find(t => t.channel === ch && /^Video/.test(t.type) === video).id;
+  const btnOf = (id, act) => page.evaluateHandle((id, act) => document.querySelector(`[data-tact="${act}"][data-id="${id}"]`), id, act);
+  const stages = () => page.evaluate(ids => ids.map(id => state.tasks.find(t => t.id === id).stage).join(","), made.map(t => t.id));
+  ok(await (await btnOf(madeId("ORG", false), "advance")).evaluate(b => b.textContent.includes("Static + Video")), "Submit Brief button says it moves Static + Video");
+  await (await btnOf(madeId("ORG", false), "advance")).click();
+  await page.waitForFunction(id => state.tasks.find(t => t.id === id).stage === "qcBrief", {}, madeId("ORG", true));
+  await (await btnOf(madeId("ADS", true), "advance")).click();
+  await page.waitForFunction(id => state.tasks.find(t => t.id === id).stage === "qcBrief", {}, madeId("ADS", false));
+  ok(await (await btnOf(madeId("ORG", false), "advance")).evaluate(b => b.textContent.includes("ORG + ADS")), "QC Brief Approve says ORG + ADS");
+  await (await btnOf(madeId("ORG", false), "revise")).click();
+  await page.waitForSelector("#reviseModal.show");
+  ok(await page.$eval("#reviseToField", e => e.hidden) && await page.$$eval("#reviseChannels input", a => a.map(i => i.value + (i.checked ? "*" : "")).join()) === "ORG*,ADS", "QC Brief revision popup: pick ORG / ADS (clicked one ticked)");
+  await page.type("#reviseNote", "Hook ORG kurang kuat");
+  await page.click("#reviseOk");
+  await page.waitForFunction(id => state.tasks.find(t => t.id === id).stage === "brief", {}, madeId("ORG", false));
+  ok(await stages() === "brief,brief,design,shoot", "ORG back to brief, ADS approved -> " + await stages());
+  await page.waitForFunction(() => !document.querySelector("#reviseModal.show"));
+
+  // Opening it again marks the ones that already exist (unticked)
+  await page.evaluate(() => openBatchForm());
+  await page.select("#bfProject", "KRR");
+  await page.$eval("#bfMonth", e => { e.value = "2026-12"; e.dispatchEvent(new Event("input")); });
+  ok(await page.$$eval("#bfRows .batch-row", a => a.every(r => r.classList.contains("is-dup") && !r.querySelector("[data-bcheck]").checked)), "Monthly Brief: existing tasks marked and unticked");
+  await page.click("#batchSaveBtn");
+  ok(await page.$eval("#batchFormErr", e => !e.hidden && /at least one/i.test(e.textContent)), "Monthly Brief: nothing ticked is blocked");
+  // Makuta: organic only, 3 video/static types, videographer required; Non-Shooting gets its own title
+  await page.select("#bfProject", "Makuta");
+  ok((await batchTitles()).join() === "BRIEF ORG JANUARY MAKUTA,VIDEO CTC NON-SHOOTING ORG JANUARY MAKUTA,VIDEO CTC ORG JANUARY MAKUTA", "Monthly Brief Makuta: ORG only, distinct titles");
+  ok(await page.$eval("#bfVideographerField", e => !e.hidden), "Monthly Brief Makuta: videographer required");
+  await page.click("#batchSaveBtn");
+  ok(await page.$eval("#batchFormErr", e => !e.hidden && /videographer/i.test(e.textContent)), "Monthly Brief Makuta: saving without a videographer is blocked");
+  await page.click("#batchModal .btn-soft");
+  ok(await page.evaluate(() => { try { GAS.addTasks([{ title: "BRIEF ORG DEC VTB", project: "VTB", type: "Static" }, { title: "BRIEF DEC VTB", project: "VTB", type: "Static" }]); return false; } catch (e) { return GAS.getTasks().every(t => t.title !== "BRIEF ORG DEC VTB"); } }), "server: one bad task in a batch saves none of them");
 
   // Filters
   await page.select("#tType", "Event Attribute");

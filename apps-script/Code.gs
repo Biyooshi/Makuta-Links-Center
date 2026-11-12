@@ -18,7 +18,7 @@ const REMINDER_HOUR = 9;
 
 /* ---------- Milestones setup: edit names here when the team changes ---------- */
 const TASK_SHEET = 'Tasks';
-const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Link', 'Notes', 'History', 'Checklist'];
+const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Link', 'Notes', 'History', 'Checklist', 'Work Month', 'For Month'];
 // Each project: its graphic designer and videographer (both filled in automatically; no videographer =
 // chosen for every video task), its icon (also used in All Links), the content types it makes
 // (all except Event Attribute when not set) and whether it only runs organic content
@@ -44,6 +44,9 @@ const EVENT_ITEMS = [
 ];
 // ORG / ADS is read from the task title, e.g. "BRIEF ORG NOV KRR"
 const CHANNELS = { 'ORG': 'Organic', 'ADS': 'Ads' };
+// Monthly Brief: briefs written in one month are for this many months later
+// (written in November: ORG for December, ADS for November itself)
+const BRIEF_MONTHS_AHEAD = { 'ORG': 1, 'ADS': 0 };
 // Every possible step, in order. Each task uses only the steps that fit its content type and channel (see pipeline_).
 // qc: the step approves or sends work back. person: who does it (empty = the task's designer/videographer).
 const STAGES = [
@@ -85,7 +88,7 @@ const MAX_WRONG_PASSCODES = 10;            // then everything stays locked for 1
 // What the page may do. Every other function ends in "_", so google.script.run cannot call it.
 const API = {
   getInitialData: getInitialData_, getLinks: getLinks_, addLink: addLink_, updateLink: updateLink_,
-  setPinned: setPinned_, deleteLink: deleteLink_, getTasks: getTasks_, addTask: addTask_,
+  setPinned: setPinned_, deleteLink: deleteLink_, getTasks: getTasks_, addTask: addTask_, addTasks: addTasks_,
   updateTask: updateTask_, setTaskItem: setTaskItem_, moveTask: moveTask_, deleteTask: deleteTask_
 };
 
@@ -125,7 +128,7 @@ function getInitialData_() {
   return {
     links: getLinks_(),
     tasks: getTasks_(),
-    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS },
+    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS },
     sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl()
   };
 }
@@ -194,12 +197,35 @@ function getTasks_() {
 }
 
 function addTask_(data) {
+  return addTasks_([data])[0];
+}
+
+// Monthly Brief: creates several tasks at once (Static + Video for ORG and ADS). workMonth
+// ("2026-11") is the month the briefs are written in; it links the tasks (see linkedTasks_).
+// Every task is checked first, so one mistake saves none of them.
+function addTasks_(list, workMonth) {
+  if (!Array.isArray(list) || !list.length) throw new Error('Choose at least one task.');
+  if (list.length > 20) throw new Error('Too many tasks at once (max 20).');
+  const month = /^\d{4}-\d{2}$/.test(workMonth) ? workMonth : '';
+  const tasks = list.map(d => {
+    try {
+      const t = cleanTask_(d);
+      t.workMonth = month;
+      t.forMonth = month ? addMonths_(month, BRIEF_MONTHS_AHEAD[t.channel] || 0) : '';
+      return t;
+    } catch (e) {
+      throw new Error(list.length > 1 && d && d.title ? d.title + ': ' + e.message : e.message);
+    }
+  });
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const now = new Date().toISOString();
-    const task = Object.assign(cleanTask_(data), { id: newId_('T'), createdAt: now, updatedAt: now, stage: 'brief', checklist: [] });
-    task.history = [{ at: now, action: 'created', from: '', to: 'brief', note: '' }];
-    return writeTask_(sheet, sheet.getLastRow() + 1, task);
+    const first = sheet.getLastRow() + 1;
+    return tasks.map((t, i) => {
+      Object.assign(t, { id: newId_('T'), createdAt: now, updatedAt: now, stage: 'brief', checklist: [] });
+      t.history = [{ at: now, action: 'created', from: '', to: 'brief', note: '' }];
+      return writeTask_(sheet, first + i, t);
+    });
   });
 }
 
@@ -232,47 +258,101 @@ function setTaskItem_(id, item, checked) {
 // back to opts.to (QC Client always sends it back to Obi first), "assign" = Obi passes a client
 // revision on to opts.to, "undo" = take back the last move. opts.from is the step the page showed,
 // so a double click (or a change made on another device) can't move the task twice.
+// Monthly Brief tasks that share the step move together (see linkedTasks_); they come back in task.linked.
+// At their QC Internal: Brief, opts.channels lists the briefs that need a revision; the others are approved.
 function moveTask_(id, action, opts) {
   opts = opts || {};
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
-    const row = findRow_(sheet, id);
-    const task = readTask_(sheet, row);
+    const rows = {};
+    const all = [];
+    const last = sheet.getLastRow();
+    if (last >= 2) sheet.getRange(2, 1, last - 1, TASK_HEADERS.length).getValues().forEach((r, i) => {
+      if (r[0] === '') return;
+      const t = rowToTask_(r);
+      rows[t.id] = i + 2;
+      all.push(t);
+    });
+    const task = all.filter(t => t.id === String(id))[0];
+    if (!task) throw new Error('Task not found. It may have been deleted - please refresh the page.');
     if (opts.from && opts.from !== task.stage) throw new Error('This task was already updated. Please refresh the page.');
-    const steps = pipeline_(task.type, task.channel);
-    const i = steps.indexOf(task.stage);
     const now = new Date().toISOString();
     const note = String(opts.note || '').trim().slice(0, 1000);
-    if (action === 'advance') {
-      if (i < 0) throw new Error(task.stage === 'revision' ? 'Choose who fixes the revision first.' : 'This task is already done.');
-      // A fix made for a revision goes straight back to the next QC step
-      const entered = task.history.filter(h => h.to === task.stage).pop();
-      const fixing = entered && (entered.action === 'revision' || entered.action === 'assign');
-      const next = (fixing && steps.slice(i + 1).filter(k => stageInfo_(k).qc)[0]) || steps[i + 1] || 'done';
-      task.history.push({ at: now, action: stageInfo_(task.stage).qc ? 'approved' : 'done', from: task.stage, to: next, note: note });
-      task.stage = next;
-    } else if (action === 'revise') {
-      if (i < 0 || !stageInfo_(task.stage).qc) throw new Error('A revision can only be requested at a QC step.');
-      const to = task.stage === 'qcClient' ? 'revision' : opts.to;
-      const j = steps.indexOf(to);
-      if (to !== 'revision' && (j < 0 || j >= i || stageInfo_(to).qc)) throw new Error('Please choose which step needs the revision.');
-      task.history.push({ at: now, action: 'revision', from: task.stage, to: to, note: note });
-      task.stage = to;
-    } else if (action === 'assign') {
-      if (task.stage !== 'revision') throw new Error('This task has no client revision waiting.');
-      if (fixSteps_(steps).indexOf(opts.to) < 0) throw new Error('Please choose who fixes the revision.');
-      task.history.push({ at: now, action: 'assign', from: 'revision', to: opts.to, note: note });
-      task.stage = opts.to;
-    } else if (action === 'undo') {
+    let moved;
+    if (action === 'undo') {
       if (task.history.length < 2) throw new Error('Nothing to undo.');
-      task.stage = task.history.pop().from;
-      task.stage = fitStage_(task);
+      // A move made together with other tasks is taken back for all of them
+      const sync = task.history[task.history.length - 1].sync;
+      moved = [task].concat(sync ? all.filter(o => o !== task && o.history.length > 1 && o.history[o.history.length - 1].sync === sync) : []);
+      moved.forEach(o => {
+        o.stage = o.history.pop().from;
+        o.stage = fitStage_(o);
+      });
+    } else if (action === 'revise' && task.stage === 'qcBrief' && Array.isArray(opts.channels)) {
+      moved = [task].concat(linkedTasks_(task, all));
+      if (!moved.some(o => opts.channels.indexOf(o.channel) >= 0)) throw new Error('Choose which brief needs the revision.');
+      const sync = moved.length > 1 ? newId_('S') : '';
+      moved.forEach(o => opts.channels.indexOf(o.channel) >= 0
+        ? stepTask_(o, 'revise', { to: 'brief', note: note }, now, sync)
+        : stepTask_(o, 'advance', { note: '' }, now, sync));
     } else {
-      throw new Error('Unknown action.');
+      moved = [task].concat(action === 'advance' ? linkedTasks_(task, all) : []);
+      const sync = moved.length > 1 ? newId_('S') : '';
+      moved.forEach(o => stepTask_(o, action, { to: opts.to, note: note }, now, sync));
     }
-    task.updatedAt = now;
-    return writeTask_(sheet, row, task);
+    moved.forEach(o => {
+      o.updatedAt = now;
+      writeTask_(sheet, rows[o.id], o);
+    });
+    task.linked = moved.slice(1);
+    return task;
   });
+}
+
+// Moves one task a step (advance / revise / assign, see moveTask_). sync marks moves made together.
+function stepTask_(task, action, opts, now, sync) {
+  const steps = pipeline_(task.type, task.channel);
+  const i = steps.indexOf(task.stage);
+  const entry = (act, to) => {
+    const e = { at: now, action: act, from: task.stage, to: to, note: opts.note };
+    if (sync) e.sync = sync;
+    task.history.push(e);
+    task.stage = to;
+  };
+  if (action === 'advance') {
+    if (i < 0) throw new Error(task.stage === 'revision' ? 'Choose who fixes the revision first.' : 'This task is already done.');
+    // A fix made for a revision goes straight back to the next QC step
+    const entered = task.history.filter(h => h.to === task.stage).pop();
+    const fixing = entered && (entered.action === 'revision' || entered.action === 'assign');
+    entry(stageInfo_(task.stage).qc ? 'approved' : 'done', (fixing && steps.slice(i + 1).filter(k => stageInfo_(k).qc)[0]) || steps[i + 1] || 'done');
+  } else if (action === 'revise') {
+    if (i < 0 || !stageInfo_(task.stage).qc) throw new Error('A revision can only be requested at a QC step.');
+    const to = task.stage === 'qcClient' ? 'revision' : opts.to;
+    const j = steps.indexOf(to);
+    if (to !== 'revision' && (j < 0 || j >= i || stageInfo_(to).qc)) throw new Error('Please choose which step needs the revision.');
+    entry('revision', to);
+  } else if (action === 'assign') {
+    if (task.stage !== 'revision') throw new Error('This task has no client revision waiting.');
+    if (fixSteps_(steps).indexOf(opts.to) < 0) throw new Error('Please choose who fixes the revision.');
+    entry('assign', opts.to);
+  } else {
+    throw new Error('Unknown action.');
+  }
+}
+
+// Monthly Brief tasks of one project and working month share three moments: one brief per channel
+// (Drafting Brief), one QC for the ORG and ADS briefs together (QC Internal: Brief) and one shooting
+// for all the month's videos (Shooting). The other tasks waiting at the same shared step move with t.
+function linkedTasks_(t, all) {
+  if (!t.workMonth || ['brief', 'qcBrief', 'shoot'].indexOf(t.stage) < 0) return [];
+  return all.filter(o => o.id !== t.id && o.project === t.project && o.workMonth === t.workMonth &&
+    o.stage === t.stage && (t.stage !== 'brief' || o.channel === t.channel));
+}
+
+// "2026-11" + 1 -> "2026-12"
+function addMonths_(month, n) {
+  const d = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 + n, 1);
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
 }
 
 function deleteTask_(id) {
@@ -382,7 +462,8 @@ function writeTask_(sheet, row, t) {
   sheet.getRange(row, 1, 1, TASK_HEADERS.length).setNumberFormat('@').setValues([[
     t.id, t.createdAt, t.updatedAt, t.title, t.project, t.type, t.channel, t.designer, t.videographer, t.deadline,
     t.stage, currentStep_(t), String(revisions), t.link, t.notes, JSON.stringify(t.history),
-    t.type === EVENT_TYPE ? EVENT_ITEMS.map(i => i.name).filter(n => t.checklist.indexOf(n) >= 0).join('\n') : ''
+    t.type === EVENT_TYPE ? EVENT_ITEMS.map(i => i.name).filter(n => t.checklist.indexOf(n) >= 0).join('\n') : '',
+    t.workMonth || '', t.forMonth || ''
   ].map(safe_)]);
   t.steps = pipeline_(t.type, t.channel);
   return t;
@@ -406,7 +487,9 @@ function rowToTask_(r) {
     link: text_(r[13]),
     notes: text_(r[14]),
     history: Array.isArray(history) ? history : [],
-    checklist: parseLines_(r[16])
+    checklist: parseLines_(r[16]),
+    workMonth: /^\d{4}-\d{2}$/.test(text_(r[17]).trim()) ? text_(r[17]).trim() : '',
+    forMonth: /^\d{4}-\d{2}$/.test(text_(r[18]).trim()) ? text_(r[18]).trim() : ''
   };
   task.stage = fitStage_(task);
   task.steps = pipeline_(task.type, task.channel);
@@ -425,6 +508,9 @@ function getSheet_(name, headers) {
   if (fresh) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
     sheet.setFrozenRows(1);
+  } else if (sheet.getRange(1, headers.length).getValue() === '') {
+    // Columns added in a newer version (e.g. Work Month) get their titles
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
   }
   protectSheet_(sheet, headers, fresh);
   return sheet;

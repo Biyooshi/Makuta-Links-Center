@@ -293,6 +293,7 @@
   }
   .cat, .tag { --c: #64748b; }
   .tag-rev { --c: #dc2626; }
+  .tag-finished { --c: #16a34a; }
   .tag-link { --c: #2563eb; text-decoration: none; }
   .tag-link:hover { text-decoration: underline; }
   .cat-google-docs { --c: #2563eb; }
@@ -359,8 +360,35 @@
   .btn-ok:hover { background: #15803d; }
   .chan { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: .4px; color: #fff; background: #0891b2; }
   .chan-ads { background: #7c3aed; }
+  /* Monthly Brief: one block per channel, one row per task */
+  .batch-group { margin-top: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-bg); }
+  .batch-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .batch-head input { flex: 1; min-width: 0; }
+  .batch-for { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .modal.modal-batch { max-width: 760px; }
+  .batch-row { display: grid; grid-template-columns: auto 150px minmax(0, 1fr) 150px; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px dashed var(--border); cursor: pointer; }
+  .batch-row input[type=checkbox] { width: 16px; height: 16px; }
+  .batch-row .batch-title { font-weight: 600; }
+  .batch-row .cat { justify-self: start; }
+  .batch-row.off .cat, .batch-row.off input:not([type=checkbox]) { opacity: .45; }
+  .batch-row .tag { grid-column: 3 / -1; justify-self: start; }
+  /* One brief (channel + month) of a Monthly Brief: its Static and Video tasks together */
+  .brief-section { margin: 12px; border: 1px solid var(--border); border-left: 4px solid #0891b2; border-radius: 10px; overflow: hidden; }
+  .brief-section:has(.chan-ads) { border-left-color: #7c3aed; }
+  .brief-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; background: var(--panel-bg); font-size: 13px; }
+  .brief-head .muted { font-size: 12px; }
+  .brief-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .together { font-weight: 500; opacity: .85; }
+  .revise-channels { display: flex; flex-wrap: wrap; gap: 8px; }
   .task { padding: 16px; border-top: 1px solid var(--border); }
-  .task.task-done { opacity: .75; }
+  /* Finished: everything greyed out, only the last step (Scheduled / Posted, Live on Ads) stays green */
+  .task.task-done { background: color-mix(in srgb, var(--muted) 7%, transparent); }
+  .task-done .task-title > strong, .task-done .meta-line > :not(.tag-finished), .task-done .ms-step:not(.ms-finish), .task-done .checklist, .task-done .task-notes, .task-done .history { filter: grayscale(1); opacity: .45; }
+  .task-done .ms-finish .dot { background: var(--success); border-color: var(--success); color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 30%, transparent); }
+  .task-done .ms-finish .ms-name, .task-done .ms-finish .ms-date { color: var(--success); font-weight: 700; }
+  .brief-section.brief-done { border-left-color: var(--success); }
+  .brief-done .brief-head > :not(.brief-count) { filter: grayscale(1); opacity: .55; }
+  .brief-done .brief-count { color: var(--success); }
   .task.row-overdue { background: var(--row-overdue); box-shadow: inset 4px 0 0 var(--danger); }
   .task-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
   .task-title { min-width: 0; flex: 1 1 320px; }
@@ -487,6 +515,8 @@
     .stat-icon { width: 34px; height: 34px; font-size: 18px; }
     .tabs button { font-size: 14px; }
     .version-row { grid-template-columns: 1fr auto; }
+    .batch-row { grid-template-columns: auto 1fr; }
+    .batch-row .batch-title, .batch-row input[type=date], .batch-row .tag { grid-column: 1 / -1; }
     .version-row .v-label { grid-column: 1 / -1; }
     .group-item { flex-wrap: wrap; }
     .group-item .main { flex-basis: calc(100% - 40px); }
