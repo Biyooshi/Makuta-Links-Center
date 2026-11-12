@@ -420,7 +420,13 @@
       <h3>Makuta Links Center</h3>
       <p>Enter your passcode to open the app.</p>
       <form id="lockForm" novalidate>
-        <input id="lockInput" type="password" autocomplete="current-password" placeholder="Passcode">
+        <div class="pass-wrap">
+          <input id="lockInput" type="password" autocomplete="current-password" placeholder="Passcode">
+          <button type="button" class="pass-eye" id="lockEye" onclick="togglePasscode()" title="Show passcode" aria-label="Show passcode" aria-pressed="false">
+            <svg class="icon eye-open" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="icon eye-closed" viewBox="0 0 24 24"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-6.4 0-10-7-10-7a18.5 18.5 0 0 1 4.1-4.9M9.9 5.2A9.6 9.6 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2M2 2l20 20"/></svg>
+          </button>
+        </div>
         <div class="error" id="lockErr" hidden></div>
         <button type="submit" class="btn-accent btn-block lock-btn">Unlock</button>
       </form>

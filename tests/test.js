@@ -300,9 +300,15 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.mouse.click(5, 5);
   ok(await page.$eval("#lockModal", e => e.classList.contains("show")), "passcode screen cannot be closed with Esc or a click outside");
   await page.type("#lockInput", "salah");
+  await page.click("#lockEye");
+  ok(await page.$eval("#lockInput", e => e.type === "text" && e.value === "salah") && await page.$eval("#lockEye", e => e.classList.contains("on")), "eye button shows the passcode");
+  await page.click("#lockEye");
+  ok(await page.$eval("#lockInput", e => e.type === "password" && e.value === "salah"), "eye button hides it again (text kept)");
+  await page.click("#lockEye");
   await page.click(".lock-btn");
   await page.waitForFunction(() => !document.getElementById("lockErr").hidden);
   ok(await page.$eval("#lockErr", e => e.textContent.includes("Wrong passcode")), "wrong passcode shows an error");
+  ok(await page.$eval("#lockInput", e => e.type === "password" && e.value === ""), "after a wrong try the field is cleared and hidden again");
   await page.type("#lockInput", "preview");
   await page.click(".lock-btn");
   await page.waitForFunction(() => state.loaded && state.links.length > 0);

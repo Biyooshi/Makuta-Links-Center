@@ -47,9 +47,21 @@
     $("lockErr").textContent = message || "";
     $("lockErr").hidden = !message;
     $("lockInput").value = "";
+    togglePasscode(false);
     document.querySelectorAll(".modal-bg.show").forEach(m => m.classList.remove("show"));
     openModal("lockModal");
     setTimeout(() => $("lockInput").focus(), 50);
+  }
+
+  // Eye button: show the passcode to check for typos, click again to hide it
+  function togglePasscode(show) {
+    show = typeof show === "boolean" ? show : $("lockInput").type === "password";
+    $("lockInput").type = show ? "text" : "password";
+    $("lockEye").classList.toggle("on", show);
+    $("lockEye").title = show ? "Hide passcode" : "Show passcode";
+    $("lockEye").setAttribute("aria-label", $("lockEye").title);
+    $("lockEye").setAttribute("aria-pressed", String(show));
+    $("lockInput").focus();
   }
 
   function unlock(e) {
