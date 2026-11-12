@@ -6,6 +6,7 @@ const puppeteer = require("puppeteer-core");
 const path = require("path");
 const fs = require("fs");
 const { execFileSync } = require("child_process");
+const { pathToFileURL } = require("url");
 const preview = path.join(__dirname, "..", "local-preview");
 execFileSync(process.execPath, [path.join(preview, "build-preview.js")], { stdio: "inherit" });
 const file = path.join(preview, "preview.html");
@@ -20,15 +21,16 @@ let pass = 0, fail = 0;
 const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS " : "  FAIL ") + name); };
 
 (async () => {
-  if (!chrome) throw new Error("Chrome not found. Set CHROME_PATH to chrome.exe.");
-  const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
+  if (!chrome) throw new Error("Chrome not found. Set CHROME_PATH to the Chrome program.");
+  // On GitHub Actions (Linux) Chrome needs --no-sandbox
+  const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: process.env.CI ? ["--no-sandbox"] : [] });
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", e => errors.push(e.message));
   page.on("console", m => m.type() === "error" && errors.push(m.text()));
   page.on("dialog", d => d.accept());
   await page.setViewport({ width: 1300, height: 900 });
-  await page.goto("file:///" + path.resolve(file).replace(/\\/g, "/"));
+  await page.goto(pathToFileURL(file).href);
   await page.waitForFunction(() => state.loaded);
 
   /* ---------- 1. Server logic (Code.gs) ---------- */

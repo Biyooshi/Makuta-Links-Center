@@ -1,0 +1,57 @@
+# On every push to main: run the tests, and only if they pass, send apps-script/ to Google Apps Script
+# and update the existing web app deployment (same /exec URL). Vercel deploys by itself from GitHub.
+name: Test & deploy Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps-script/**"
+      - "tests/**"
+      - "local-preview/build-preview.js"
+      - ".clasp.json"
+      - ".github/workflows/apps-script.yml"
+  workflow_dispatch:
+
+# Never run two deploys at the same time
+concurrency:
+  group: apps-script-deploy
+  cancel-in-progress: false
+
+env:
+  CLASP: npx --yes @google/clasp@2.4.2
+  DEPLOYMENT_ID: AKfycbxtAnUeT0JJgAzp5dj418s1kDTWvvNxKIPPVYY5qFBqxyPSispJbsoSA-QsoWXdmMOL
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+        working-directory: tests
+      - run: npm test
+        working-directory: tests
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Sign in to clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then echo "::error::Secret CLASPRC_JSON is missing (see README)"; exit 1; fi
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+      - name: Push code to Apps Script
+        run: $CLASP push --force
+      - name: Update the web app (new version, same URL)
+        run: $CLASP deploy --deploymentId "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA::7}"

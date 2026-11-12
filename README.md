@@ -12,6 +12,9 @@ Website untuk menyimpan semua link pekerjaan di satu tempat. Datanya tersimpan p
 | `apps-script/JavaScript.html` | Logika halaman (form, filter, pencarian, dll.) |
 | `local-preview/preview.html` | Untuk mencoba website secara lokal sebelum setup Google Sheets. Data hanya tersimpan di browser. |
 | `local-preview/build-preview.js` | Membuat ulang `preview.html` kalau kode di `apps-script/` diubah: `node build-preview.js` |
+| `apps-script/appsscript.json` | Pengaturan project Apps Script (zona waktu Jakarta, V8, Web app: Execute as Me, akses Anyone) |
+| `.clasp.json` | Script ID project Apps Script, dipakai clasp untuk mengirim kode |
+| `.github/workflows/apps-script.yml` | Otomatis: tes → kirim kode ke Apps Script → update Web app, setiap push ke GitHub |
 | `web/index.html` | Halaman Vercel yang menampilkan aplikasi di alamat makuta-links-center.vercel.app |
 | `tests/` | Tes otomatis (Chrome headless) untuk semua alur dan tombol. Lihat bagian **Tes otomatis**. |
 
@@ -108,9 +111,22 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 - Supaya bisa ditampilkan di Vercel, `doGet` di `Code.gs` memakai `setXFrameOptionsMode(ALLOWALL)`, dan Web app diatur **Who has access: Anyone**. Akses "Only myself" tidak bisa dipakai di Vercel (Google menolak dengan error 401 karena cookie login diblokir di dalam halaman lain).
 - Karena itu aplikasi dikunci **passcode** (Setup langkah 4.6): server menolak semua baca/tulis data tanpa passcode yang benar. Tidak perlu login Google untuk membukanya.
 - Kalau Web app URL berubah (membuat *New deployment* baru, bukan *New version*), ganti `APP_URL` di `web/index.html`, lalu push ke GitHub. Vercel otomatis memperbarui.
-- Mengubah kode di GitHub **tidak** otomatis mengubah Apps Script. Kode tetap perlu di-paste ke Apps Script (lihat di bawah).
 
-## Kalau nanti kode diubah / di-update
+## Update otomatis (GitHub → Apps Script → Vercel)
+Setiap push ke branch `main` yang mengubah `apps-script/`, `tests/`, atau pengaturan deploy:
+1. **GitHub Actions** menjalankan semua tes (`tests/`).
+2. Kalau semua lulus, kode di `apps-script/` dikirim ke Apps Script dengan **clasp** dan deployment Web app yang sama dinaikkan ke versi baru. URL `/exec` tetap sama. Kalau ada tes yang gagal, Apps Script **tidak** diubah.
+3. **Vercel** otomatis memperbarui dirinya sendiri dari GitHub.
+
+Hasilnya bisa dilihat di tab **Actions** di GitHub (centang hijau = sudah live).
+
+- **Jangan edit kode langsung di editor Apps Script**: push berikutnya akan menimpanya. Semua perubahan lewat repo ini. Data di Google Sheet dan passcode di Script Properties tidak tersentuh.
+- Izin login clasp disimpan di **GitHub → Settings → Secrets and variables → Actions** dengan nama `CLASPRC_JSON` (isi file `C:\Users\<nama>\.clasprc.json` setelah `npx @google/clasp@2.4.2 login`).
+- Kalau deploy gagal dengan error login / `invalid_grant` (misalnya izin dicabut atau password Google diganti): jalankan lagi `npx @google/clasp@2.4.2 login` di laptop, lalu ganti isi secret `CLASPRC_JSON` dengan isi file `.clasprc.json` yang baru.
+- Mencabut akses: https://myaccount.google.com/permissions → hapus akses "clasp".
+- Deploy manual dari laptop (kalau perlu): `npx @google/clasp@2.4.2 push --force` lalu `npx @google/clasp@2.4.2 deploy --deploymentId <Deployment ID> --description "manual"`.
+
+## Kalau nanti kode diubah / di-update (cara manual, tanpa GitHub)
 1. Paste kode baru ke file yang sesuai di Apps Script → Save.
 2. **Deploy → Manage deployments** → klik ikon pensil → Version: **New version** → **Deploy**.
 3. URL website **tetap sama**, tidak perlu bookmark ulang.
