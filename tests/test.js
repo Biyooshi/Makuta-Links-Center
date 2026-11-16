@@ -467,6 +467,9 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.select("#tfType", "Event Attribute");
   await page.screenshot({ path: `${shots}/dark-form.png` });
 
+  // Apps Script cuts "//" inside template literals as if it started a comment (write "\/\/" instead)
+  const js = fs.readFileSync(path.join(__dirname, "..", "apps-script", "JavaScript.html"), "utf8");
+  ok(!(js.match(/`[^`]*`/g) || []).some(t => t.includes("//")), "no // inside template literals (Apps Script would cut the line)");
   ok(errors.length === 0, "no JavaScript errors" + (errors.length ? ": " + errors.join(" | ") : ""));
   console.log(`\n${pass} passed, ${fail} failed`);
   await browser.close();

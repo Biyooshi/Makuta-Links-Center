@@ -281,7 +281,7 @@
     v = v || {};
     const row = document.createElement("div");
     row.className = "version-row";
-    row.innerHTML = `<input class="v-label" placeholder="Label, e.g. Part 2 / Assets"><input class="v-url" placeholder="https://..."><button type="button" class="btn-danger btn-sm" title="Remove">&#10005;</button>`;
+    row.innerHTML = `<input class="v-label" placeholder="Label, e.g. Part 2 / Assets"><input class="v-url" placeholder="https:\/\/..."><button type="button" class="btn-danger btn-sm" title="Remove">&#10005;</button>`;
     row.querySelector(".v-label").value = v.label || "";
     row.querySelector(".v-url").value = v.url || "";
     row.querySelector("button").onclick = () => row.remove();
@@ -979,6 +979,8 @@
     $("bfProject").focus();
   }
 
+  // Inside template literals "//" is written "\/\/": Apps Script treats "//" there as the start of a
+  // comment and cuts the rest of the line, which broke the brief link input
   function renderBatchRows() {
     const project = $("bfProject").value, month = $("bfMonth").value, p = state.cfg.projects[project];
     $("bfTeam").innerHTML = p ? `Graphic Designer: ${escapeHtml(p.designer)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "choose one above"}${p.orgOnly ? " · Organic only" : ""}` : "";
@@ -994,7 +996,7 @@
       <div class="batch-head">
         <span class="chan chan-${ch.toLowerCase()}">${ch}</span>
         <span class="batch-for">for ${contentMonth(month, ch).name} ${contentMonth(month, ch).year}</span>
-        <input data-blink="${ch}" placeholder="Brief ${state.cfg.channels[ch]} link (https://...)" aria-label="Brief link for ${ch}">
+        <input data-blink="${ch}" placeholder="Brief ${state.cfg.channels[ch]} link (https:\/\/...)" aria-label="Brief link for ${ch}">
       </div>
       ${types.map(type => {
         const title = batchTitle(project, type, ch, month), dup = existing.has(title);
