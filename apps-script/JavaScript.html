@@ -1320,7 +1320,8 @@
   function projectCards(items) {
     const shown = new Set();
     return items.map(t => {
-      if (!t.workMonth) return taskCard(t);
+      // A task of its own (Event Attribute, Collateral, ...) gets its own box too, edged in its type's colour
+      if (!t.workMonth) return `<div class="brief-section solo-section solo-${typeKind(t.type)}">${taskCard(t)}</div>`;
       const key = t.workMonth + "|" + t.channel;
       if (shown.has(key)) return "";
       shown.add(key);

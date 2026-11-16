@@ -380,7 +380,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     "Newest tasks on top: KRR first, its new January brief at the top");
   // Shown per brief: ORG JANUARY section with Static on top and the video below, shared buttons
   await page.select("#tStep", "all");
-  const sections = await page.$$eval(".brief-section", a => a.map(s => s.querySelector(".brief-head").textContent.replace(/\s+/g, " ").trim() + " | " + [...s.querySelectorAll("article strong")].map(e => e.textContent).join(" / ")));
+  const sections = await page.$$eval(".brief-section:not(.solo-section)", a => a.map(s => s.querySelector(".brief-head").textContent.replace(/\s+/g, " ").trim() + " | " + [...s.querySelectorAll("article strong")].map(e => e.textContent).join(" / ")));
   ok(sections.some(s => /^ORG JANUARY 2027 brief written in December 2026 📄 Brief ORG ↗ 0\/2 done \| BRIEF ORG JANUARY KRR \/ VIDEO CTC ORG JANUARY KRR$/.test(s)), "ORG brief section: Static on top, video below -> " + sections.join(" || "));
   ok(sections.some(s => s.startsWith("ADS DECEMBER 2026") && s.endsWith("BRIEF ADS DECEMBER KRR / VIDEO CTC ADS DECEMBER KRR")), "ADS brief section");
   const madeId = (ch, video) => made.find(t => t.channel === ch && /^Video/.test(t.type) === video).id;

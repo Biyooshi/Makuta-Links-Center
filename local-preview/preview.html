@@ -396,6 +396,12 @@
   /* One brief (channel + month) of a Monthly Brief: its Static and Video tasks together */
   .brief-section { margin: 12px; border: 1px solid var(--border); border-left: 4px solid #0891b2; border-radius: 10px; overflow: hidden; }
   .brief-section:has(.chan-ads) { border-left-color: #7c3aed; }
+  .solo-section > .task { border-top: none; }
+  .brief-section.solo-static { border-left-color: #ea580c; }
+  .brief-section.solo-video { border-left-color: #db2777; }
+  .brief-section.solo-event { border-left-color: #0d9488; }
+  .brief-section.solo-collateral { border-left-color: #4f46e5; }
+  .brief-section.solo-section:has(.task-done) { border-left-color: var(--success); }
   .brief-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; background: var(--panel-bg); font-size: 13px; }
   .brief-head .muted { font-size: 12px; }
   .brief-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -3234,7 +3240,8 @@ function previewClear() {
   function projectCards(items) {
     const shown = new Set();
     return items.map(t => {
-      if (!t.workMonth) return taskCard(t);
+      // A task of its own (Event Attribute, Collateral, ...) gets its own box too, edged in its type's colour
+      if (!t.workMonth) return `<div class="brief-section solo-section solo-${typeKind(t.type)}">${taskCard(t)}</div>`;
       const key = t.workMonth + "|" + t.channel;
       if (shown.has(key)) return "";
       shown.add(key);
