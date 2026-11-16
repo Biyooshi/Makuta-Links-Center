@@ -1113,7 +1113,9 @@
       if (proj && t.project !== proj) return false;
       if (month && taskMonth(t) !== month) return false;
       if (type && t.type !== type) return false;
-      if (channel && t.channel !== channel) return false;
+      // ORG / ADS: regular content only; Event Attribute and Collateral have their own option
+      if (channel && (["event", "collateral"].includes(channel) ? typeKind(t.type) !== channel
+        : t.channel !== channel || ["event", "collateral"].includes(typeKind(t.type)))) return false;
       if (STEP_GROUPS[step] ? !STEP_GROUPS[step].test(t) : t.stage !== step) return false;
       if (q) {
         const people = t.steps.map(k => stageOwner(stageOf(k), t));

@@ -276,6 +276,15 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(await page.evaluate(() => [...document.querySelectorAll(".task")].some(a => a.querySelector("strong").textContent === "ROLL-UP BANNER GTR" && /Collateral: Roll-up Banner/.test(a.textContent) && /Approved by Client/.test(a.textContent))),
     "Collateral card shows its item and ends at Approved by Client");
 
+  // ORG / ADS / Other filter: ORG and ADS show regular content only, Event Attribute and Collateral have their own option
+  const kindsFor = async v => { await page.select("#tChannel", v); return page.evaluate(() => [...new Set(getFilteredTasks().map(t => typeKind(t.type) + ":" + (t.channel || "-")))].sort().join()); };
+  await page.select("#tStep", "all");
+  const orgKinds = await kindsFor("ORG");
+  ok(orgKinds && !/event|collateral|ADS/.test(orgKinds), "filter ORG: no Event Attribute / Collateral -> " + orgKinds);
+  ok(await kindsFor("event") === "event:ORG", "filter Event Attribute: only Event Attribute tasks");
+  ok(await kindsFor("collateral") === "collateral:-", "filter Collateral: only Collateral tasks");
+  await page.evaluate(() => resetTaskFilters());
+
   // Walk the new event task through every step with the real buttons, with one client revision
   const card = () => page.evaluateHandle(id => document.querySelector(`[data-id="${id}"]`).closest("article"), evId);
   const stage = () => page.evaluate(id => state.tasks.find(t => t.id === id).stage, evId);
