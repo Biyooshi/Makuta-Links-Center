@@ -796,9 +796,14 @@
     const extra = [...new Set(state.tasks.map(t => t.project))].filter(p => p && !known.includes(p)).sort((a, b) => a.localeCompare(b));
     return known.concat(extra);
   }
+  // The month a task's content is for ("2026-12"); tasks without one (Event, Single Task) use their deadline month
+  const taskMonth = t => t.forMonth || (t.deadline || "").slice(0, 7);
   function refreshTaskProjects() {
     const projects = taskProjects();
     fillSelect("tProject", projects, "All projects", p => `${projectIcon(p)} ${p}`);
+    // Months that have tasks, newest first
+    const months = [...new Set(state.tasks.map(taskMonth))].filter(m => /^\d{4}-\d{2}$/.test(m)).sort().reverse();
+    fillSelect("tMonth", months, "All months", m => monthLabel(m).charAt(0) + monthLabel(m).slice(1).toLowerCase());
   }
 
   function upsertTask(task) {
@@ -1072,7 +1077,7 @@
 
   /* ---------- Milestones: filtering ---------- */
   function resetTaskFilters(rerender = true) {
-    ["tSearch", "tProject", "tType", "tChannel"].forEach(id => $(id).value = "");
+    ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).value = "");
     $("tStep").value = "current";
     if (rerender) renderTasks();
   }
@@ -1085,9 +1090,10 @@
 
   function getFilteredTasks() {
     const q = $("tSearch").value.trim().toLowerCase();
-    const proj = $("tProject").value, type = $("tType").value, channel = $("tChannel").value, step = $("tStep").value || "current";
+    const proj = $("tProject").value, month = $("tMonth").value, type = $("tType").value, channel = $("tChannel").value, step = $("tStep").value || "current";
     return state.tasks.filter(t => {
       if (proj && t.project !== proj) return false;
+      if (month && taskMonth(t) !== month) return false;
       if (type && t.type !== type) return false;
       if (channel && t.channel !== channel) return false;
       if (STEP_GROUPS[step] ? !STEP_GROUPS[step].test(t) : t.stage !== step) return false;
@@ -1249,14 +1255,14 @@
   function renderTaskStats() {
     ["active", "qc", "client", "ready"].forEach(k => {
       $("tstat-" + k).textContent = state.tasks.filter(STEP_GROUPS[k].test).length;
-      $("tcard-" + k).classList.toggle("active", $("tStep").value === k && !$("tProject").value && !$("tType").value && !$("tChannel").value && !$("tSearch").value);
+      $("tcard-" + k).classList.toggle("active", $("tStep").value === k && !$("tProject").value && !$("tMonth").value && !$("tType").value && !$("tChannel").value && !$("tSearch").value);
     });
   }
 
   function renderTasks() {
     if (!state.loaded) return;
     renderTaskStats();
-    ["tSearch", "tProject", "tType", "tChannel"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
+    ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
     $("tStep").classList.toggle("is-active", $("tStep").value !== "current");
     const list = getFilteredTasks();
     $("taskCount").innerHTML = `Showing <b>${list.length}</b> of ${plural(state.tasks.length, "task")}`;
@@ -1455,7 +1461,7 @@
   $("bfRows").addEventListener("change", updateBatchForm);
   // The shared deadline fills every task (each one can still be changed after)
   $("bfDeadline").addEventListener("input", () => document.querySelectorAll("#bfRows [data-bdeadline]").forEach(i => i.value = $("bfDeadline").value));
-  ["tSearch", "tProject", "tType", "tChannel", "tStep"].forEach(id => $(id).addEventListener("input", renderTasks));
+  ["tSearch", "tProject", "tMonth", "tType", "tChannel", "tStep"].forEach(id => $(id).addEventListener("input", renderTasks));
   $("sheetLink").addEventListener("click", e => {
     if (state.app.sheetUrl) return;
     e.preventDefault();

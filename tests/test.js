@@ -331,6 +331,14 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(made.length === 4 && made.every(t => t.project === "KRR" && t.stage === "brief" && t.deadline === "2026-11-28"), "Monthly Brief: 4 KRR tasks created at Drafting Brief");
   ok(made.filter(t => t.channel === "ORG").every(t => t.link === "https://docs.google.com/spreadsheets/d/brief-org") && made.filter(t => t.channel === "ADS").every(t => !t.link), "Monthly Brief: brief link goes to its channel only");
   ok(made.filter(t => /^Video/.test(t.type)).every(t => t.videographer === "Anno"), "Monthly Brief: KRR videos get VG Anno");
+
+  // Month filter: by the month the content is for (ORG January, ADS December)
+  ok(await page.$$eval("#tMonth option", a => a.some(o => o.value === "2027-01" && o.textContent === "January 2027")), "Month filter lists January 2027");
+  await page.select("#tStep", "all");
+  await page.select("#tMonth", "2027-01");
+  ok(await page.evaluate(() => { const l = getFilteredTasks(); return l.length > 0 && l.every(t => taskMonth(t) === "2027-01") && l.some(t => t.title === "BRIEF ORG JANUARY KRR") && !l.some(t => t.title === "BRIEF ADS DECEMBER KRR"); }), "Month filter shows only January 2027 content");
+  await page.evaluate(() => resetTaskFilters());
+  ok(await page.$eval("#tMonth", s => s.value === ""), "Reset Filters clears the month");
   // Shown per brief: ORG JANUARY section with Static on top and the video below, shared buttons
   await page.select("#tStep", "all");
   const sections = await page.$$eval(".brief-section", a => a.map(s => s.querySelector(".brief-head").textContent.replace(/\s+/g, " ").trim() + " | " + [...s.querySelectorAll("article strong")].map(e => e.textContent).join(" / ")));

@@ -370,7 +370,7 @@
   .modal.modal-wide { max-width: 640px; }
   .stat-qc { --c: #9333ea; }
   .stat-client { --c: #0891b2; }
-  .filters.filters-4 { grid-template-columns: repeat(4, 1fr); }
+  .filters.filters-5 { grid-template-columns: repeat(5, 1fr); }
   .btn-ok { background: var(--success); color: #fff; }
   .btn-ok:hover { background: #15803d; }
   .chan { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: .4px; color: #fff; background: #0891b2; }
@@ -521,7 +521,7 @@
     .links-table .row-actions button { width: auto; }
   }
   @media (max-width: 1000px) {
-    .filters.filters-4 { grid-template-columns: repeat(2, 1fr); }
+    .filters.filters-5 { grid-template-columns: repeat(3, 1fr); }
     .filters { grid-template-columns: repeat(3, 1fr); }
     .stats { grid-template-columns: repeat(2, 1fr); }
   }
@@ -530,7 +530,7 @@
     .content { padding: 20px 16px; }
     .page-header { padding: 20px 16px 18px; }
     .page-header h1 { font-size: 20px; }
-    .grid-2, .filters, .filters.filters-4 { grid-template-columns: 1fr; }
+    .grid-2, .filters, .filters.filters-5 { grid-template-columns: 1fr; }
     .stat { padding: 12px; gap: 8px; }
     .stat-icon { width: 34px; height: 34px; font-size: 18px; }
     .tabs button { font-size: 14px; }
@@ -792,10 +792,14 @@
             <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
             <input id="tSearch" type="search" placeholder="Search title, project, person, or notes...">
           </div>
-          <div class="filters filters-4">
+          <div class="filters filters-5">
             <div class="field">
               <label for="tProject">Project</label>
               <select id="tProject"><option value="">All projects</option></select>
+            </div>
+            <div class="field">
+              <label for="tMonth">Month</label>
+              <select id="tMonth" title="The month the content is for (tasks without one: their deadline month)"><option value="">All months</option></select>
             </div>
             <div class="field">
               <label for="tType">Content Type</label>
@@ -2685,9 +2689,14 @@ function previewClear() {
     const extra = [...new Set(state.tasks.map(t => t.project))].filter(p => p && !known.includes(p)).sort((a, b) => a.localeCompare(b));
     return known.concat(extra);
   }
+  // The month a task's content is for ("2026-12"); tasks without one (Event, Single Task) use their deadline month
+  const taskMonth = t => t.forMonth || (t.deadline || "").slice(0, 7);
   function refreshTaskProjects() {
     const projects = taskProjects();
     fillSelect("tProject", projects, "All projects", p => `${projectIcon(p)} ${p}`);
+    // Months that have tasks, newest first
+    const months = [...new Set(state.tasks.map(taskMonth))].filter(m => /^\d{4}-\d{2}$/.test(m)).sort().reverse();
+    fillSelect("tMonth", months, "All months", m => monthLabel(m).charAt(0) + monthLabel(m).slice(1).toLowerCase());
   }
 
   function upsertTask(task) {
@@ -2961,7 +2970,7 @@ function previewClear() {
 
   /* ---------- Milestones: filtering ---------- */
   function resetTaskFilters(rerender = true) {
-    ["tSearch", "tProject", "tType", "tChannel"].forEach(id => $(id).value = "");
+    ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).value = "");
     $("tStep").value = "current";
     if (rerender) renderTasks();
   }
@@ -2974,9 +2983,10 @@ function previewClear() {
 
   function getFilteredTasks() {
     const q = $("tSearch").value.trim().toLowerCase();
-    const proj = $("tProject").value, type = $("tType").value, channel = $("tChannel").value, step = $("tStep").value || "current";
+    const proj = $("tProject").value, month = $("tMonth").value, type = $("tType").value, channel = $("tChannel").value, step = $("tStep").value || "current";
     return state.tasks.filter(t => {
       if (proj && t.project !== proj) return false;
+      if (month && taskMonth(t) !== month) return false;
       if (type && t.type !== type) return false;
       if (channel && t.channel !== channel) return false;
       if (STEP_GROUPS[step] ? !STEP_GROUPS[step].test(t) : t.stage !== step) return false;
@@ -3138,14 +3148,14 @@ function previewClear() {
   function renderTaskStats() {
     ["active", "qc", "client", "ready"].forEach(k => {
       $("tstat-" + k).textContent = state.tasks.filter(STEP_GROUPS[k].test).length;
-      $("tcard-" + k).classList.toggle("active", $("tStep").value === k && !$("tProject").value && !$("tType").value && !$("tChannel").value && !$("tSearch").value);
+      $("tcard-" + k).classList.toggle("active", $("tStep").value === k && !$("tProject").value && !$("tMonth").value && !$("tType").value && !$("tChannel").value && !$("tSearch").value);
     });
   }
 
   function renderTasks() {
     if (!state.loaded) return;
     renderTaskStats();
-    ["tSearch", "tProject", "tType", "tChannel"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
+    ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
     $("tStep").classList.toggle("is-active", $("tStep").value !== "current");
     const list = getFilteredTasks();
     $("taskCount").innerHTML = `Showing <b>${list.length}</b> of ${plural(state.tasks.length, "task")}`;
@@ -3344,7 +3354,7 @@ function previewClear() {
   $("bfRows").addEventListener("change", updateBatchForm);
   // The shared deadline fills every task (each one can still be changed after)
   $("bfDeadline").addEventListener("input", () => document.querySelectorAll("#bfRows [data-bdeadline]").forEach(i => i.value = $("bfDeadline").value));
-  ["tSearch", "tProject", "tType", "tChannel", "tStep"].forEach(id => $(id).addEventListener("input", renderTasks));
+  ["tSearch", "tProject", "tMonth", "tType", "tChannel", "tStep"].forEach(id => $(id).addEventListener("input", renderTasks));
   $("sheetLink").addEventListener("click", e => {
     if (state.app.sheetUrl) return;
     e.preventDefault();
