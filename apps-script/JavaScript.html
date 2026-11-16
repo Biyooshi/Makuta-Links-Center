@@ -981,7 +981,7 @@
 
   function renderBatchRows() {
     const project = $("bfProject").value, month = $("bfMonth").value, p = state.cfg.projects[project];
-    $("bfTeam").innerHTML = p ? `Graphic Designer: ${escapeHtml(p.designer)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "choose below"}${p.orgOnly ? " · Organic only" : ""}` : "";
+    $("bfTeam").innerHTML = p ? `Graphic Designer: ${escapeHtml(p.designer)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "choose one above"}${p.orgOnly ? " · Organic only" : ""}` : "";
     if (!p || !/^\d{4}-\d{2}$/.test(month)) {
       $("bfRows").innerHTML = `<div class="help">Choose the project and month to see the tasks.</div>`;
       updateBatchForm();

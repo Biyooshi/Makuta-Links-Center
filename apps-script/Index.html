@@ -347,18 +347,16 @@
   <div class="modal-bg" id="batchModal">
     <div class="modal modal-left modal-wide modal-batch">
       <h3>Monthly Brief</h3>
-      <p class="help help-top">Creates all of this month's tasks in one go. Titles are written for you; untick what you don't need.</p>
+      <p class="help help-top">Creates all of this month's tasks in one go: ORG is for the next month, ADS for this month. Titles are written for you; untick what you don't need.</p>
       <form id="batchForm" novalidate>
-        <div class="grid-2">
+        <div class="batch-fields">
           <div class="field">
             <label for="bfProject">Project <span class="req">*</span></label>
             <select id="bfProject"></select>
-            <div class="help" id="bfTeam"></div>
           </div>
           <div class="field">
             <label for="bfMonth">Working Month <span class="req">*</span></label>
             <input id="bfMonth" type="month">
-            <div class="help">ORG is for the next month, ADS for this month.</div>
           </div>
           <div class="field">
             <label for="bfDeadline">Deadline (all tasks)</label>
@@ -369,6 +367,7 @@
             <select id="bfVideographer"></select>
           </div>
         </div>
+        <div class="help" id="bfTeam"></div>
         <div id="bfRows"></div>
         <div class="error" id="batchFormErr" hidden></div>
         <div class="actions" style="margin-top:16px">

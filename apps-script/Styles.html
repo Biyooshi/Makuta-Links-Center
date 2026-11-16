@@ -361,12 +361,17 @@
   .chan { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: .4px; color: #fff; background: #0891b2; }
   .chan-ads { background: #7c3aed; }
   /* Monthly Brief: one block per channel, one row per task */
-  .batch-group { margin-top: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-bg); }
-  .batch-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
-  .batch-head input { flex: 1; min-width: 0; }
+  .modal.modal-batch { max-width: 860px; }
+  /* Project, month, deadline (and videographer when needed) side by side */
+  .batch-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+  .batch-fields .field { margin-bottom: 0; }
+  #bfTeam { margin-top: 8px; }
+  /* Rows share the group's columns (subgrid), so every type pill, title and date lines up */
+  .batch-group { display: grid; grid-template-columns: auto max-content minmax(0, 1fr) 156px; column-gap: 8px; margin-top: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-bg); }
+  .batch-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-bottom: 8px; }
+  .batch-head input { flex: 1 1 260px; min-width: 0; }
   .batch-for { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
-  .modal.modal-batch { max-width: 760px; }
-  .batch-row { display: grid; grid-template-columns: auto 150px minmax(0, 1fr) 150px; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px dashed var(--border); cursor: pointer; }
+  .batch-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; row-gap: 6px; align-items: center; padding: 6px 0; border-top: 1px dashed var(--border); cursor: pointer; }
   .batch-row input[type=checkbox] { width: 16px; height: 16px; }
   .batch-row .batch-title { font-weight: 600; }
   .batch-row .cat { justify-self: start; }
@@ -515,7 +520,8 @@
     .stat-icon { width: 34px; height: 34px; font-size: 18px; }
     .tabs button { font-size: 14px; }
     .version-row { grid-template-columns: 1fr auto; }
-    .batch-row { grid-template-columns: auto 1fr; }
+    .batch-group { display: block; }
+    .batch-row { grid-template-columns: auto 1fr; column-gap: 8px; }
     .batch-row .batch-title, .batch-row input[type=date], .batch-row .tag { grid-column: 1 / -1; }
     .version-row .v-label { grid-column: 1 / -1; }
     .group-item { flex-wrap: wrap; }
