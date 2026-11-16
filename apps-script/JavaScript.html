@@ -736,15 +736,16 @@
   };
   const isVideoType = type => /^Video/.test(type);
   const isEventType = type => type === state.cfg.eventType;
-  const TYPE_ICONS = { video: "🎬", event: "🎪", static: "🖼️" };
-  const typeKind = type => isVideoType(type) ? "video" : isEventType(type) ? "event" : "static";
+  const isCollateralType = type => type === state.cfg.collateralType;
+  const TYPE_ICONS = { video: "🎬", event: "🎪", collateral: "🖨️", static: "🖼️" };
+  const typeKind = type => isVideoType(type) ? "video" : isEventType(type) ? "event" : isCollateralType(type) ? "collateral" : "static";
   const stageOf = key => state.cfg.stages.find(s => s.key === key) || { key, name: key, role: "" };
   // Who does this step for this task (mirrors stageOwner_ in Code.gs)
   function stageOwner(s, t) {
     if (s.key === "shoot") return `Obi & ${t.videographer || "Videographer"}`;
     return s.person || (s.role === "Graphic Designer" ? t.designer : s.role === "Videographer" ? t.videographer : "") || s.role;
   }
-  const doneLabel = t => t.channel === "ADS" ? "Live on Ads" : "Scheduled / Posted";
+  const doneLabel = t => isCollateralType(t.type) ? "Approved by Client" : t.channel === "ADS" ? "Live on Ads" : "Scheduled / Posted";
   // Mirrors channelFromTitle_ in Code.gs: "BRIEF ORG NOV KRR" -> "ORG" ("" when neither or both)
   function channelFromTitle(title) {
     const found = Object.keys(state.cfg.channels).filter(c => new RegExp(`(^|[^A-Za-z])${c}([^A-Za-z]|$)`, "i").test(title));
@@ -814,8 +815,9 @@
   }
 
   /* ---------- Milestones: new / edit task form ---------- */
-  // Content types a project makes (Event Attribute only where the project lists it)
-  const projectTypes = p => (p && p.types) || state.cfg.contentTypes.filter(v => !isEventType(v));
+  // Content types a project makes (Event Attribute only where the project lists it); every project can get Collateral
+  const projectTypes = p => ((p && p.types) || state.cfg.contentTypes.filter(v => !isEventType(v)))
+    .filter(v => !isCollateralType(v)).concat(state.cfg.collateralType);
 
   function fillTaskTypes() {
     const types = projectTypes(state.cfg.projects[$("tfProject").value]);
@@ -832,7 +834,9 @@
     $("taskSaveBtn").textContent = t ? "Save Changes" : "Create Task";
     $("taskFormErr").hidden = true;
     $("tfProject").dataset.auto = "";
+    $("tfTitle").dataset.auto = "";
     $("tfType").value = "";
+    $("tfItem").innerHTML = `<option value="">-- Select --</option>` + state.cfg.collateralItems.map(v => `<option>${escapeHtml(v)}</option>`).join("");
     fillTaskTypes();
     if (t) {
       $("tfTitle").value = t.title;
@@ -841,6 +845,8 @@
       fillTaskTypes();
       ensureOption($("tfType"), t.type);
       $("tfType").value = t.type;
+      ensureOption($("tfItem"), t.item);
+      $("tfItem").value = t.item || "";
       $("tfDeadline").value = t.deadline;
       ensureOption($("tfVideographer"), t.videographer);
       $("tfVideographer").value = t.videographer;
@@ -854,6 +860,7 @@
 
   // Typing the title picks the project when it names one (until the project is chosen by hand)
   function onTaskTitleInput() {
+    $("tfTitle").dataset.auto = "";
     const p = projectFromTitle($("tfTitle").value);
     if (p && (!$("tfProject").value || $("tfProject").dataset.auto)) {
       $("tfProject").value = p;
@@ -864,12 +871,20 @@
   }
 
   function updateTaskForm() {
-    const type = $("tfType").value, title = $("tfTitle").value, channel = channelFromTitle(title);
+    const type = $("tfType").value, collateral = isCollateralType(type);
     const p = state.cfg.projects[$("tfProject").value];
+    // Collateral: one item per task, titled "FLYER KRR" until the title is typed by hand
+    $("tfItemField").hidden = !collateral;
+    if (collateral && $("tfItem").value && p && (!$("tfTitle").value.trim() || $("tfTitle").dataset.auto)) {
+      $("tfTitle").value = `${$("tfItem").value} ${$("tfProject").value}`.toUpperCase();
+      $("tfTitle").dataset.auto = "1";
+    }
+    const title = $("tfTitle").value, channel = collateral ? "" : channelFromTitle(title);
     // New tasks get the project's videographer; another one can only be picked when editing.
     // Projects without a fixed videographer (Makuta) choose one for every video task.
     $("tfVideographerField").hidden = !(isVideoType(type) && (state.editingTaskId || (p && !p.videographer)));
-    $("tfDetected").innerHTML = channel
+    $("tfDetected").innerHTML = collateral ? "Collateral is not posted, so no ORG / ADS is needed. Format: [ITEM] [PROJECT], e.g. FLYER KRR"
+      : channel
       ? `Detected: <span class="chan chan-${channel.toLowerCase()}">${channel}</span> ${channel === "ADS" ? "Ads Manager (Musthofa)" : "client's social media"}`
       : title.trim() ? `<span class="text-danger">Write ORG or ADS in the title.</span>` : "Format: [BRIEF / VIDEO CTC / EVENT] [ORG / ADS] [MONTH] [PROJECT]";
     // "VIDEO CTC" in the title but a Static type (or the other way round) is probably a mistake
@@ -878,14 +893,14 @@
       $("tfDetected").innerHTML += `<br><span class="text-danger">The title says ${saysVideo ? "VIDEO CTC" : "BRIEF"} but the content type is ${escapeHtml(type)}. Please double-check.</span>`;
     }
     $("tfDesigner").innerHTML = !p ? ""
-      : p.orgOnly && channel === "ADS" ? `<span class="text-danger">${escapeHtml($("tfProject").value)} is organic only. Use ORG in the title.</span>`
+      : !collateral && p.orgOnly && channel === "ADS" ? `<span class="text-danger">${escapeHtml($("tfProject").value)} is organic only. Use ORG in the title.</span>`
       : `Graphic Designer: ${escapeHtml(p.designer)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "chosen per video"}${p.orgOnly ? " · Organic only" : ""}`;
     // Event Attribute: the deadline is the event day, and the countdown posts are counted back from it
     const event = isEventType(type);
     $("tfDeadlineLabel").innerHTML = event ? `Event Date (D-Day) <span class="req">*</span>` : "Deadline";
     $("tfEventItems").hidden = !event;
     if (event) $("tfEventItems").innerHTML = `Included in this task: ${state.cfg.eventItems.map(i => escapeHtml(eventItemLabel(i, $("tfDeadline").value))).join(" · ")}`;
-    $("tfSteps").innerHTML = type && channel
+    $("tfSteps").innerHTML = type && (channel || collateral)
       ? `Timeline: ${previewSteps(type, channel).map(escapeHtml).join(" → ")}`
       : "Write ORG / ADS in the title and choose the content type to see the timeline.";
   }
@@ -905,8 +920,8 @@
       k === "shoot" ? type === "Video (Shooting)" :
       k === "video" || k === "qcCut" || k === "motion" ? isVideoType(type) :
       k === "design" ? !isVideoType(type) :
-      k === "post" ? channel !== "ADS" :
-      k === "ads" ? channel === "ADS" : true);
+      k === "post" ? channel !== "ADS" && !isCollateralType(type) :
+      k === "ads" ? channel === "ADS" && !isCollateralType(type) : true);
     return keys.map(k => stageOf(k).name);
   }
 
@@ -920,14 +935,17 @@
       videographer: $("tfVideographerField").hidden ? "" : $("tfVideographer").value,
       link: $("tfLink").value.trim() ? normalizeUrl($("tfLink").value) : "",
       notes: $("tfNotes").value.trim(),
+      item: $("tfItemField").hidden ? "" : $("tfItem").value,
     };
-    const problem = !data.title ? ["tfTitle", "Title is required."]
-      : !channelFromTitle(data.title) ? ["tfTitle", 'Write either ORG or ADS in the title, e.g. "BRIEF ORG DECEMBER KRR".']
+    const collateral = isCollateralType(data.type);
+    // A Collateral title is written from its item, so ask for the item first
+    const problem = collateral && !data.item ? ["tfItem", "Please choose the collateral item (e.g. Flyer, Billboard)."]
+      : !data.title ? ["tfTitle", "Title is required."]
+      : !collateral && !channelFromTitle(data.title) ? ["tfTitle", 'Write either ORG or ADS in the title, e.g. "BRIEF ORG DECEMBER KRR".']
       : !data.project ? ["tfProject", "Please choose the project."]
-      : (state.cfg.projects[data.project] || {}).orgOnly && channelFromTitle(data.title) !== "ORG" ? ["tfTitle", `${data.project} is organic only. Use ORG in the title.`]
+      : !collateral && (state.cfg.projects[data.project] || {}).orgOnly && channelFromTitle(data.title) !== "ORG" ? ["tfTitle", `${data.project} is organic only. Use ORG in the title.`]
       : !data.type ? ["tfType", "Please choose the content type."]
-      : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]
-      : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
+      : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]      : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
       : isEventType(data.type) && !data.deadline ? ["tfDeadline", "Please fill in the event date (D-Day)."]
       : data.link && !isValidUrl(data.link) ? ["tfLink", "Please enter a valid link, or leave it empty."]
       : null;
@@ -995,7 +1013,7 @@
       return;
     }
     const existing = new Set(state.tasks.map(t => t.title.trim().toUpperCase()));
-    const types = projectTypes(p).filter(v => !isEventType(v));
+    const types = projectTypes(p).filter(v => !isEventType(v) && !isCollateralType(v));
     const channels = Object.keys(state.cfg.channels).filter(c => !(p.orgOnly && c !== "ORG"));
     $("bfRows").innerHTML = channels.map(ch => `<div class="batch-group">
       <div class="batch-head">
@@ -1099,7 +1117,7 @@
       if (STEP_GROUPS[step] ? !STEP_GROUPS[step].test(t) : t.stage !== step) return false;
       if (q) {
         const people = t.steps.map(k => stageOwner(stageOf(k), t));
-        const haystack = [t.title, t.project, t.type, t.channel, t.notes, t.link, ...people].join(" ").toLowerCase();
+        const haystack = [t.title, t.project, t.type, t.item, t.channel, t.notes, t.link, ...people].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -1215,8 +1233,8 @@
         <div class="task-title">
           <strong>${escapeHtml(t.title)}</strong>
           <div class="meta-line">
-            <span class="chan chan-${t.channel === "ADS" ? "ads" : "org"}">${escapeHtml(t.channel)}</span>
-            <span class="cat cat-type-${typeKind(t.type)}">${TYPE_ICONS[typeKind(t.type)]} ${escapeHtml(t.type)}</span>
+            ${t.channel ? `<span class="chan chan-${t.channel === "ADS" ? "ads" : "org"}">${escapeHtml(t.channel)}</span>` : ""}
+            <span class="cat cat-type-${typeKind(t.type)}">${TYPE_ICONS[typeKind(t.type)]} ${escapeHtml(t.type)}${t.item ? `: ${escapeHtml(t.item)}` : ""}</span>
             ${t.videographer ? `<span class="tag">🎥 VG-${escapeHtml(t.videographer)}</span>` : ""}
             ${done ? `<span class="tag tag-finished">✓ Completed ${shortDate(finishedAt(t))}</span>` : ""}
             ${taskDue(t)}
@@ -1451,6 +1469,7 @@
   }, true);
   $("taskForm").addEventListener("submit", submitTaskForm);
   $("tfType").addEventListener("change", updateTaskForm);
+  $("tfItem").addEventListener("change", updateTaskForm);
   $("tfDeadline").addEventListener("input", updateTaskForm);
   $("tfTitle").addEventListener("input", onTaskTitleInput);
   $("tfProject").addEventListener("change", () => {

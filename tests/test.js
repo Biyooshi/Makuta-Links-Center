@@ -42,7 +42,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     const cfg = GAS.getInitialData().taskConfig;
     // Every project x content type x channel runs from brief to done
     out.flows = [];
-    Object.keys(cfg.projects).forEach(p => (cfg.projects[p].types || cfg.contentTypes.filter(t => t !== cfg.eventType)).forEach(type =>
+    Object.keys(cfg.projects).forEach(p => (cfg.projects[p].types || cfg.contentTypes.filter(t => t !== cfg.eventType && t !== cfg.collateralType)).forEach(type =>
       ["ORG", "ADS"].filter(c => !(cfg.projects[p].orgOnly && c === "ADS")).forEach(ch => {
         let t = GAS.addTask({ title: `TEST ${ch} DEC ${p}`, project: p, type, deadline: "2026-12-20", videographer: cfg.projects[p].videographer ? "" : "Arif" });
         const visited = [t.stage];
@@ -60,7 +60,15 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
       eventNoDate: tryErr(() => GAS.addTask({ title: "EVENT ORG KRR", project: "KRR", type: "Event Attribute" })),
       noChannel: tryErr(() => GAS.addTask({ title: "BRIEF DEC KRR", project: "KRR", type: "Static" })),
       bothChannels: tryErr(() => GAS.addTask({ title: "ORG ADS KRR", project: "KRR", type: "Static" })),
+      collateralNoItem: tryErr(() => GAS.addTask({ title: "FLYER KRR", project: "KRR", type: "Collateral" })),
+      collateralBadItem: tryErr(() => GAS.addTask({ title: "MUG KRR", project: "KRR", type: "Collateral", item: "Mug" })),
     };
+    // Collateral: any project (VTB does not list it), no ORG / ADS, Static steps, done once the client approves
+    let c = GAS.addTask({ title: "BILLBOARD ORG VTB", project: "VTB", type: "Collateral", item: "Billboard" });
+    const cVisited = [c.stage];
+    for (let i = 0; i < 30 && c.stage !== "done"; i++) { c = GAS.moveTask(c.id, "advance", { from: c.stage }); cVisited.push(c.stage); }
+    const cRow = mockSheet("Tasks").data.find(row => row[0] === c.id);
+    out.collateral = { channel: c.channel, item: c.item, visited: cVisited.join(">"), step: cRow[11], itemCol: cRow[19] };
     // Revisions: internal QC goes straight back to QC after the fix; client revisions go via Obi
     let t = GAS.addTask({ title: "VIDEO CTC ORG DEC KRR", project: "KRR", type: "Video (Shooting)" });
     out.krrVg = t.videographer;
@@ -160,6 +168,9 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(r.flows.filter(f => !/^Video/.test(f.type)).every(f => f.vg === ""), "non-video tasks have no videographer");
   ok(r.flows.find(f => f.p === "GTR").designer === "Wawan" && flow("VTB", "Static", "ORG").designer === "Ilham", "graphic designer comes from the project");
   for (const [k, v] of Object.entries(r.errors)) ok(!!v, `rejected: ${k} -> "${v}"`);
+  ok(r.collateral.channel === "" && r.collateral.item === "Billboard" && r.collateral.itemCol === "Billboard", "Collateral: VTB allowed, no channel (even with ORG in the title), item saved in its column");
+  ok(r.collateral.visited === "brief>qcBrief>design>qcContent>toClient>qcClient>done" && r.collateral.step === "Done: Approved by Client",
+    "Collateral follows the Static steps and is done when the client approves -> " + r.collateral.visited);
   ok(r.atQcCut === "qcCut" && r.reviseTo === "shoot" && r.afterFixShoot === "qcCut" && r.afterQcCut === "motion", "QC CTC revision -> fix -> straight back to QC CTC -> Motion / ToV");
   ok(r.atQcClient === "qcClient" && r.clientRev === "revision", "QC Client revision always goes back to Obi");
   ok(!!r.advanceAtRevision && !!r.badAssign, "Obi must pick a valid person for the client revision");
@@ -215,7 +226,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await openForm();
   await page.type("#tfTitle", "VIDEO CTC ORG DECEMBER MAKUTA");
   ok(await page.$eval("#tfProject", s => s.value) === "Makuta", "project picked from the title");
-  ok((await typeOptions()).join() === "Static,Video (Non-Shooting),Video (Shooting)", "Makuta: all types except Event Attribute");
+  ok((await typeOptions()).join() === "Static,Video (Non-Shooting),Video (Shooting),Collateral", "Makuta: all types except Event Attribute");
   await page.select("#tfType", "Video (Shooting)");
   ok(await page.$eval("#tfVideographerField", e => !e.hidden), "Makuta: videographer field shown on a new task");
   await page.click("#taskSaveBtn");
@@ -228,7 +239,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   // KRR: no Non-Shooting, has Event Attribute; VTB: no Event Attribute; VG field hidden for fixed VG
   await openForm();
   await page.type("#tfTitle", "EVENT ORG DECEMBER KRR");
-  ok((await typeOptions()).join() === "Static,Video (Shooting),Event Attribute", "KRR types: Static, Video (Shooting), Event Attribute");
+  ok((await typeOptions()).join() === "Static,Video (Shooting),Event Attribute,Collateral", "KRR types: Static, Video (Shooting), Event Attribute, Collateral");
   await page.select("#tfType", "Video (Shooting)");
   ok(await page.$eval("#tfVideographerField", e => e.hidden), "KRR new video: videographer hidden (auto Anno)");
   await page.select("#tfType", "Event Attribute");
@@ -248,6 +259,22 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.type("#tfTitle", "BRIEF ORG DECEMBER VTB");
   ok(!(await typeOptions()).includes("Event Attribute"), "VTB has no Event Attribute");
   await page.click("#taskModal .btn-soft");
+
+  // Collateral from the form: pick project + item, the title is written, no ORG / ADS needed
+  await openForm();
+  await page.select("#tfProject", "GTR");
+  await page.select("#tfType", "Collateral");
+  ok(await page.$eval("#tfItemField", e => !e.hidden) && await page.$eval("#tfVideographerField", e => e.hidden), "Collateral: Item field shown");
+  await page.click("#taskSaveBtn");
+  ok(await page.$eval("#taskFormErr", e => !e.hidden && /item/i.test(e.textContent)), "Collateral: saving without an item is blocked");
+  await page.select("#tfItem", "Roll-up Banner");
+  ok(await page.$eval("#tfTitle", e => e.value) === "ROLL-UP BANNER GTR", "Collateral: title written from item + project");
+  ok(await page.$eval("#tfSteps", e => e.textContent.includes("QC Client") && !e.textContent.includes("Scheduling Post")), "Collateral: timeline ends at QC Client");
+  await page.click("#taskSaveBtn");
+  await page.waitForFunction(() => !document.querySelector("#taskModal.show"));
+  ok(await page.evaluate(() => { const t = state.tasks.find(x => x.title === "ROLL-UP BANNER GTR"); return t && t.item === "Roll-up Banner" && t.channel === ""; }), "Collateral task created from the form");
+  ok(await page.evaluate(() => [...document.querySelectorAll(".task")].some(a => a.querySelector("strong").textContent === "ROLL-UP BANNER GTR" && /Collateral: Roll-up Banner/.test(a.textContent) && /Approved by Client/.test(a.textContent))),
+    "Collateral card shows its item and ends at Approved by Client");
 
   // Walk the new event task through every step with the real buttons, with one client revision
   const card = () => page.evaluateHandle(id => document.querySelector(`[data-id="${id}"]`).closest("article"), evId);

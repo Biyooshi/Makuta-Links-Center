@@ -18,7 +18,7 @@ const REMINDER_HOUR = 9;
 
 /* ---------- Milestones setup: edit names here when the team changes ---------- */
 const TASK_SHEET = 'Tasks';
-const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Link', 'Notes', 'History', 'Checklist', 'Work Month', 'For Month'];
+const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Link', 'Notes', 'History', 'Checklist', 'Work Month', 'For Month', 'Item'];
 // Each project: its graphic designer and videographer (both filled in automatically; no videographer =
 // chosen for every video task), its icon (also used in All Links), the content types it makes
 // (all except Event Attribute when not set) and whether it only runs organic content
@@ -32,8 +32,13 @@ const PROJECTS = {
 const VIDEOGRAPHERS = ['Anno', 'Arif'];
 // Static = carousel, single image and motion (all made by the graphic designer).
 // Event Attribute = everything for one exhibition / event, in one task that follows the Static steps.
-const CONTENT_TYPES = ['Static', 'Video (Non-Shooting)', 'Video (Shooting)', 'Event Attribute'];
+// Collateral = one print, merchandise or web item a client asks for (any project, no ORG / ADS);
+// it follows the Static steps and is done once the client approves it.
+const CONTENT_TYPES = ['Static', 'Video (Non-Shooting)', 'Video (Shooting)', 'Event Attribute', 'Collateral'];
 const EVENT_TYPE = 'Event Attribute';
+const COLLATERAL_TYPE = 'Collateral';
+const COLLATERAL_ITEMS = ['T-Banner', 'T-Banner Mini', 'Banner General', 'Neon Box', 'Billboard', 'Flyer', 'Brosur',
+  'Landing Page', 'Website', 'Signboard', 'X Banner', 'Roll-up Banner', 'Product Knowledge', 'Umbul-umbul', 'Kipas', 'Topi'];
 // What an Event Attribute task delivers, ticked off one by one. days = posting day before the event (D-Day = the deadline).
 const EVENT_ITEMS = [
   { name: 'Countdown H-5', days: 5 },
@@ -129,7 +134,7 @@ function getInitialData_() {
   return {
     links: getLinks_(),
     tasks: getTasks_(),
-    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS },
+    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS },
     sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl()
   };
 }
@@ -419,8 +424,8 @@ function pipeline_(type, channel) {
     k === 'shoot' ? type === 'Video (Shooting)' :
     k === 'video' || k === 'qcCut' || k === 'motion' ? video :
     k === 'design' ? !video :
-    k === 'post' ? channel !== 'ADS' :
-    k === 'ads' ? channel === 'ADS' : true);
+    k === 'post' ? channel !== 'ADS' && type !== COLLATERAL_TYPE :
+    k === 'ads' ? channel === 'ADS' && type !== COLLATERAL_TYPE : true);
 }
 
 // Steps that can fix a client revision: videographer (CTC) or graphic designer
@@ -452,7 +457,7 @@ function fitStage_(task) {
 }
 
 function currentStep_(t) {
-  if (t.stage === 'done') return t.channel === 'ADS' ? 'Done: Live on Ads' : 'Done: Scheduled / Posted';
+  if (t.stage === 'done') return t.type === COLLATERAL_TYPE ? 'Done: Approved by Client' : t.channel === 'ADS' ? 'Done: Live on Ads' : 'Done: Scheduled / Posted';
   const s = stageInfo_(t.stage);
   return s.name + ' (' + stageOwner_(s, t) + ')';
 }
@@ -476,17 +481,25 @@ function cleanTask_(d) {
     videographer: line(d.videographer),
     deadline: /^\d{4}-\d{2}-\d{2}$/.test(d.deadline) ? d.deadline : '',
     link: str(d.link, 2000),
-    notes: str(d.notes, 5000)
+    notes: str(d.notes, 5000),
+    item: ''
   };
   if (!t.title) throw new Error('Title is required.');
-  t.channel = channelFromTitle_(t.title);
-  if (!t.channel) throw new Error('Write either ORG or ADS in the title, e.g. "BRIEF ORG NOV KRR".');
+  // Collateral is not posted, so it has no ORG / ADS
+  const collateral = t.type === COLLATERAL_TYPE;
+  t.channel = collateral ? '' : channelFromTitle_(t.title);
+  if (!collateral && !t.channel) throw new Error('Write either ORG or ADS in the title, e.g. "BRIEF ORG NOV KRR".');
   if (!PROJECTS.hasOwnProperty(t.project)) throw new Error('Please choose the project.');
   const p = PROJECTS[t.project];
-  if (p.orgOnly && t.channel !== 'ORG') throw new Error(t.project + ' is organic only. Use ORG in the title.');
+  if (!collateral && p.orgOnly && t.channel !== 'ORG') throw new Error(t.project + ' is organic only. Use ORG in the title.');
   t.designer = p.designer;
   if (!t.type) throw new Error('Please choose the content type.');
-  if ((p.types || CONTENT_TYPES).indexOf(t.type) < 0) throw new Error(t.project + ' has no ' + t.type + ' content.');
+  // Every project can get Collateral; the other types only where the project makes them
+  if (!collateral && (p.types || CONTENT_TYPES).indexOf(t.type) < 0) throw new Error(t.project + ' has no ' + t.type + ' content.');
+  if (collateral) {
+    t.item = COLLATERAL_ITEMS.indexOf(line(d.item)) >= 0 ? line(d.item) : '';
+    if (!t.item) throw new Error('Please choose the collateral item (e.g. Flyer, Billboard).');
+  }
   if (t.type === EVENT_TYPE && !t.deadline) throw new Error('Please fill in the event date (D-Day).');
   if (!/^Video/.test(t.type)) t.videographer = '';
   else if (VIDEOGRAPHERS.indexOf(t.videographer) < 0) {
@@ -510,7 +523,7 @@ function writeTask_(sheet, row, t) {
     t.id, t.createdAt, t.updatedAt, t.title, t.project, t.type, t.channel, t.designer, t.videographer, t.deadline,
     t.stage, currentStep_(t), String(revisions), t.link, t.notes, JSON.stringify(t.history),
     t.type === EVENT_TYPE ? EVENT_ITEMS.map(i => i.name).filter(n => t.checklist.indexOf(n) >= 0).join('\n') : '',
-    t.workMonth || '', t.forMonth || ''
+    t.workMonth || '', t.forMonth || '', t.type === COLLATERAL_TYPE ? t.item || '' : ''
   ].map(safe_)]);
   t.steps = pipeline_(t.type, t.channel);
   return t;
@@ -536,7 +549,8 @@ function rowToTask_(r) {
     history: Array.isArray(history) ? history : [],
     checklist: parseLines_(r[16]),
     workMonth: /^\d{4}-\d{2}$/.test(text_(r[17]).trim()) ? text_(r[17]).trim() : '',
-    forMonth: /^\d{4}-\d{2}$/.test(text_(r[18]).trim()) ? text_(r[18]).trim() : ''
+    forMonth: /^\d{4}-\d{2}$/.test(text_(r[18]).trim()) ? text_(r[18]).trim() : '',
+    item: text_(r[19]).trim()
   };
   task.stage = fitStage_(task);
   task.steps = pipeline_(task.type, task.channel);
