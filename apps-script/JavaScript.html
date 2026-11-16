@@ -1274,12 +1274,15 @@
     }
     const groups = {};
     list.forEach(t => (groups[t.project] = groups[t.project] || []).push(t));
-    const order = taskProjects();
-    // Inside a project: unfinished first, then nearest deadline, then oldest
+    // Inside a project: unfinished first, newest task on top; finished ones by when they finished, newest first
     const sorter = (a, b) => ((a.stage === "done") - (b.stage === "done")) || finishedAt(b).localeCompare(finishedAt(a)) ||
-      (a.deadline || "9999").localeCompare(b.deadline || "9999") || a.createdAt.localeCompare(b.createdAt);
-    $("taskResults").innerHTML = order.filter(p => groups[p]).map(name => {
-      const items = groups[name].sort(sorter);
+      (b.createdAt || "").localeCompare(a.createdAt || "");
+    Object.values(groups).forEach(items => items.sort(sorter));
+    // The project with the newest task comes first
+    const newest = name => groups[name].reduce((m, t) => (t.createdAt || "") > m ? t.createdAt : m, "");
+    const order = taskProjects().filter(p => groups[p]).sort((a, b) => newest(b).localeCompare(newest(a)));
+    $("taskResults").innerHTML = order.map(name => {
+      const items = groups[name];
       const active = items.filter(t => t.stage !== "done").length;
       const p = state.cfg.projects[name] || {};
       return `<section class="group">

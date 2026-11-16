@@ -339,6 +339,9 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(await page.evaluate(() => { const l = getFilteredTasks(); return l.length > 0 && l.every(t => taskMonth(t) === "2027-01") && l.some(t => t.title === "BRIEF ORG JANUARY KRR") && !l.some(t => t.title === "BRIEF ADS DECEMBER KRR"); }), "Month filter shows only January 2027 content");
   await page.evaluate(() => resetTaskFilters());
   ok(await page.$eval("#tMonth", s => s.value === ""), "Reset Filters clears the month");
+  // Newest on top: the project just given a Monthly Brief comes first, with those tasks at the top
+  ok(await page.$eval("#taskResults .group", g => /KRR/.test(g.querySelector(".group-head h3").textContent) && /JANUARY KRR/.test(g.querySelector(".task-title strong").textContent)),
+    "Newest tasks on top: KRR first, its new January brief at the top");
   // Shown per brief: ORG JANUARY section with Static on top and the video below, shared buttons
   await page.select("#tStep", "all");
   const sections = await page.$$eval(".brief-section", a => a.map(s => s.querySelector(".brief-head").textContent.replace(/\s+/g, " ").trim() + " | " + [...s.querySelectorAll("article strong")].map(e => e.textContent).join(" / ")));
