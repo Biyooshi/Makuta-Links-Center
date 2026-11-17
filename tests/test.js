@@ -450,7 +450,12 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   const known = await page.evaluate(() => Object.keys(state.cfg.projects).concat(REFERENCE_PROJECT));
   ok(await page.evaluate(k => state.links.every(l => !l.project || k.includes(l.project)), known), "sample links only use real projects");
   ok(await page.evaluate(() => state.links.filter(l => l.category === "Reference").every(l => l.project === "REFERENCE")), "sample Reference links are in REFERENCE");
-  // Table fits without sideways scrolling at every width (cards below 1340px)
+  // Next to the sidebar a laptop gets the real table; a tablet or phone gets one card per link
+  await page.setViewport({ width: 1300, height: 900 });
+  ok(await page.$eval("#results thead", e => getComputedStyle(e).display !== "none"), "laptop (1300px): links show as a table, not cards");
+  await page.setViewport({ width: 820, height: 900 });
+  ok(await page.$eval("#results thead", e => getComputedStyle(e).display === "none"), "tablet (820px): links show as cards");
+  // Table fits without sideways scrolling at every width
   for (const w of [1920, 1440, 1340, 1339, 1024, 800, 390]) {
     await page.setViewport({ width: w, height: 900 });
     const over = await page.evaluate(() => Math.max(document.documentElement.scrollWidth - innerWidth, document.querySelector(".table-wrap").scrollWidth - document.querySelector(".table-wrap").clientWidth));
@@ -678,21 +683,38 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
       // Every task waiting for Obi is listed, except Monthly Brief tasks moved together with one already listed
       complete: state.tasks.filter(isMyStep).every(t => ids.includes(t.id) || ids.some(id => linkedTasks(state.tasks.find(o => o.id === id)).includes(t))),
       once: !tasks.some((t, i) => tasks.slice(0, i).some(o => linkedTasks(o).includes(t))),
-      pipeline: [...document.querySelectorAll("#homePipeline .pipe-step")].map(b => b.dataset.stat).join(),
-      pipelineSum: [...document.querySelectorAll("#homePipeline .pipe-num")].reduce((n, e) => n + Number(e.textContent), 0),
-      active: state.tasks.filter(t => t.stage !== "done").length,
+      stats: [...document.querySelectorAll("#homeStats .home-stat")].map(b => b.dataset.stat || "links:" + b.dataset.links).join(),
+      mineStat: Number(document.querySelector("#homeStats [data-stat=mine] .stat-n").textContent) === state.tasks.filter(isMyStep).length,
+      projects: [...document.querySelectorAll("#homeProjects [data-project-open]")].map(b => b.dataset.projectOpen).join(),
+      // Each project row adds up to its active tasks (every active task sits in exactly one stage)
+      sums: [...document.querySelectorAll("#homeProjects .proj-row:not(.proj-head)")].every(r => {
+        const p = r.querySelector("[data-project-open]").dataset.projectOpen;
+        const n = [...r.querySelectorAll(".proj-cell:not([data-label=Late]) .stage-n")].reduce((a, e) => a + Number(e.textContent), 0);
+        return n === state.tasks.filter(t => t.project === p && t.stage !== "done").length;
+      }),
+      hello: document.getElementById("helloTitle").textContent.endsWith("Obi") && /VTB, KRR, Makuta and GTR/.test(document.getElementById("helloText").textContent),
       recent: document.querySelectorAll("#homeRecent li").length, due: !!document.querySelector("#homeDue"),
       sideProjects: [...document.querySelectorAll("#sideProjects [data-project]")].map(b => b.dataset.project).filter(Boolean).join(),
       navTurn: document.getElementById("navTurn").textContent,
     };
   });
   ok(home.count > 0 && home.allMine && home.allButtons && home.complete && home.once, `Home "Your turn": every step waiting for me, with its buttons, linked tasks once (${home.count})`);
-  ok(home.pipeline === "drafting,qc,production,client,ready" && home.pipelineSum === home.active, "Home pipeline counts every active task once, in workflow order");
+  ok(home.hello, "Home greets me and names my role and projects");
+  ok(home.stats === "mine,late,soon,links:open" && home.mineStat, "Home numbers: waiting for me, late, due this week, links not done");
+  ok(home.projects === "VTB,KRR,Makuta,GTR" && home.sums, "Home Projects table: my projects, every active task counted once per project");
   ok(home.recent > 0 && home.due, "Home shows recent moves and what is due");
   ok(home.sideProjects === "VTB,KRR,Makuta,GTR" && Number(home.navTurn) === await page.evaluate(() => state.tasks.filter(isMyStep).length), "sidebar: my projects only, Milestones shows how many are my turn");
-  // A pipeline step opens Milestones on that group; a sidebar project opens Milestones on it
-  await page.click('#homePipeline [data-stat="qc"]');
-  ok(await page.evaluate(() => state.page === "tasks" && document.getElementById("tStep").value === "qc"), "pipeline step opens Milestones on that step group");
+  // A number in the Projects table opens Milestones on that project and stage; a sidebar project opens Milestones on it
+  const cellPick = await page.evaluate(() => { const b = document.querySelector("#homeProjects button[data-stat]"); return { stat: b.dataset.stat, project: b.dataset.project, n: Number(b.textContent) }; });
+  await page.click(`#homeProjects button[data-stat="${cellPick.stat}"][data-project="${cellPick.project}"]`);
+  ok(await page.evaluate(c => state.page === "tasks" && document.getElementById("tStep").value === c.stat && document.getElementById("tProject").value === c.project &&
+    document.querySelectorAll("#taskResults [data-task]").length === c.n, cellPick), `a number in the Projects table opens Milestones on that project and stage (${cellPick.project} / ${cellPick.stat})`);
+  await page.evaluate(() => showView("home"));
+  await page.click('#homeStats [data-links="open"]');
+  ok(await page.evaluate(() => state.page === "links" && document.getElementById("fStatus").value === "open"), "Links not done opens Links on the links still open");
+  await page.evaluate(() => showView("home"));
+  await page.click('#homeStats [data-stat="late"]');
+  ok(await page.evaluate(() => state.page === "tasks" && document.getElementById("tStep").value === "late"), "Late opens Milestones on the late tasks");
   await page.click('#sideProjects [data-project="KRR"]');
   ok(await page.evaluate(() => document.getElementById("tProject").value === "KRR" && document.querySelector('#sideProjects [data-project="KRR"]').classList.contains("active") &&
     [...document.querySelectorAll("#taskResults .group-head h3")].every(h => /KRR/.test(h.textContent))), "sidebar project opens Milestones on that project (highlighted)");
@@ -731,7 +753,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(await page.evaluate(() => [...document.querySelectorAll("#newMenu .task-create")].every(b => b.hidden) && !document.querySelector("#newMenu .link-create").hidden), "designer: New menu has Link only");
   await page.evaluate(() => lockApp());
   await loginAs("owner", "owner");
-  ok(await page.evaluate(() => document.getElementById("turnTitle").textContent === "Overdue"), "owner's Home lists what is overdue (no steps of their own)");
+  ok(await page.evaluate(() => document.getElementById("turnTitle").textContent === "Late tasks" && document.querySelector("#homeStats [data-stat=active]")), "owner's Home lists late tasks and all active tasks (no steps of their own)");
 
   // Layout: no sideways scroll on a phone or tablet, and screenshots for a visual check
   for (const [w, name] of [[1300, "desktop"], [820, "tablet"], [390, "phone"]]) {

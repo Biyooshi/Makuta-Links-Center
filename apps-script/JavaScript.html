@@ -674,30 +674,32 @@
     return `<button class="pin${l.pinned ? " on" : ""}" data-act="pin" data-id="${escapeHtml(l.id)}" title="${l.pinned ? "Unpin" : "Pin to top"}">&#9733;</button>`;
   }
 
+  // Icon + word; the table shows only the icons (the word stays as the tooltip and for screen readers)
+  const ACT_ICONS = {
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    delete: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+  };
   function actionButtons(l) {
     const id = escapeHtml(l.id);
-    return `<div class="row-actions">
-      <button class="btn-sm btn-soft" data-act="copy" data-id="${id}">Copy</button>
-      <button class="btn-sm btn-soft" data-act="edit" data-id="${id}">Edit</button>
-      <button class="btn-sm btn-danger" data-act="delete" data-id="${id}">Delete</button>
-    </div>`;
+    const btn = (act, label, cls) => `<button class="btn-sm ${cls}" data-act="${act}" data-id="${id}" title="${label}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ACT_ICONS[act]}</svg><span class="act-text">${label}</span></button>`;
+    return `<div class="row-actions">${btn("copy", "Copy", "btn-soft")}${btn("edit", "Edit", "btn-soft")}${btn("delete", "Delete", "btn-danger")}</div>`;
   }
 
-  // Fixed column widths so the table always fits; on narrow screens each row becomes a card (see Styles)
+  // Fixed column widths so the table always fits; the date added and description sit under the title.
+  // When the page is too narrow for the table, each row becomes a card (see Styles)
   function renderTable(list) {
     return `<div class="table-wrap"><table class="links-table">
-      <colgroup><col class="c-pin"><col class="c-date"><col><col class="c-cat"><col class="c-proj"><col class="c-status"><col class="c-due"><col class="c-desc"><col class="c-act"></colgroup>
-      <thead><tr><th>Pin</th><th>Date Added</th><th>Title &amp; Link</th><th>Category</th><th>Project</th><th>Status</th><th>Deadline</th><th>Description</th><th>Actions</th></tr></thead>
+      <colgroup><col class="c-pin"><col><col class="c-cat"><col class="c-proj"><col class="c-status"><col class="c-due"><col class="c-act"></colgroup>
+      <thead><tr><th><span class="sr-only">Pin</span></th><th>Title &amp; link</th><th>Category</th><th>Project</th><th>Status</th><th>Deadline</th><th><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>${list.map(l => `
         <tr class="${rowClass(l)}">
           <td class="pin-cell">${pinButton(l)}</td>
-          <td data-label="Date Added" title="${formatDate(l.createdAt)}">${addedDay(l) ? formatDay(addedDay(l)) : "-"}</td>
-          <td class="title-cell">${titleBlock(l)}</td>
+          <td class="title-cell">${titleBlock(l)}<div class="link-meta" title="${formatDate(l.createdAt)}">Added ${addedDay(l) ? formatDay(addedDay(l)) : "-"}${l.purpose ? ` · <span class="link-desc">${escapeHtml(l.purpose)}</span>` : ""}</div></td>
           <td data-label="Category">${categoryBadge(l.category)}</td>
           <td data-label="Project">${projectChip(l.project)}</td>
           <td data-label="Status">${statusBadge(l.status)}</td>
           <td data-label="Deadline">${deadlineText(l)}</td>
-          <td data-label="Description" class="desc">${escapeHtml(l.purpose) || "-"}</td>
           <td class="act-cell">${actionButtons(l)}</td>
         </tr>`).join("")}
       </tbody></table></div>`;
@@ -863,7 +865,7 @@
   // Finished tasks stay in the default view (dimmed, at the bottom) for this many days after they are done
   const RECENT_DONE_DAYS = 30;
   const STEP_GROUPS = {
-    current: { label: `Active + done in the last ${RECENT_DONE_DAYS} days`, test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
+    current: { label: `Active + done in ${RECENT_DONE_DAYS} days`, test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
     active: { label: "All active tasks", test: t => t.stage !== "done" },
     mine: { label: "My Tasks", test: t => isMyStep(t) },
     qc: { label: "Waiting QC Internal", test: t => ["qcBrief", "qcCut", "qcContent"].includes(t.stage) },
@@ -871,6 +873,8 @@
     production: { label: "In production (shooting / VO / CTC / design / ToV)", test: t => ["shoot", "vo", "video", "design", "motion"].includes(t.stage) },
     client: { label: "At client", test: t => ["toClient", "qcClient"].includes(t.stage) },
     ready: { label: "Approved by client", test: t => ["post", "ads"].includes(t.stage) },
+    late: { label: "Late (past the deadline)", test: t => t.stage !== "done" && !!t.deadline && t.deadline < today() },
+    soon: { label: "Due in the next 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) <= 7 },
     done: { label: "Done", test: t => t.stage === "done" },
     all: { label: "All tasks", test: () => true },
   };
@@ -1287,9 +1291,10 @@
   }
 
   // Also used from Home's pipeline, so it opens Milestones
-  function applyTaskStat(kind) {
+  function applyTaskStat(kind, project = "") {
     resetTaskFilters(false);
     $("tStep").value = kind;
+    $("tProject").value = project;
     if (state.page === "tasks") renderTasks(); else showView("tasks");
   }
 
@@ -1559,8 +1564,8 @@
   }
 
   /* ---------- Home ---------- */
-  // Where the active tasks of my projects are, in workflow order (each opens Milestones on that group)
-  const PIPELINE = [
+  // The stages a task goes through, as columns of the Projects table (each opens Milestones on that group)
+  const STAGE_COLUMNS = [
     { key: "drafting", name: "Brief" }, { key: "qc", name: "QC Internal" }, { key: "production", name: "Production" },
     { key: "client", name: "At client" }, { key: "ready", name: "Ready to post" },
   ];
@@ -1568,44 +1573,83 @@
     const m = Math.round((Date.now() - new Date(iso)) / 60000);
     return m < 60 ? `${Math.max(1, m)}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : m < 2880 ? "yesterday" : `${Math.round(m / 1440)}d ago`;
   }
-  const RECENT_WORDS = { revision: "asked for a revision on", approved: "approved", assign: "passed on" };
+  const RECENT_WORDS = { revision: "asked for a revision", approved: "approved", assign: "passed on" };
+  // "VTB, KRR and GTR"
+  const listWords = words => words.length < 2 ? words.join("") : words.slice(0, -1).join(", ") + " and " + words[words.length - 1];
 
   function renderHome() {
     if (!state.loaded) return;
+    const u = me(), owner = u.role === "owner";
     const byDeadline = (a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999");
-    // Your turn: the steps I am responsible for. The owner has none, so they see what is overdue.
-    const owner = me().role === "owner";
-    const late = t => t.stage !== "done" && t.deadline && t.deadline < today();
+    const late = t => t.stage !== "done" && !!t.deadline && t.deadline < today();
+    const active = state.tasks.filter(t => t.stage !== "done");
+    const projects = taskProjects();
+
+    const hour = new Date().getHours();
+    $("helloTitle").textContent = `Good ${hour < 11 ? "morning" : hour < 15 ? "afternoon" : hour < 18 ? "evening" : "night"}, ${u.name}`;
+    $("helloText").textContent = owner || u.role === "manager"
+      ? "You see every project. Here is what needs attention and where each project stands."
+      : `${u.roleName} for ${listWords(u.projects)}. Here is what needs you and where each project stands.`;
+
+    // Four numbers that answer "what should I look at?"; each opens the matching list
+    const soon = active.filter(t => t.deadline && daysUntil(t.deadline) <= 7).sort(byDeadline);
+    const openLinks = state.links.filter(l => l.status !== "Done").length;
+    const stats = [
+      owner ? { n: active.length, label: "Active tasks", note: "In every project", stat: "active" }
+        : { n: active.filter(isMyStep).length, label: "Waiting for you", note: "At a step you handle", stat: "mine", tone: "accent" },
+      { n: active.filter(late).length, label: "Late", note: "Past their deadline", stat: "late", tone: "danger" },
+      { n: soon.length, label: "Due this week", note: "Deadline in the next 7 days", stat: "soon" },
+      { n: openLinks, label: "Links not done", note: "Links still being worked on", link: "open" },
+    ];
+    $("homeStats").innerHTML = stats.map(s => `<button type="button" class="home-stat${s.n && s.tone ? " tone-" + s.tone : ""}" ${s.link ? `data-links="${s.link}"` : `data-stat="${s.stat}"`}>
+        <span class="stat-n">${s.n}</span><span class="stat-label">${s.label}</span><span class="stat-note">${s.note}</span></button>`).join("");
+
+    // Waiting for you: the steps I am responsible for. The owner has none, so they see what is late.
     // Monthly Brief tasks that one button moves together are listed once ("Static + Video" on the button)
-    const turn = state.tasks.filter(t => owner ? late(t) : isMyStep(t)).sort(byDeadline)
+    const turn = active.filter(t => owner ? late(t) : isMyStep(t)).sort(byDeadline)
       .filter((t, i, list) => !list.slice(0, i).some(o => linkedTasks(o).includes(t)));
-    $("turnTitle").textContent = owner ? "Overdue" : "Your turn";
+    $("turnTitle").textContent = owner ? "Late tasks" : "Waiting for you";
     $("turnCount").textContent = turn.length ? plural(turn.length, "task") : "";
+    $("turnNote").textContent = owner ? "Tasks past their deadline, with who they are waiting for."
+      : "These tasks are at a step you handle. Press the button once the step is finished and the task moves on to the next person.";
     $("homeTurn").innerHTML = turn.length ? turn.map(t => `<div class="turn-row${late(t) ? " is-late" : ""}">
         <button type="button" class="turn-open" data-open="${escapeHtml(t.id)}" title="Open in Milestones">
           <span class="turn-title">${escapeHtml(t.title)}</span>
-          <span class="turn-meta">${projectIcon(t.project)} ${escapeHtml(t.project)} · <b>${escapeHtml(stageOf(t.stage).name)}</b>${t.deadline ? ` · due ${formatDay(t.deadline)}` : ""}</span>
+          <span class="turn-meta">${projectIcon(t.project)} ${escapeHtml(t.project)} · Step: <b>${escapeHtml(stageOf(t.stage).name)}</b>${owner ? ` · Waiting for ${escapeHtml(waitingFor(t))}` : ""}</span>
+          ${taskDue(t)}
         </button>
         <div class="turn-actions">${stepButtons(t)}</div>
       </div>`).join("")
-      : `<div class="turn-empty">${owner ? "Nothing is overdue." : "Nothing is waiting for you. Everything in your projects is with someone else."}</div>`;
-    const active = state.tasks.filter(t => t.stage !== "done");
-    $("homePipeline").innerHTML = PIPELINE.map(g => {
-      const n = active.filter(STEP_GROUPS[g.key].test).length;
-      return `<button type="button" class="pipe-step${n ? "" : " is-empty"}" data-stat="${g.key}"><span class="pipe-num">${n}</span><span class="pipe-name">${g.name}</span></button>`;
-    }).join("");
-    // Due soon (late ones first)
-    const soon = active.filter(t => t.deadline && daysUntil(t.deadline) <= 7).sort(byDeadline).slice(0, 8);
-    $("homeDue").innerHTML = soon.length ? `<ul class="home-list">${soon.map(t => `<li><button type="button" data-open="${escapeHtml(t.id)}">
-        ${taskDue(t)}<span class="home-item">${escapeHtml(t.title)}</span><span class="muted">${escapeHtml(stageOf(t.stage).name)}</span></button></li>`).join("")}</ul>`
+      : `<div class="turn-empty">${owner ? "Nothing is late. 🎉" : "Nothing is waiting for you right now. Every task in your projects is with someone else."}</div>`;
+
+    // Projects: active tasks per stage
+    const cell = (list, key, p) => {
+      const n = list.filter(STEP_GROUPS[key].test).length;
+      return n ? `<button type="button" class="stage-n${key === "late" ? " is-late" : ""}" data-stat="${key}" data-project="${escapeHtml(p)}">${n}</button>` : `<span class="stage-n is-zero">0</span>`;
+    };
+    $("homeProjects").innerHTML = projects.length ? `<div class="proj-table" role="table">
+        <div class="proj-row proj-head" role="row"><span role="columnheader">Project</span>${STAGE_COLUMNS.map(c => `<span role="columnheader">${c.name}</span>`).join("")}<span role="columnheader">Late</span></div>
+        ${projects.map(p => {
+          const list = active.filter(t => t.project === p);
+          return `<div class="proj-row" role="row">
+            <button type="button" class="proj-name" data-project-open="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}<small>${plural(list.length, "active task")}</small></button>
+            ${STAGE_COLUMNS.map(c => `<span class="proj-cell" data-label="${c.name}">${cell(list, c.key, p)}</span>`).join("")}
+            <span class="proj-cell" data-label="Late">${cell(list, "late", p)}</span>
+          </div>`;
+        }).join("")}
+      </div>` : `<p class="home-empty">No projects yet.</p>`;
+
+    // Due soon (late ones first), with who has to act
+    $("homeDue").innerHTML = soon.length ? `<ul class="home-list">${soon.slice(0, 8).map(t => `<li><button type="button" data-open="${escapeHtml(t.id)}">
+        <span class="home-item">${escapeHtml(t.title)}</span>
+        <span class="home-sub">${taskDue(t)} ${escapeHtml(stageOf(t.stage).name)} · ${escapeHtml(waitingFor(t))}</span></button></li>`).join("")}</ul>`
       : `<p class="home-empty">No deadlines in the next 7 days.</p>`;
     // The latest moves in my projects, newest first
     const recent = state.tasks.flatMap(t => t.history.filter(e => e.action !== "created").map(e => ({ t, e })))
       .sort((a, b) => b.e.at.localeCompare(a.e.at)).slice(0, 8);
     $("homeRecent").innerHTML = recent.length ? `<ul class="home-list">${recent.map(({ t, e }) => `<li><button type="button" data-open="${escapeHtml(t.id)}">
-        <span class="recent-who">${escapeHtml(e.by || "Someone")}</span>
-        <span class="home-item">${escapeHtml(RECENT_WORDS[e.action] || stageOf(e.from).name + " done:")} ${escapeHtml(t.title)}</span>
-        <span class="muted">${timeAgo(e.at)}</span></button></li>`).join("")}</ul>`
+        <span class="home-item"><b>${escapeHtml(e.by || "Someone")}</b> ${escapeHtml(RECENT_WORDS[e.action] || "finished " + stageOf(e.from).name)}</span>
+        <span class="home-sub">${escapeHtml(t.title)} · ${timeAgo(e.at)}</span></button></li>`).join("")}</ul>`
       : `<p class="home-empty">Nothing has moved yet.</p>`;
   }
 
@@ -1629,7 +1673,11 @@
     const open = e.target.closest("[data-open]");
     if (open) return openTask(open.dataset.open);
     const stat = e.target.closest("[data-stat]");
-    if (stat) return applyTaskStat(stat.dataset.stat);
+    if (stat) return applyTaskStat(stat.dataset.stat, stat.dataset.project || "");
+    const proj = e.target.closest("[data-project-open]");
+    if (proj) return showProject(proj.dataset.projectOpen);
+    const links = e.target.closest("[data-links]");
+    if (links) { showView("links"); return applyStat(links.dataset.links); }
     handleTaskAction(e);
   }
 
