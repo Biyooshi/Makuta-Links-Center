@@ -134,6 +134,9 @@
   .side-actions { display: flex; gap: 4px; }
   .side-btn { width: auto; flex: 1; justify-content: center; padding: 8px; font-size: 13px; }
   .side-btn.theme-toggle { flex: 0 0 auto; }
+  /* The Sheet link is an <a class="btn">; keep it looking like the other sidebar buttons */
+  a.side-btn { background: none; color: var(--ink-text); box-shadow: none; text-decoration: none; }
+  a.side-btn:hover { background: rgba(255, 255, 255, .07); color: #fff; transform: none; }
 
   .main { min-width: 0; display: flex; flex-direction: column; }
   .topbar {
@@ -169,43 +172,66 @@
   body.drawer-open .scrim, body.sidebar-open .scrim { display: block; position: fixed; inset: 0; z-index: 25; background: rgba(5, 10, 25, .45); }
   body.drawer-open .scrim { z-index: 37; }
 
-  /* Home: my turn first, then where everything is */
-  .turn { margin-bottom: 28px; }
-  .turn-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
-  .turn-head h2 { font-size: 20px; color: var(--heading); }
-  .turn-count { font-size: 14px; color: var(--muted); }
+  /* Home: a greeting, four numbers, what is waiting for me, then each project by stage */
+  .home-hello { margin-bottom: 18px; }
+  .home-hello h2 { font-size: 22px; color: var(--heading); }
+  .home-hello p { margin-top: 4px; font-size: 14px; color: var(--muted); max-width: 70ch; }
+  .home-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 28px; }
+  .home-stat {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px 16px; text-align: left;
+    background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 12px; font-weight: 400;
+  }
+  .home-stat:hover { background: var(--card-bg); border-color: var(--accent); }
+  .stat-n { font-size: 28px; font-weight: 700; line-height: 1.1; color: var(--heading); }
+  .stat-label { font-size: 14px; font-weight: 600; color: var(--heading); }
+  .stat-note { font-size: 12px; color: var(--muted); }
+  .home-stat.tone-accent { border-top: 3px solid var(--accent); }
+  .home-stat.tone-accent .stat-n { color: var(--accent); }
+  .home-stat.tone-danger { border-top: 3px solid var(--danger); }
+  .home-stat.tone-danger .stat-n { color: var(--danger); }
+  .home-block { margin-bottom: 28px; }
+  .block-head { display: flex; align-items: baseline; gap: 10px; }
+  .block-head h3 { font-size: 17px; color: var(--heading); }
+  .turn-count { font-size: 13px; color: var(--muted); }
+  .block-note { margin: 2px 0 12px; font-size: 13px; color: var(--muted); max-width: 75ch; }
+  .block-head + div, .block-head + ul { margin-top: 10px; }
   .turn-row {
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 16px; margin-bottom: 8px;
     background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px;
   }
   .turn-row.is-late { border-left-color: var(--danger); }
-  .turn-open { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0; background: none; color: var(--text); text-align: left; font-weight: 400; }
+  .turn-open { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 0; background: none; color: var(--text); text-align: left; font-weight: 400; }
   .turn-open:hover { background: none; }
   .turn-open:hover .turn-title { text-decoration: underline; }
-  .turn-title { font-size: 15px; font-weight: 600; color: var(--heading); }
+  .turn-title { font-size: 15px; font-weight: 600; color: var(--heading); overflow-wrap: anywhere; }
   .turn-meta { font-size: 13px; color: var(--muted); }
   .turn-meta b { color: var(--text); font-weight: 600; }
   .turn-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .turn-empty { padding: 22px; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); font-size: 14px; }
-  .home-block { margin-bottom: 24px; }
-  .home-block h3 { font-size: 15px; color: var(--heading); margin-bottom: 10px; }
+  /* Projects by stage: a table on wide pages, one card per project on narrow ones */
+  .proj-table { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .proj-row { display: grid; grid-template-columns: minmax(150px, 1.6fr) repeat(6, minmax(0, 1fr)); align-items: center; }
+  .proj-row + .proj-row { border-top: 1px solid var(--border); }
+  .proj-head { background: var(--panel-bg); font-size: 12px; font-weight: 600; color: var(--muted); }
+  .proj-head span { padding: 10px 8px; text-align: center; }
+  .proj-head span:first-child { padding-left: 16px; text-align: left; }
+  .proj-name { display: flex; justify-content: flex-start; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 12px 16px; background: none; color: var(--heading); font-size: 14px; font-weight: 600; text-align: left; border-radius: 0; }
+  .proj-name small { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .proj-name:hover { background: var(--primary-soft); }
+  .proj-cell { display: flex; justify-content: center; padding: 8px; }
+  .stage-n { min-width: 36px; height: 30px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 14px; font-weight: 600; }
+  button.stage-n { background: var(--primary-soft); color: var(--heading); }
+  button.stage-n:hover { background: var(--accent); color: #fff; }
+  button.stage-n.is-late { background: var(--danger); color: #fff; }
+  .stage-n.is-zero { color: var(--muted); opacity: .5; font-weight: 400; }
   .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
-  /* The pipeline repeats the timeline's line and dots, at the scale of all tasks */
-  .pipeline { display: flex; padding: 18px 8px 14px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; }
-  .pipe-step { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 4px; background: none; color: var(--text); font-weight: 500; border-radius: 10px; }
-  .pipe-step:hover { background: var(--primary-soft); }
-  .pipe-step::before { content: ""; position: absolute; top: 19px; right: 50%; width: 100%; height: 3px; background: var(--border); z-index: 0; }
-  .pipe-step:first-child::before { display: none; }
-  .pipe-num { position: relative; z-index: 1; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--accent); color: #fff; font-size: 16px; font-weight: 700; box-shadow: 0 0 0 4px var(--card-bg); }
-  .pipe-step.is-empty .pipe-num { background: var(--panel-bg); color: var(--muted); border: 2px solid var(--border); }
-  .pipe-name { font-size: 12px; text-align: center; color: var(--muted); }
   .home-list { list-style: none; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   .home-list li + li { border-top: 1px solid var(--border); }
-  .home-list button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 14px; border-radius: 0; background: none; color: var(--text); font-weight: 400; font-size: 13px; text-align: left; }
+  .home-list button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; padding: 11px 14px; border-radius: 0; background: none; color: var(--text); font-weight: 400; font-size: 13px; text-align: left; }
   .home-list button:hover { background: var(--primary-soft); }
-  .home-item { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .home-list .muted { flex-shrink: 0; font-size: 12px; }
-  .recent-who { flex-shrink: 0; font-weight: 600; color: var(--heading); }
+  .home-item { font-weight: 600; color: var(--heading); overflow-wrap: anywhere; }
+  .home-item b { font-weight: 700; }
+  .home-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
   .home-empty { padding: 16px; font-size: 13px; color: var(--muted); background: var(--card-bg); border: 1px dashed var(--border); border-radius: 12px; }
   /* A task opened from Home lights up once */
   .task-flash { animation: flash 1.6s ease-out; }
@@ -344,24 +370,29 @@
   /* Table */
   .table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--box-shadow); }
   .links-table { table-layout: fixed; }
-  .links-table .c-pin { width: 48px; }
-  .links-table .c-date { width: 104px; }
-  .links-table .c-cat { width: 184px; }
-  .links-table .c-proj { width: 128px; }
-  .links-table .c-status { width: 124px; }
-  .links-table .c-due { width: 148px; }
-  .links-table .c-desc { width: 200px; }
-  .links-table .c-act { width: 88px; }
+  .links-table .c-pin { width: 44px; }
+  .links-table .c-cat { width: 172px; }
+  .links-table .c-proj { width: 112px; }
+  .links-table .c-status { width: 120px; }
+  .links-table .c-due { width: 140px; }
+  .links-table .c-act { width: 120px; }
+  .link-meta { margin-top: 4px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .link-desc { color: var(--text); white-space: pre-wrap; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .links-table th, .links-table td { padding: 12px 8px; overflow-wrap: anywhere; }
   .links-table th:first-child, .links-table td:first-child { padding-left: 12px; }
   .links-table th:last-child, .links-table td:last-child { padding-right: 12px; }
   .links-table th { white-space: normal; }
   /* Pills may wrap between words, never inside one */
-  .links-table .cat, .links-table .status, .links-table .due, .links-table .proj { white-space: normal; overflow-wrap: normal; max-width: 100%; }
+  .links-table .cat, .links-table .status, .links-table .due { white-space: normal; overflow-wrap: normal; max-width: 100%; }
   .links-table .proj { font-size: 12px; }
   .links-table .cat { white-space: nowrap; }
   .links-table .desc { min-width: 0; max-width: none; }
-  .links-table .row-actions button { width: 100%; }
+  .links-table .row-actions { flex-direction: row; gap: 4px; }
+  .links-table .row-actions button { width: 32px; height: 32px; padding: 0; }
+  .links-table .act-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .row-actions button { gap: 5px; }
+  .links-table .proj { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
   tbody tr:last-child td { border-bottom: none; }
@@ -622,7 +653,9 @@
     button:hover, .btn:hover, .stat:hover, .ms-step:hover .dot { transform: none !important; }
   }
 
-  @media (max-width: 1339px) {
+  /* The table needs about 860px of page; below that each row becomes a card */
+  .content { container-type: inline-size; }
+  @container (max-width: 860px) {
     .table-wrap { border: none; border-radius: 0; overflow: visible; box-shadow: none; }
     .links-table, .links-table tbody { display: block; }
     .links-table thead, .links-table colgroup { display: none; }
@@ -634,10 +667,10 @@
     .links-table .title-cell { order: 1; flex: 1 1 calc(100% - 60px); }
     .links-table td[data-label] { order: 2; flex: 1 1 140px; }
     .links-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
-    .links-table td.desc { order: 3; flex-basis: 100%; }
     .links-table .act-cell { order: 4; flex-basis: 100%; }
     .links-table .row-actions { flex-direction: row; flex-wrap: wrap; }
-    .links-table .row-actions button { width: auto; }
+    .links-table .row-actions button { width: auto; height: auto; padding: 5px 10px; }
+    .links-table .act-text { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
   }
   /* Tablets: the sidebar becomes a rail of icons (names show on hover) */
   @media (max-width: 1100px) and (min-width: 721px) {
@@ -665,6 +698,8 @@
     .topbar { padding: 10px 12px; background: var(--app-bg); backdrop-filter: none; }
     .topbar h1 { font-size: 18px; }
     .new-btn { display: none; }
+    /* The + in the bottom bar creates everything; no second set of buttons above the list */
+    .page-create { display: none; }
     .new-menu { position: fixed; left: 12px; right: 12px; top: auto; bottom: calc(76px + env(safe-area-inset-bottom)); width: auto; }
     .content { padding: 16px 12px; }
     .credit { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
@@ -681,10 +716,15 @@
     .home-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
     .turn-row { padding: 12px; }
     .turn-actions { width: 100%; }
-    .pipeline { padding: 14px 0 10px; }
-    .pipe-num { width: 34px; height: 34px; font-size: 14px; }
-    .pipe-step::before { top: 16px; }
-    .pipe-name { font-size: 11px; }
+    .home-hello h2 { font-size: 19px; }
+    .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 22px; }
+    .home-stat { padding: 12px; }
+    .stat-n { font-size: 24px; }
+    .proj-head { display: none; }
+    .proj-row { grid-template-columns: repeat(3, minmax(0, 1fr)); padding-bottom: 8px; }
+    .proj-name { grid-column: 1 / -1; padding: 12px 12px 4px; }
+    .proj-cell { flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; }
+    .proj-cell::before { content: attr(data-label); font-size: 11px; color: var(--muted); }
     .drawer { padding: 0 14px 20px; }
     .filter-panel { padding: 12px; }
     .filter-toggle { display: inline-flex; }
@@ -697,6 +737,7 @@
     .filters.filters-5 { grid-template-columns: repeat(3, 1fr); }
     .filters { grid-template-columns: repeat(3, 1fr); }
     .stats { grid-template-columns: repeat(2, 1fr); }
+    .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 640px) {
     .grid-2, .filters, .filters.filters-5 { grid-template-columns: 1fr; }
@@ -781,24 +822,31 @@
     <div class="content">
       <!-- ============ HOME ============ -->
       <div id="viewHome">
-        <section class="turn">
-          <div class="turn-head">
-            <h2 id="turnTitle">Your turn</h2>
+        <div class="home-hello">
+          <h2 id="helloTitle"></h2>
+          <p id="helloText"></p>
+        </div>
+        <div class="home-stats" id="homeStats"></div>
+        <section class="home-block">
+          <div class="block-head">
+            <h3 id="turnTitle">Waiting for you</h3>
             <span class="turn-count" id="turnCount"></span>
           </div>
+          <p class="block-note" id="turnNote"></p>
           <div id="homeTurn"></div>
         </section>
         <section class="home-block">
-          <h3>Where everything is</h3>
-          <div class="pipeline" id="homePipeline"></div>
+          <div class="block-head"><h3>Projects</h3></div>
+          <p class="block-note">How many active tasks each project has at every stage. Click a number to see those tasks.</p>
+          <div id="homeProjects"></div>
         </section>
         <div class="home-grid">
           <section class="home-block">
-            <h3>Due in the next 7 days</h3>
+            <div class="block-head"><h3>Due in the next 7 days</h3></div>
             <div id="homeDue"></div>
           </section>
           <section class="home-block">
-            <h3>Recent in your projects</h3>
+            <div class="block-head"><h3>Latest updates</h3></div>
             <div id="homeRecent"></div>
           </section>
         </div>
@@ -981,7 +1029,7 @@
             <span id="count"></span>
           </div>
           <div class="actions">
-            <button class="btn-accent btn-sm link-create" onclick="newItem('link')">+ Add link</button>
+            <button class="btn-accent btn-sm link-create page-create" onclick="newItem('link')">+ Add link</button>
             <button class="btn-soft btn-sm" onclick="resetFilters()">Reset Filters</button>
             <button class="btn-soft btn-sm" onclick="exportExcel()">Export to Excel</button>
           </div>
@@ -1030,8 +1078,8 @@
 
         <div class="meta-bar">
           <div class="meta-left">
-            <button type="button" class="btn-accent btn-sm task-create" onclick="openBatchForm()" title="Create all tasks for one month at once">+ Monthly Brief</button>
-            <button type="button" class="btn-soft btn-sm task-create" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single Task</button>
+            <button type="button" class="btn-accent btn-sm task-create page-create" onclick="openBatchForm()" title="Create all tasks for one month at once">+ Monthly Brief</button>
+            <button type="button" class="btn-soft btn-sm task-create page-create" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single Task</button>
             <span id="taskCount"></span>
           </div>
           <div class="actions">
@@ -3310,30 +3358,32 @@ function previewReset() {
     return `<button class="pin${l.pinned ? " on" : ""}" data-act="pin" data-id="${escapeHtml(l.id)}" title="${l.pinned ? "Unpin" : "Pin to top"}">&#9733;</button>`;
   }
 
+  // Icon + word; the table shows only the icons (the word stays as the tooltip and for screen readers)
+  const ACT_ICONS = {
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    delete: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+  };
   function actionButtons(l) {
     const id = escapeHtml(l.id);
-    return `<div class="row-actions">
-      <button class="btn-sm btn-soft" data-act="copy" data-id="${id}">Copy</button>
-      <button class="btn-sm btn-soft" data-act="edit" data-id="${id}">Edit</button>
-      <button class="btn-sm btn-danger" data-act="delete" data-id="${id}">Delete</button>
-    </div>`;
+    const btn = (act, label, cls) => `<button class="btn-sm ${cls}" data-act="${act}" data-id="${id}" title="${label}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ACT_ICONS[act]}</svg><span class="act-text">${label}</span></button>`;
+    return `<div class="row-actions">${btn("copy", "Copy", "btn-soft")}${btn("edit", "Edit", "btn-soft")}${btn("delete", "Delete", "btn-danger")}</div>`;
   }
 
-  // Fixed column widths so the table always fits; on narrow screens each row becomes a card (see Styles)
+  // Fixed column widths so the table always fits; the date added and description sit under the title.
+  // When the page is too narrow for the table, each row becomes a card (see Styles)
   function renderTable(list) {
     return `<div class="table-wrap"><table class="links-table">
-      <colgroup><col class="c-pin"><col class="c-date"><col><col class="c-cat"><col class="c-proj"><col class="c-status"><col class="c-due"><col class="c-desc"><col class="c-act"></colgroup>
-      <thead><tr><th>Pin</th><th>Date Added</th><th>Title &amp; Link</th><th>Category</th><th>Project</th><th>Status</th><th>Deadline</th><th>Description</th><th>Actions</th></tr></thead>
+      <colgroup><col class="c-pin"><col><col class="c-cat"><col class="c-proj"><col class="c-status"><col class="c-due"><col class="c-act"></colgroup>
+      <thead><tr><th><span class="sr-only">Pin</span></th><th>Title &amp; link</th><th>Category</th><th>Project</th><th>Status</th><th>Deadline</th><th><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>${list.map(l => `
         <tr class="${rowClass(l)}">
           <td class="pin-cell">${pinButton(l)}</td>
-          <td data-label="Date Added" title="${formatDate(l.createdAt)}">${addedDay(l) ? formatDay(addedDay(l)) : "-"}</td>
-          <td class="title-cell">${titleBlock(l)}</td>
+          <td class="title-cell">${titleBlock(l)}<div class="link-meta" title="${formatDate(l.createdAt)}">Added ${addedDay(l) ? formatDay(addedDay(l)) : "-"}${l.purpose ? ` · <span class="link-desc">${escapeHtml(l.purpose)}</span>` : ""}</div></td>
           <td data-label="Category">${categoryBadge(l.category)}</td>
           <td data-label="Project">${projectChip(l.project)}</td>
           <td data-label="Status">${statusBadge(l.status)}</td>
           <td data-label="Deadline">${deadlineText(l)}</td>
-          <td data-label="Description" class="desc">${escapeHtml(l.purpose) || "-"}</td>
           <td class="act-cell">${actionButtons(l)}</td>
         </tr>`).join("")}
       </tbody></table></div>`;
@@ -3499,7 +3549,7 @@ function previewReset() {
   // Finished tasks stay in the default view (dimmed, at the bottom) for this many days after they are done
   const RECENT_DONE_DAYS = 30;
   const STEP_GROUPS = {
-    current: { label: `Active + done in the last ${RECENT_DONE_DAYS} days`, test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
+    current: { label: `Active + done in ${RECENT_DONE_DAYS} days`, test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
     active: { label: "All active tasks", test: t => t.stage !== "done" },
     mine: { label: "My Tasks", test: t => isMyStep(t) },
     qc: { label: "Waiting QC Internal", test: t => ["qcBrief", "qcCut", "qcContent"].includes(t.stage) },
@@ -3507,6 +3557,8 @@ function previewReset() {
     production: { label: "In production (shooting / VO / CTC / design / ToV)", test: t => ["shoot", "vo", "video", "design", "motion"].includes(t.stage) },
     client: { label: "At client", test: t => ["toClient", "qcClient"].includes(t.stage) },
     ready: { label: "Approved by client", test: t => ["post", "ads"].includes(t.stage) },
+    late: { label: "Late (past the deadline)", test: t => t.stage !== "done" && !!t.deadline && t.deadline < today() },
+    soon: { label: "Due in the next 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) <= 7 },
     done: { label: "Done", test: t => t.stage === "done" },
     all: { label: "All tasks", test: () => true },
   };
@@ -3923,9 +3975,10 @@ function previewReset() {
   }
 
   // Also used from Home's pipeline, so it opens Milestones
-  function applyTaskStat(kind) {
+  function applyTaskStat(kind, project = "") {
     resetTaskFilters(false);
     $("tStep").value = kind;
+    $("tProject").value = project;
     if (state.page === "tasks") renderTasks(); else showView("tasks");
   }
 
@@ -4195,8 +4248,8 @@ function previewReset() {
   }
 
   /* ---------- Home ---------- */
-  // Where the active tasks of my projects are, in workflow order (each opens Milestones on that group)
-  const PIPELINE = [
+  // The stages a task goes through, as columns of the Projects table (each opens Milestones on that group)
+  const STAGE_COLUMNS = [
     { key: "drafting", name: "Brief" }, { key: "qc", name: "QC Internal" }, { key: "production", name: "Production" },
     { key: "client", name: "At client" }, { key: "ready", name: "Ready to post" },
   ];
@@ -4204,44 +4257,83 @@ function previewReset() {
     const m = Math.round((Date.now() - new Date(iso)) / 60000);
     return m < 60 ? `${Math.max(1, m)}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : m < 2880 ? "yesterday" : `${Math.round(m / 1440)}d ago`;
   }
-  const RECENT_WORDS = { revision: "asked for a revision on", approved: "approved", assign: "passed on" };
+  const RECENT_WORDS = { revision: "asked for a revision", approved: "approved", assign: "passed on" };
+  // "VTB, KRR and GTR"
+  const listWords = words => words.length < 2 ? words.join("") : words.slice(0, -1).join(", ") + " and " + words[words.length - 1];
 
   function renderHome() {
     if (!state.loaded) return;
+    const u = me(), owner = u.role === "owner";
     const byDeadline = (a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999");
-    // Your turn: the steps I am responsible for. The owner has none, so they see what is overdue.
-    const owner = me().role === "owner";
-    const late = t => t.stage !== "done" && t.deadline && t.deadline < today();
+    const late = t => t.stage !== "done" && !!t.deadline && t.deadline < today();
+    const active = state.tasks.filter(t => t.stage !== "done");
+    const projects = taskProjects();
+
+    const hour = new Date().getHours();
+    $("helloTitle").textContent = `Good ${hour < 11 ? "morning" : hour < 15 ? "afternoon" : hour < 18 ? "evening" : "night"}, ${u.name}`;
+    $("helloText").textContent = owner || u.role === "manager"
+      ? "You see every project. Here is what needs attention and where each project stands."
+      : `${u.roleName} for ${listWords(u.projects)}. Here is what needs you and where each project stands.`;
+
+    // Four numbers that answer "what should I look at?"; each opens the matching list
+    const soon = active.filter(t => t.deadline && daysUntil(t.deadline) <= 7).sort(byDeadline);
+    const openLinks = state.links.filter(l => l.status !== "Done").length;
+    const stats = [
+      owner ? { n: active.length, label: "Active tasks", note: "In every project", stat: "active" }
+        : { n: active.filter(isMyStep).length, label: "Waiting for you", note: "At a step you handle", stat: "mine", tone: "accent" },
+      { n: active.filter(late).length, label: "Late", note: "Past their deadline", stat: "late", tone: "danger" },
+      { n: soon.length, label: "Due this week", note: "Deadline in the next 7 days", stat: "soon" },
+      { n: openLinks, label: "Links not done", note: "Links still being worked on", link: "open" },
+    ];
+    $("homeStats").innerHTML = stats.map(s => `<button type="button" class="home-stat${s.n && s.tone ? " tone-" + s.tone : ""}" ${s.link ? `data-links="${s.link}"` : `data-stat="${s.stat}"`}>
+        <span class="stat-n">${s.n}</span><span class="stat-label">${s.label}</span><span class="stat-note">${s.note}</span></button>`).join("");
+
+    // Waiting for you: the steps I am responsible for. The owner has none, so they see what is late.
     // Monthly Brief tasks that one button moves together are listed once ("Static + Video" on the button)
-    const turn = state.tasks.filter(t => owner ? late(t) : isMyStep(t)).sort(byDeadline)
+    const turn = active.filter(t => owner ? late(t) : isMyStep(t)).sort(byDeadline)
       .filter((t, i, list) => !list.slice(0, i).some(o => linkedTasks(o).includes(t)));
-    $("turnTitle").textContent = owner ? "Overdue" : "Your turn";
+    $("turnTitle").textContent = owner ? "Late tasks" : "Waiting for you";
     $("turnCount").textContent = turn.length ? plural(turn.length, "task") : "";
+    $("turnNote").textContent = owner ? "Tasks past their deadline, with who they are waiting for."
+      : "These tasks are at a step you handle. Press the button once the step is finished and the task moves on to the next person.";
     $("homeTurn").innerHTML = turn.length ? turn.map(t => `<div class="turn-row${late(t) ? " is-late" : ""}">
         <button type="button" class="turn-open" data-open="${escapeHtml(t.id)}" title="Open in Milestones">
           <span class="turn-title">${escapeHtml(t.title)}</span>
-          <span class="turn-meta">${projectIcon(t.project)} ${escapeHtml(t.project)} · <b>${escapeHtml(stageOf(t.stage).name)}</b>${t.deadline ? ` · due ${formatDay(t.deadline)}` : ""}</span>
+          <span class="turn-meta">${projectIcon(t.project)} ${escapeHtml(t.project)} · Step: <b>${escapeHtml(stageOf(t.stage).name)}</b>${owner ? ` · Waiting for ${escapeHtml(waitingFor(t))}` : ""}</span>
+          ${taskDue(t)}
         </button>
         <div class="turn-actions">${stepButtons(t)}</div>
       </div>`).join("")
-      : `<div class="turn-empty">${owner ? "Nothing is overdue." : "Nothing is waiting for you. Everything in your projects is with someone else."}</div>`;
-    const active = state.tasks.filter(t => t.stage !== "done");
-    $("homePipeline").innerHTML = PIPELINE.map(g => {
-      const n = active.filter(STEP_GROUPS[g.key].test).length;
-      return `<button type="button" class="pipe-step${n ? "" : " is-empty"}" data-stat="${g.key}"><span class="pipe-num">${n}</span><span class="pipe-name">${g.name}</span></button>`;
-    }).join("");
-    // Due soon (late ones first)
-    const soon = active.filter(t => t.deadline && daysUntil(t.deadline) <= 7).sort(byDeadline).slice(0, 8);
-    $("homeDue").innerHTML = soon.length ? `<ul class="home-list">${soon.map(t => `<li><button type="button" data-open="${escapeHtml(t.id)}">
-        ${taskDue(t)}<span class="home-item">${escapeHtml(t.title)}</span><span class="muted">${escapeHtml(stageOf(t.stage).name)}</span></button></li>`).join("")}</ul>`
+      : `<div class="turn-empty">${owner ? "Nothing is late. 🎉" : "Nothing is waiting for you right now. Every task in your projects is with someone else."}</div>`;
+
+    // Projects: active tasks per stage
+    const cell = (list, key, p) => {
+      const n = list.filter(STEP_GROUPS[key].test).length;
+      return n ? `<button type="button" class="stage-n${key === "late" ? " is-late" : ""}" data-stat="${key}" data-project="${escapeHtml(p)}">${n}</button>` : `<span class="stage-n is-zero">0</span>`;
+    };
+    $("homeProjects").innerHTML = projects.length ? `<div class="proj-table" role="table">
+        <div class="proj-row proj-head" role="row"><span role="columnheader">Project</span>${STAGE_COLUMNS.map(c => `<span role="columnheader">${c.name}</span>`).join("")}<span role="columnheader">Late</span></div>
+        ${projects.map(p => {
+          const list = active.filter(t => t.project === p);
+          return `<div class="proj-row" role="row">
+            <button type="button" class="proj-name" data-project-open="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}<small>${plural(list.length, "active task")}</small></button>
+            ${STAGE_COLUMNS.map(c => `<span class="proj-cell" data-label="${c.name}">${cell(list, c.key, p)}</span>`).join("")}
+            <span class="proj-cell" data-label="Late">${cell(list, "late", p)}</span>
+          </div>`;
+        }).join("")}
+      </div>` : `<p class="home-empty">No projects yet.</p>`;
+
+    // Due soon (late ones first), with who has to act
+    $("homeDue").innerHTML = soon.length ? `<ul class="home-list">${soon.slice(0, 8).map(t => `<li><button type="button" data-open="${escapeHtml(t.id)}">
+        <span class="home-item">${escapeHtml(t.title)}</span>
+        <span class="home-sub">${taskDue(t)} ${escapeHtml(stageOf(t.stage).name)} · ${escapeHtml(waitingFor(t))}</span></button></li>`).join("")}</ul>`
       : `<p class="home-empty">No deadlines in the next 7 days.</p>`;
     // The latest moves in my projects, newest first
     const recent = state.tasks.flatMap(t => t.history.filter(e => e.action !== "created").map(e => ({ t, e })))
       .sort((a, b) => b.e.at.localeCompare(a.e.at)).slice(0, 8);
     $("homeRecent").innerHTML = recent.length ? `<ul class="home-list">${recent.map(({ t, e }) => `<li><button type="button" data-open="${escapeHtml(t.id)}">
-        <span class="recent-who">${escapeHtml(e.by || "Someone")}</span>
-        <span class="home-item">${escapeHtml(RECENT_WORDS[e.action] || stageOf(e.from).name + " done:")} ${escapeHtml(t.title)}</span>
-        <span class="muted">${timeAgo(e.at)}</span></button></li>`).join("")}</ul>`
+        <span class="home-item"><b>${escapeHtml(e.by || "Someone")}</b> ${escapeHtml(RECENT_WORDS[e.action] || "finished " + stageOf(e.from).name)}</span>
+        <span class="home-sub">${escapeHtml(t.title)} · ${timeAgo(e.at)}</span></button></li>`).join("")}</ul>`
       : `<p class="home-empty">Nothing has moved yet.</p>`;
   }
 
@@ -4265,7 +4357,11 @@ function previewReset() {
     const open = e.target.closest("[data-open]");
     if (open) return openTask(open.dataset.open);
     const stat = e.target.closest("[data-stat]");
-    if (stat) return applyTaskStat(stat.dataset.stat);
+    if (stat) return applyTaskStat(stat.dataset.stat, stat.dataset.project || "");
+    const proj = e.target.closest("[data-project-open]");
+    if (proj) return showProject(proj.dataset.projectOpen);
+    const links = e.target.closest("[data-links]");
+    if (links) { showView("links"); return applyStat(links.dataset.links); }
     handleTaskAction(e);
   }
 
