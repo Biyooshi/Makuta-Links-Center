@@ -664,16 +664,100 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.evaluate(() => loadTestData());
   await page.waitForFunction(() => state.loaded && state.links.length > 0);
 
-  // Layout: no sideways scroll on a phone, and screenshots for a visual check
-  for (const [w, name] of [[1300, "desktop"], [390, "phone"]]) {
+  /* ---------- 4. Dashboard: Home, sidebar, New menu, link panel ---------- */
+  console.log("Dashboard");
+  await page.evaluate(() => lockApp());
+  await loginAs("obi");
+  ok(await page.evaluate(() => state.page === "home" && !document.getElementById("viewHome").hidden && document.getElementById("pageTitle").textContent === "Home"), "after login the app opens on Home");
+  const home = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll("#homeTurn .turn-row")];
+    const ids = rows.map(r => r.querySelector("[data-open]").dataset.open);
+    const tasks = ids.map(id => state.tasks.find(t => t.id === id));
+    return {
+      count: rows.length, allMine: tasks.every(isMyStep), allButtons: rows.every(r => r.querySelector("[data-tact]")),
+      // Every task waiting for Obi is listed, except Monthly Brief tasks moved together with one already listed
+      complete: state.tasks.filter(isMyStep).every(t => ids.includes(t.id) || ids.some(id => linkedTasks(state.tasks.find(o => o.id === id)).includes(t))),
+      once: !tasks.some((t, i) => tasks.slice(0, i).some(o => linkedTasks(o).includes(t))),
+      pipeline: [...document.querySelectorAll("#homePipeline .pipe-step")].map(b => b.dataset.stat).join(),
+      pipelineSum: [...document.querySelectorAll("#homePipeline .pipe-num")].reduce((n, e) => n + Number(e.textContent), 0),
+      active: state.tasks.filter(t => t.stage !== "done").length,
+      recent: document.querySelectorAll("#homeRecent li").length, due: !!document.querySelector("#homeDue"),
+      sideProjects: [...document.querySelectorAll("#sideProjects [data-project]")].map(b => b.dataset.project).filter(Boolean).join(),
+      navTurn: document.getElementById("navTurn").textContent,
+    };
+  });
+  ok(home.count > 0 && home.allMine && home.allButtons && home.complete && home.once, `Home "Your turn": every step waiting for me, with its buttons, linked tasks once (${home.count})`);
+  ok(home.pipeline === "drafting,qc,production,client,ready" && home.pipelineSum === home.active, "Home pipeline counts every active task once, in workflow order");
+  ok(home.recent > 0 && home.due, "Home shows recent moves and what is due");
+  ok(home.sideProjects === "VTB,KRR,Makuta,GTR" && Number(home.navTurn) === await page.evaluate(() => state.tasks.filter(isMyStep).length), "sidebar: my projects only, Milestones shows how many are my turn");
+  // A pipeline step opens Milestones on that group; a sidebar project opens Milestones on it
+  await page.click('#homePipeline [data-stat="qc"]');
+  ok(await page.evaluate(() => state.page === "tasks" && document.getElementById("tStep").value === "qc"), "pipeline step opens Milestones on that step group");
+  await page.click('#sideProjects [data-project="KRR"]');
+  ok(await page.evaluate(() => document.getElementById("tProject").value === "KRR" && document.querySelector('#sideProjects [data-project="KRR"]').classList.contains("active") &&
+    [...document.querySelectorAll("#taskResults .group-head h3")].every(h => /KRR/.test(h.textContent))), "sidebar project opens Milestones on that project (highlighted)");
+  // Pressing my step from Home, then Undo from the message
+  await page.evaluate(() => showView("home"));
+  const pressed = await page.evaluate(() => {
+    const row = [...document.querySelectorAll("#homeTurn .turn-row")].find(r => r.querySelector('[data-tact="advance"]') && !r.querySelector('[data-tact="revise"]'));
+    const id = row.querySelector("[data-open]").dataset.open;
+    const before = state.tasks.find(t => t.id === id).stage;
+    row.querySelector('[data-tact="advance"]').click();
+    return { id, before };
+  });
+  await page.waitForFunction(p => state.tasks.find(t => t.id === p.id).stage !== p.before, {}, pressed);
+  ok(await page.evaluate(() => !document.querySelector("#homeTurn") || true) && await page.$eval("#toast", e => e.classList.contains("show") && !!e.querySelector(".toast-action")), "a step pressed on Home moves the task; the message offers Undo");
+  await page.click("#toast .toast-action");
+  await page.waitForFunction(p => state.tasks.find(t => t.id === p.id).stage === p.before, {}, pressed);
+  ok(true, "Undo in the message takes the move back");
+  // Opening a task from Home jumps to its card in Milestones
+  await page.evaluate(id => openTask(id), pressed.id);
+  ok(await page.evaluate(id => state.page === "tasks" && !!document.querySelector(`#taskResults [data-task="${id}"].task-flash`), pressed.id), "a task opened from Home is shown and highlighted in Milestones");
+  // New menu and the link panel
+  await page.click("#newBtn");
+  ok(await page.$eval("#newMenu", e => !e.hidden) && await page.$$eval("#newMenu button", b => b.filter(x => !x.hidden).length) === 3, "New menu: Monthly Brief, Single task, Link");
+  await page.mouse.click(400, 600);
+  ok(await page.$eval("#newMenu", e => e.hidden), "New menu closes on a click outside it");
+  await page.evaluate(() => newItem("link"));
+  ok(await page.evaluate(() => !document.getElementById("viewSubmit").hidden && document.body.classList.contains("drawer-open") && state.page === "tasks"), "Add link opens as a side panel over the page");
+  await page.type("#url", "https:\/\/docs.google.com/spreadsheets/d/abc/edit");
+  ok(await page.$eval("#category", e => e.value === "Google Spreadsheets"), "pasting a Google Sheets address picks its category");
+  await page.keyboard.press("Escape");
+  ok(await page.evaluate(() => document.getElementById("viewSubmit").hidden && !document.body.classList.contains("drawer-open")), "Esc closes the side panel");
+  await page.evaluate(() => resetForm());
+  // Designers: no New button entries for tasks, no Links creation hidden
+  await page.evaluate(() => lockApp());
+  await loginAs("alfid");
+  ok(await page.evaluate(() => [...document.querySelectorAll("#newMenu .task-create")].every(b => b.hidden) && !document.querySelector("#newMenu .link-create").hidden), "designer: New menu has Link only");
+  await page.evaluate(() => lockApp());
+  await loginAs("owner", "owner");
+  ok(await page.evaluate(() => document.getElementById("turnTitle").textContent === "Overdue"), "owner's Home lists what is overdue (no steps of their own)");
+
+  // Layout: no sideways scroll on a phone or tablet, and screenshots for a visual check
+  for (const [w, name] of [[1300, "desktop"], [820, "tablet"], [390, "phone"]]) {
     await page.setViewport({ width: w, height: 900 });
-    for (const v of ["submit", "links", "tasks"]) {
+    for (const v of ["home", "tasks", "links", "admin", "submit"]) {
       await page.evaluate(v => showView(v), v);
       const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       ok(over <= 0, `${name} ${v}: no horizontal page scroll (${over}px)`);
       await page.screenshot({ path: `${shots}/${name}-${v}.png`, fullPage: v !== "tasks" });
     }
+    await page.evaluate(() => closeOverlays());
   }
+  // Phone: bottom bar and the slide-in sidebar
+  await page.setViewport({ width: 390, height: 844 });
+  ok(await page.evaluate(() => getComputedStyle(document.querySelector(".bottom-nav")).display === "flex" && getComputedStyle(document.querySelector(".menu-btn")).display !== "none"), "phone: bottom bar and menu button shown");
+  await page.evaluate(() => toggleSidebar(true));
+  await new Promise(r => setTimeout(r, 300));
+  ok(await page.evaluate(() => document.getElementById("sidebar").getBoundingClientRect().left >= 0), "phone: the menu button slides the sidebar in");
+  // Phone: Milestones filters fold behind one button that counts the ones in use
+  await page.evaluate(() => { showProject("KRR"); });
+  ok(await page.evaluate(() => getComputedStyle(document.querySelector("#viewTasks .filters")).display === "none" &&
+    document.querySelector("#viewTasks .filter-toggle").textContent === "Filters (1)"), "phone: filters folded, the button says one is in use");
+  await page.click("#viewTasks .filter-toggle");
+  ok(await page.evaluate(() => getComputedStyle(document.querySelector("#viewTasks .filters")).display !== "none"), "phone: the Filters button opens them");
+  await page.evaluate(() => { showView("links"); });
+  ok(await page.evaluate(() => !document.body.classList.contains("sidebar-open") && document.querySelector('.bottom-nav [data-nav="links"]').classList.contains("active")), "phone: opening a page closes the sidebar and marks it in the bottom bar");
   await page.setViewport({ width: 1300, height: 900 });
   await page.evaluate(() => { showView("tasks"); document.documentElement.dataset.theme = "dark"; openTaskForm(); });
   await page.type("#tfTitle", "EVENT ORG DECEMBER KRR");

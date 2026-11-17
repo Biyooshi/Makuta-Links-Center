@@ -16,10 +16,9 @@ const banner = `
   <button type="button" onclick="previewReset()">Reset demo data</button>
 </div>
 <style>
-  .preview-banner { margin: -40px -16px 24px; z-index: 30; background: #7c3aed; color: #fff; font-size: 12px; padding: 6px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .preview-banner { position: relative; z-index: 1; background: #7c3aed; color: #fff; font-size: 12px; padding: 6px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
   .preview-banner button { padding: 3px 10px; font-size: 12px; background: rgba(255,255,255,.2); }
   .preview-banner button:hover { background: rgba(255,255,255,.35); }
-  @media (max-width: 640px) { .preview-banner { margin: -16px -12px 16px; } }
 </style>`;
 
 const mock = `
@@ -174,7 +173,8 @@ function previewReset() {
 
 let html = read("Index.html")
   .replace("<?!= include('Styles'); ?>", read("Styles.html"))
-  .replace("<body>", "<body>" + banner)
+  // Inside the main area, so the sidebar keeps the full height of the screen
+  .replace('<main class="main">', '<main class="main">' + banner)
   .replace("<?!= include('JavaScript'); ?>", mock + read("JavaScript.html"));
 if (version) {
   // Own login per version, a tab title that says which demo it is, and kept out of search engines
