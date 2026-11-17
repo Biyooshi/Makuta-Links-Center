@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Makuta Links Center · Demos</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #eef2f8; --card: #ffffff; --text: #334155; --heading: #1e3a6e; --muted: #64748b;
+      --border: #dbe3ef; --accent: #e8ad45; --accent-text: #3b2a06; --chip: #e8eef8;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0b1220; --card: #172033; --text: #cbd5e1; --heading: #a9c3f5; --muted: #94a3b8;
+        --border: #2a3650; --accent: #e8ad45; --accent-text: #1f1604; --chip: rgba(74, 114, 189, .2);
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0b1220; --card: #172033; --text: #cbd5e1; --heading: #a9c3f5; --muted: #94a3b8;
+      --border: #2a3650; --accent: #e8ad45; --accent-text: #1f1604; --chip: rgba(74, 114, 189, .2);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Poppins", system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 48px 16px; line-height: 1.6; }
+    main { max-width: 720px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 32px; }
+    h1 { color: var(--heading); font-size: 26px; letter-spacing: .5px; }
+    header p { color: var(--muted); font-size: 14px; margin-top: 6px; }
+    .card { display: block; background: var(--card); border: 1px solid var(--border); border-top: 4px solid var(--accent); border-radius: 16px; padding: 24px; text-decoration: none; color: inherit; transition: transform .15s, box-shadow .15s; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(15, 23, 42, .12); }
+    .card + .card { margin-top: 16px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .version { display: inline-flex; align-items: center; gap: 10px; }
+    .tag { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 6px; background: var(--accent); color: var(--accent-text); }
+    h2 { color: var(--heading); font-size: 18px; }
+    .date { color: var(--muted); font-size: 13px; }
+    .card p { margin-top: 10px; font-size: 14px; }
+    ul { margin: 12px 0 0 18px; font-size: 14px; }
+    .logins { margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: var(--chip); font-size: 13px; }
+    .open { margin-top: 16px; display: inline-block; font-weight: 600; color: var(--heading); }
+    footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>👑 Makuta Links Center</h1>
+      <p>Demo versions. Each one runs with its own sample data, saved only in your browser. Nothing here touches the real app.</p>
+    </header>
+
+    <a class="card" href="v1/">
+      <div class="top">
+        <span class="version"><span class="tag">v1</span><h2>Per-user logins &amp; roles</h2></span>
+        <span class="date">17 Nov 2026</span>
+      </div>
+      <p>Everyone logs in with their own account and sees only their projects.</p>
+      <ul>
+        <li>Content writers, graphic designers and managerial each press only their own steps</li>
+        <li>My Tasks, "Waiting for …" on every step, names in each task's history</li>
+        <li>New projects GM, HC (ADS only) and LUX</li>
+        <li>Owner Admin tab: who is logged in, activity log, View as</li>
+      </ul>
+      <div class="logins">Logins: obi, puput, hendra, riska, alfid, ilham, wawan (password <b>demo</b>) · owner (password <b>owner</b>)</div>
+      <span class="open">Open demo v1 →</span>
+    </a>
+
+    <footer>Sample data only · use "Reset demo data" inside a demo to start over</footer>
+  </main>
+</body>
+</html>
