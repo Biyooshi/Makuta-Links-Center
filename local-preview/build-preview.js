@@ -1,13 +1,17 @@
 // Builds preview.html: the real Apps Script files + a local stand-in for Google Sheets.
 // Run again after changing anything in ../apps-script:  node build-preview.js
+// A published demo version (GitHub Pages, one folder per version):  node build-preview.js v1 <output file>
+// Each version keeps its demo data and login under its own browser keys, so versions on the same site never mix.
 const fs = require("fs");
 const path = require("path");
 const src = path.join(__dirname, "..", "apps-script");
 const read = f => fs.readFileSync(path.join(src, f), "utf8");
+const version = process.argv[2] || "";
+const out = process.argv[3] || path.join(__dirname, "preview.html");
 
 const banner = `
 <div class="preview-banner">
-  <span><strong>LOCAL PREVIEW</strong> &middot; demo data, saved in this browser only, not in Google Sheets.</span>
+  <span><strong>${version ? "DEMO " + version.toUpperCase() : "LOCAL PREVIEW"}</strong> &middot; demo data, saved in this browser only, not in Google Sheets.</span>
   <span>Logins: obi, puput, hendra, riska, alfid, ilham, wawan (password <b>demo</b>) &middot; owner (password <b>owner</b>)</span>
   <button type="button" onclick="previewReset()">Reset demo data</button>
 </div>
@@ -22,7 +26,7 @@ const mock = `
 <script>
 // ---- Local stand-in for Google Sheets / Apps Script services ----
 // Demo data lives under its own keys, apart from anything saved by older previews
-const PREVIEW_KEY = "makutaDemo";
+const PREVIEW_KEY = "makutaDemo${version ? "-" + version : ""}";
 const mockSheets = {};
 // One fake sheet per name ("Links", "Tasks"), each saved under its own localStorage key
 function mockSheet(name) {
@@ -168,9 +172,15 @@ function previewReset() {
 }
 </script>`;
 
-const html = read("Index.html")
+let html = read("Index.html")
   .replace("<?!= include('Styles'); ?>", read("Styles.html"))
   .replace("<body>", "<body>" + banner)
   .replace("<?!= include('JavaScript'); ?>", mock + read("JavaScript.html"));
-fs.writeFileSync(path.join(__dirname, "preview.html"), html);
-console.log("preview.html built");
+if (version) {
+  // Own login per version, a tab title that says which demo it is, and kept out of search engines
+  html = html.replace(/"makutaTicket"/g, `"makutaTicket-${version}"`)
+    .replace("<head>", `<head>\n  <title>Makuta Links Center · Demo ${version}</title>\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="robots" content="noindex">`);
+  if (!html.includes(`"makutaTicket-${version}"`)) throw new Error("login key not found");
+}
+fs.writeFileSync(out, html);
+console.log(path.basename(out) + " built" + (version ? " (demo " + version + ")" : ""));
