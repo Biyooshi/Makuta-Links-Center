@@ -19,15 +19,38 @@ const REMINDER_HOUR = 9;
 /* ---------- Milestones setup: edit names here when the team changes ---------- */
 const TASK_SHEET = 'Tasks';
 const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Link', 'Notes', 'History', 'Checklist', 'Work Month', 'For Month', 'Item'];
-// Each project: its graphic designer and videographer (both filled in automatically; no videographer =
-// chosen for every video task), its icon (also used in All Links), the content types it makes
-// (all except Event Attribute when not set) and whether it only runs organic content
+// Each project: its content writer and graphic designer (names of the accounts in USERS), its videographer
+// (filled in automatically; no videographer = chosen for every video task), its icon (also used in All Links),
+// the content types it makes (all except Event Attribute when not set) and whether it only runs organic
+// (orgOnly) or only ads (adsOnly) content
 const PROJECTS = {
-  'VTB': { designer: 'Ilham', videographer: 'Anno', icon: '🏙️', types: ['Static', 'Video (Shooting)'] },
-  'KRR': { designer: 'Alfid', videographer: 'Anno', icon: '🌴', types: ['Static', 'Video (Shooting)', 'Event Attribute'] },
-  'Makuta': { designer: 'Alfid', videographer: '', icon: '👑', orgOnly: true },
-  'GTR': { designer: 'Wawan', videographer: 'Anno', icon: '🏡', types: ['Static', 'Video (Non-Shooting)'] }
+  'VTB': { writer: 'Obi', designer: 'Ilham', videographer: 'Anno', icon: '🏙️', types: ['Static', 'Video (Shooting)'] },
+  'KRR': { writer: 'Obi', designer: 'Alfid', videographer: 'Anno', icon: '🌴', types: ['Static', 'Video (Shooting)', 'Event Attribute'] },
+  'Makuta': { writer: 'Obi', designer: 'Alfid', videographer: '', icon: '👑', orgOnly: true },
+  'GTR': { writer: 'Obi', designer: 'Wawan', videographer: 'Anno', icon: '🏡', types: ['Static', 'Video (Non-Shooting)'] },
+  'GM': { writer: 'Puput', designer: 'Wawan', videographer: 'Arif', icon: '🏢', adsOnly: true, types: ['Static', 'Video (Shooting)', 'Event Attribute'] },
+  'HC': { writer: 'Puput', designer: 'Ilham', videographer: 'Arif', icon: '🏥', adsOnly: true, types: ['Static', 'Video (Shooting)', 'Event Attribute'] },
+  'LUX': { writer: 'Puput', designer: 'Wawan', videographer: 'Arif', icon: '💎', types: ['Static', 'Video (Non-Shooting)', 'Video (Shooting)', 'Event Attribute'] }
 };
+// Team accounts (username: name and role). Content writers and graphic designers see the projects they
+// are set on above; managerial accounts and the owner see every project.
+// Passwords are not in this code (it is public on GitHub). Set them in Project Settings > Script Properties:
+//   DEFAULT_PASSWORD                  the password of every team account below
+//   OWNER_USERNAME / OWNER_PASSWORD   the owner (superadmin) account, shown everywhere only as "Owner"
+const USERS = {
+  hendra: { name: 'Kak Hendra', role: 'manager' },
+  riska: { name: 'Bu Riska', role: 'manager' },
+  obi: { name: 'Obi', role: 'writer' },
+  puput: { name: 'Puput', role: 'writer' },
+  alfid: { name: 'Alfid', role: 'designer' },
+  ilham: { name: 'Ilham', role: 'designer' },
+  wawan: { name: 'Wawan', role: 'designer' }
+};
+const ROLE_NAMES = { owner: 'Owner', manager: 'Managerial', writer: 'Content Writer', designer: 'Graphic Designer' };
+// Who presses each step's button: the QC steps are for managerial, Design and Motion for the project's
+// graphic designer, every other step (also those of Kak Faza, the client and the freelance videographers
+// and ads team) for the project's content writer. Managerial and the owner can press every step.
+const STEP_ACTORS = { qcBrief: 'manager', qcCut: 'manager', qcContent: 'manager', design: 'designer', motion: 'designer' };
 // Videographers that can be picked when editing a task (new tasks use the project's videographer)
 const VIDEOGRAPHERS = ['Anno', 'Arif'];
 // Static = carousel, single image and motion (all made by the graphic designer).
@@ -55,9 +78,9 @@ const BRIEF_MONTHS_AHEAD = { 'ORG': 1, 'ADS': 0 };
 // Every possible step, in order. Each task uses only the steps that fit its content type and channel (see pipeline_).
 // qc: the step approves or sends work back. person: who does it (empty = the task's designer/videographer).
 const STAGES = [
-  { key: 'brief', name: 'Drafting Brief', role: 'Content Writer', person: 'Obi', action: 'Submit Brief for QC' },
-  // Only used after the client asks for a revision: Obi decides who fixes it (not part of the normal timeline)
-  { key: 'revision', name: 'Client Revision', role: 'Content Writer', person: 'Obi', extra: true },
+  { key: 'brief', name: 'Drafting Brief', role: 'Content Writer', person: '', action: 'Submit Brief for QC' },
+  // Only used after the client asks for a revision: the content writer decides who fixes it (not part of the normal timeline)
+  { key: 'revision', name: 'Client Revision', role: 'Content Writer', person: '', extra: true },
   { key: 'qcBrief', name: 'QC Internal: Brief', role: 'Head Manager Content', person: 'Kak Hendra / Bu Riska', qc: true },
   { key: 'vo', name: 'Voice Over', role: 'Voice Over', person: 'Bu Riska', action: 'Voice Over Received' },
   { key: 'shoot', name: 'Shooting', role: 'Shooting', person: '', action: 'Shooting Done' },
@@ -69,7 +92,7 @@ const STAGES = [
   { key: 'qcContent', name: 'QC Internal: Content', role: 'Head Manager Content', person: 'Kak Hendra / Bu Riska', qc: true },
   { key: 'toClient', name: 'Send to Client', role: 'Assistant Manager', person: 'Kak Faza', action: 'Sent to Client' },
   { key: 'qcClient', name: 'QC Client', role: 'Client', person: 'Client', qc: true },
-  { key: 'post', name: 'Scheduling Post', role: 'Content Writer', person: 'Obi', action: 'Scheduled on Meta Business Suite' },
+  { key: 'post', name: 'Scheduling Post', role: 'Content Writer', person: '', action: 'Scheduled on Meta Business Suite' },
   { key: 'ads', name: 'Run Ads', role: 'Ads Team', person: 'Musthofa', action: 'Mark as Live on Ads' }
 ];
 
@@ -85,46 +108,213 @@ function include(name) {
   return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
-/* ---------- Passcode: the web app is open to "Anyone" (so it also works inside the Vercel page), ----------
-   so every call from the page carries the passcode, checked here before anything is read or changed. */
-const PASSCODE_PROPERTY = 'APP_PASSCODE';  // set in Project Settings > Script Properties
-const MAX_WRONG_PASSCODES = 10;            // then everything stays locked for 15 minutes
+/* ---------- Login: the web app is open to "Anyone" (so it also works inside the Vercel page), ----------
+   so every call from the page carries the login ticket of this browser, checked here before anything
+   is read or changed. The ticket itself is never stored, only its SHA-256 (see hash_). */
+const ACCOUNT_PROPERTIES = ['DEFAULT_PASSWORD', 'OWNER_USERNAME', 'OWNER_PASSWORD'];
+const OWNER_KEY = '@owner';            // how the owner is stored in sessions (never the real username)
+const SESSION_PREFIX = 'SESSION_';     // Script Properties key of a session: SESSION_<hash of the ticket>
+const SESSION_DAYS = 30;               // a login is remembered this long in one browser
+const MAX_WRONG_PASSWORDS = 10;        // then that account stays locked for 15 minutes
 
 // What the page may do. Every other function ends in "_", so google.script.run cannot call it.
 const API = {
   getInitialData: getInitialData_, getLinks: getLinks_, addLink: addLink_, updateLink: updateLink_,
   setPinned: setPinned_, deleteLink: deleteLink_, getTasks: getTasks_, addTask: addTask_, addTasks: addTasks_,
-  updateTask: updateTask_, setTaskItem: setTaskItem_, moveTask: moveTask_, deleteTask: deleteTask_
+  updateTask: updateTask_, setTaskItem: setTaskItem_, moveTask: moveTask_, deleteTask: deleteTask_,
+  logout: logout_, getAdminData: getAdminData_, endSessions: endSessions_
 };
+// Only these work while the owner uses View as (seeing the app as someone else changes nothing)
+const READ_ONLY_API = ['getInitialData', 'getLinks', 'getTasks'];
+const OWNER_API = ['getAdminData', 'endSessions'];
 
-// The only entry point for the page: api(passcode, "addLink", [data])
-function api(passcode, fn, args) {
-  checkPasscode_(passcode);
+// The account making the current call (set by api and login)
+let user_ = null;
+
+// The only entry point for the page: api(ticket, "addLink", [data]). viewAs: the owner sees the app
+// as that team account, read-only.
+function api(ticket, fn, args, viewAs) {
+  user_ = checkSession_(ticket);
   if (!API.hasOwnProperty(fn)) throw new Error('Unknown action.');
+  if (OWNER_API.indexOf(fn) >= 0 && user_.role !== 'owner') throw new Error('Only the owner can do this.');
+  if (viewAs) {
+    if (user_.role !== 'owner' || !USERS.hasOwnProperty(viewAs)) throw new Error('Only the owner can use View as.');
+    if (READ_ONLY_API.indexOf(fn) < 0) throw new Error('View as is read-only. Exit View as to make changes.');
+    user_ = Object.assign(account_(viewAs), { readOnly: true, session: user_.session });
+  }
   return API[fn].apply(null, Array.isArray(args) ? args : []);
 }
 
-// Errors starting with "LOCKED:" make the page show the passcode screen
-function checkPasscode_(passcode) {
-  const real = PropertiesService.getScriptProperties().getProperty(PASSCODE_PROPERTY);
-  if (!real) throw new Error('LOCKED: No passcode is set up yet. Add ' + PASSCODE_PROPERTY + ' in Apps Script > Project Settings > Script Properties.');
+// Called by the login screen: checks the username and password and returns a new ticket for this browser.
+// Errors starting with "LOCKED:" make the page show the login screen.
+function login(username, password, device) {
+  const props = PropertiesService.getScriptProperties();
+  const shared = props.getProperty('DEFAULT_PASSWORD');
+  if (!shared) throw new Error('LOCKED: The accounts are not set up yet. Add ' + ACCOUNT_PROPERTIES.join(', ') + ' in Apps Script > Project Settings > Script Properties.');
+  const name = String(username == null ? '' : username).trim().toLowerCase();
+  const owner = String(props.getProperty('OWNER_USERNAME') || '').trim().toLowerCase();
+  const key = owner && name === owner ? OWNER_KEY : USERS.hasOwnProperty(name) ? name : '';
+  const real = key === OWNER_KEY ? props.getProperty('OWNER_PASSWORD') : shared;
   const cache = CacheService.getScriptCache();
-  const wrong = Number(cache.get('wrongPasscodes') || 0);
-  if (wrong >= MAX_WRONG_PASSCODES) throw new Error('LOCKED: Too many wrong passcodes. Please try again in 15 minutes.');
-  if (String(passcode == null ? '' : passcode) !== real) {
-    cache.put('wrongPasscodes', String(wrong + 1), 15 * 60);
-    throw new Error('LOCKED: Wrong passcode.');
+  // Wrong tries are counted per account (all unknown usernames share one count)
+  const wrongKey = 'wrongLogin_' + (key || '?');
+  const wrong = Number(cache.get(wrongKey) || 0);
+  if (wrong >= MAX_WRONG_PASSWORDS) throw new Error('LOCKED: Too many wrong passwords for this account. Please try again in 15 minutes.');
+  return withLock_(() => {
+    if (!key || !real || String(password == null ? '' : password) !== real) {
+      cache.put(wrongKey, String(wrong + 1), 15 * 60);
+      // An unknown username is not written down (it could be a mistyped owner username)
+      logActivity_('Failed login', '', '', '', key ? account_(key).name : '(unknown username)');
+      throw new Error('LOCKED: Wrong username or password.');
+    }
+    cache.remove(wrongKey);
+    const ticket = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    const now = Date.now();
+    endOldSessions_(props, now);
+    props.setProperty(SESSION_PREFIX + hash_(ticket), JSON.stringify({ u: key, start: now, seen: now, device: String(device || '').slice(0, 120) }));
+    user_ = account_(key);
+    logActivity_('Login', '', '', String(device || '').slice(0, 120));
+    return { ticket: ticket };
+  });
+}
+
+// The account a session belongs to (a team username or OWNER_KEY), with the projects it sees
+function account_(key) {
+  const u = key === OWNER_KEY ? { name: 'Owner', role: 'owner' } : USERS[key];
+  if (!u) return null;
+  const all = u.role === 'owner' || u.role === 'manager';
+  return { key: key, name: u.name, role: u.role, all: all,
+    projects: Object.keys(PROJECTS).filter(p => all || PROJECTS[p][u.role] === u.name) };
+}
+
+function checkSession_(ticket) {
+  if (!ticket) throw new Error('LOCKED: ');
+  const props = PropertiesService.getScriptProperties();
+  const id = SESSION_PREFIX + hash_(String(ticket));
+  let s = null;
+  try { s = JSON.parse(props.getProperty(id) || 'null'); } catch (e) {}
+  const account = s && Date.now() < s.start + SESSION_DAYS * 864e5 ? account_(s.u) : null;
+  if (!account) {
+    if (s) props.deleteProperty(id);
+    throw new Error('LOCKED: ' + (s ? 'Your login has ended. Please log in again.' : 'Please log in again.'));
+  }
+  // "Last active" for the owner's session list, saved at most every 10 minutes
+  if (Date.now() - s.seen > 10 * 60000) {
+    s.seen = Date.now();
+    props.setProperty(id, JSON.stringify(s));
+  }
+  account.session = id;
+  return account;
+}
+
+function logout_() {
+  return withLock_(() => {
+    PropertiesService.getScriptProperties().deleteProperty(user_.session);
+    logActivity_('Logout', '', '', '');
+    return true;
+  });
+}
+
+// Removes the sessions older than SESSION_DAYS
+function endOldSessions_(props, now) {
+  const all = props.getProperties();
+  Object.keys(all).forEach(k => {
+    if (k.indexOf(SESSION_PREFIX) !== 0) return;
+    let s = null;
+    try { s = JSON.parse(all[k]); } catch (e) {}
+    if (!s || now >= s.start + SESSION_DAYS * 864e5) props.deleteProperty(k);
+  });
+}
+
+function hash_(text) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text)
+    .map(b => ('0' + (b & 255).toString(16)).slice(-2)).join('');
+}
+
+/* ---------- Owner only: who is logged in, the activity log, and ending sessions ---------- */
+
+function getAdminData_() {
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const sessions = Object.keys(props).filter(k => k.indexOf(SESSION_PREFIX) === 0).map(k => {
+    let s = {};
+    try { s = JSON.parse(props[k]); } catch (e) {}
+    const a = account_(s.u) || { name: '?', role: '' };
+    return { id: k, name: a.name, role: ROLE_NAMES[a.role] || '', device: s.device || '', start: new Date(s.start).toISOString(),
+      seen: new Date(s.seen).toISOString(), self: k === user_.session };
+  }).filter(s => s.name !== '?').sort((a, b) => b.seen.localeCompare(a.seen));
+  const sheet = getSheet_(ACTIVITY_SHEET, ACTIVITY_HEADERS);
+  const last = sheet.getLastRow();
+  const from = Math.max(2, last - MAX_ACTIVITY_SHOWN + 1);
+  const activity = last < 2 ? [] : sheet.getRange(from, 1, last - from + 1, ACTIVITY_HEADERS.length).getValues()
+    .map(r => ({ at: toIso_(r[0]), who: text_(r[1]), action: text_(r[2]), project: text_(r[3]), task: text_(r[4]), details: text_(r[5]) }))
+    .reverse();
+  const users = Object.keys(USERS).map(k => ({ username: k, name: USERS[k].name, role: ROLE_NAMES[USERS[k].role] }));
+  return { sessions: sessions, activity: activity, users: users };
+}
+
+// ids: the sessions to end (from getAdminData), or "all" for everyone except the owner's own session
+function endSessions_(ids) {
+  return withLock_(() => {
+    const props = PropertiesService.getScriptProperties();
+    const all = Object.keys(props.getProperties()).filter(k => k.indexOf(SESSION_PREFIX) === 0 && k !== user_.session);
+    const ended = ids === 'all' ? all : all.filter(k => Array.isArray(ids) && ids.indexOf(k) >= 0);
+    ended.forEach(k => props.deleteProperty(k));
+    logActivity_('Ended logins', '', '', ids === 'all' ? 'Everyone (' + ended.length + ')' : String(ended.length));
+    return ended.length;
+  });
+}
+
+/* ---------- Activity log: every login and change, in its own sheet (kept after a task is deleted) ---------- */
+const ACTIVITY_SHEET = 'Activity';
+const ACTIVITY_HEADERS = ['Time', 'Who', 'Action', 'Project', 'Task', 'Details'];
+const MAX_ACTIVITY_SHOWN = 500;
+
+// Always called inside withLock_. who: only for a failed login (otherwise the current account).
+function logActivity_(action, project, task, details, who) {
+  try {
+    const sheet = getSheet_(ACTIVITY_SHEET, ACTIVITY_HEADERS);
+    const row = sheet.getLastRow() + 1;
+    const missing = row - sheet.getMaxRows();
+    if (missing > 0) sheet.insertRowsAfter(sheet.getMaxRows(), missing);
+    sheet.getRange(row, 1, 1, ACTIVITY_HEADERS.length).setNumberFormat('@').setValues([[
+      new Date().toISOString(), who || (user_ ? user_.name : ''), action, project || '', task || '', String(details || '').slice(0, 1000)
+    ].map(safe_)]);
+  } catch (e) {
+    // The log never stops the change itself
   }
 }
 
-// Run once from the Apps Script editor: asks for the permissions and creates the Links and Tasks sheets
+/* ---------- Who may do what (the page shows the same rules, but they are enforced here) ---------- */
+const isBoss_ = u => u.role === 'owner' || u.role === 'manager';
+const seesProject_ = (u, project) => u.all || u.projects.indexOf(project) >= 0;
+// Create, edit and delete a project's tasks: its content writer, managerial and the owner
+const managesProject_ = (u, project) => isBoss_(u) || (u.role === 'writer' && (PROJECTS[project] || {}).writer === u.name);
+const stepActor_ = key => STEP_ACTORS[key] || 'writer';
+// Press the button of the task's current step
+function canPress_(u, t) {
+  if (isBoss_(u)) return true;
+  const actor = stepActor_(t.stage);
+  return u.role === actor && (PROJECTS[t.project] || {})[actor] === u.name;
+}
+// Take back the last move: whoever made it, managerial and the owner (moves saved before logins
+// existed have no name: the project's content writer too)
+function canUndo_(u, t) {
+  const last = t.history[t.history.length - 1] || {};
+  return isBoss_(u) || (last.by ? last.by === u.name : managesProject_(u, t.project));
+}
+// Tick Event Attribute deliverables: the content writer and graphic designer of the project, managerial, the owner
+const canTick_ = (u, t) => managesProject_(u, t.project) || (u.role === 'designer' && (PROJECTS[t.project] || {}).designer === u.name);
+
+// Run once from the Apps Script editor: asks for the permissions and creates the sheets
 // (with the edit warnings on their protected columns, see protectSheet_)
 function setup() {
   getSheet_();
   getSheet_(TASK_SHEET, TASK_HEADERS);
+  getSheet_(ACTIVITY_SHEET, ACTIVITY_HEADERS);
   CalendarApp.getDefaultCalendar();
-  const ready = !!PropertiesService.getScriptProperties().getProperty(PASSCODE_PROPERTY);
-  Logger.log(ready ? 'Setup done. The passcode is set.' : 'Setup done. Now add ' + PASSCODE_PROPERTY + ' in Project Settings > Script Properties.');
+  const props = PropertiesService.getScriptProperties();
+  const missing = ACCOUNT_PROPERTIES.filter(k => !props.getProperty(k));
+  Logger.log(missing.length ? 'Setup done. Now add ' + missing.join(', ') + ' in Project Settings > Script Properties.' : 'Setup done. The accounts are set.');
 }
 
 /* ---------- Server functions used by the page (through api) ---------- */
@@ -134,7 +324,9 @@ function getInitialData_() {
   return {
     links: getLinks_(),
     tasks: getTasks_(),
-    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS },
+    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS },
+    // Who is logged in (the owner's username is never sent)
+    user: { name: user_.name, role: user_.role, roleName: ROLE_NAMES[user_.role], projects: user_.projects, all: user_.all, readOnly: !!user_.readOnly },
     sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl()
   };
 }
@@ -155,6 +347,7 @@ function addLink_(data) {
     const link = Object.assign(clean_(data), { id: newId_(), createdAt: now, updatedAt: now });
     const warning = syncReminders_(link, []);
     writeRows_(sheet, sheet.getLastRow() + 1, [linkToRow_(link)]);
+    logActivity_('Added link', link.project, link.title, link.url);
     return publicLink_(link, warning);
   });
 }
@@ -167,6 +360,7 @@ function updateLink_(id, data) {
     const link = Object.assign(clean_(data), { id: old.id, createdAt: old.createdAt, updatedAt: new Date().toISOString() });
     const warning = syncReminders_(link, old.reminders);
     writeRows_(sheet, row, [linkToRow_(link)]);
+    logActivity_('Edited link', link.project, link.title, '');
     return publicLink_(link, warning);
   });
 }
@@ -177,6 +371,8 @@ function setPinned_(id, pinned) {
     const row = findRow_(sheet, id);
     sheet.getRange(row, PINNED_COL).setValue(pinned === true);
     sheet.getRange(row, UPDATED_COL).setValue(new Date().toISOString());
+    const link = rowToLink_(sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0]);
+    logActivity_(pinned === true ? 'Pinned link' : 'Unpinned link', link.project, link.title, '');
     return true;
   });
 }
@@ -185,8 +381,10 @@ function deleteLink_(id) {
   return withLock_(() => {
     const sheet = getSheet_();
     const row = findRow_(sheet, id);
-    deleteReminders_(parseLines_(sheet.getRange(row, REMINDERS_COL).getValue()));
+    const link = rowToLink_(sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0]);
+    deleteReminders_(link.reminders);
     sheet.deleteRow(row);
+    logActivity_('Deleted link', link.project, link.title, link.url);
     return true;
   });
 }
@@ -199,7 +397,15 @@ function getTasks_() {
   if (last < 2) return [];
   return sheet.getRange(2, 1, last - 1, TASK_HEADERS.length).getValues()
     .filter(r => r[0] !== '')
-    .map(rowToTask_);
+    .map(rowToTask_)
+    .filter(t => seesProject_(user_, t.project));
+}
+
+// The task in that row, if the current account may see it (otherwise it is "not found")
+function readVisibleTask_(sheet, row) {
+  const task = readTask_(sheet, row);
+  if (!seesProject_(user_, task.project)) throw new Error('Task not found. It may have been deleted - please refresh the page.');
+  return task;
 }
 
 function addTask_(data) {
@@ -216,6 +422,7 @@ function addTasks_(list, workMonth) {
   const tasks = list.map(d => {
     try {
       const t = cleanTask_(d);
+      if (!managesProject_(user_, t.project)) throw new Error('Only the content writer of ' + t.project + ' (or managerial) can create its tasks.');
       t.workMonth = month;
       t.forMonth = month ? addMonths_(month, BRIEF_MONTHS_AHEAD[t.channel] || 0) : '';
       return t;
@@ -229,7 +436,8 @@ function addTasks_(list, workMonth) {
     const first = sheet.getLastRow() + 1;
     return tasks.map((t, i) => {
       Object.assign(t, { id: newId_('T'), createdAt: now, updatedAt: now, stage: 'brief', checklist: [] });
-      t.history = [{ at: now, action: 'created', from: '', to: 'brief', note: '' }];
+      t.history = [{ at: now, action: 'created', from: '', to: 'brief', note: '', by: user_.name }];
+      logActivity_('Created task', t.project, t.title, month ? 'Monthly Brief ' + month : t.type);
       return writeTask_(sheet, first + i, t);
     });
   });
@@ -239,9 +447,14 @@ function updateTask_(id, data) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const row = findRow_(sheet, id);
-    const task = Object.assign(readTask_(sheet, row), cleanTask_(data), { updatedAt: new Date().toISOString() });
+    const old = readVisibleTask_(sheet, row);
+    const changes = cleanTask_(data);
+    // A task can only be moved to a project its editor also looks after
+    if (!managesProject_(user_, old.project) || !managesProject_(user_, changes.project)) throw new Error('Only the content writer of ' + old.project + ' (or managerial) can edit this task.');
+    const task = Object.assign(old, changes, { updatedAt: new Date().toISOString() });
     task.stage = fitStage_(task);
     if (task.type !== EVENT_TYPE) task.checklist = [];
+    logActivity_('Edited task', task.project, task.title, '');
     return writeTask_(sheet, row, task);
   });
 }
@@ -251,17 +464,19 @@ function setTaskItem_(id, item, checked) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const row = findRow_(sheet, id);
-    const task = readTask_(sheet, row);
+    const task = readVisibleTask_(sheet, row);
     if (task.type !== EVENT_TYPE || !EVENT_ITEMS.some(i => i.name === item)) throw new Error('This task has no such item.');
+    if (!canTick_(user_, task)) throw new Error('Only the content writer or graphic designer of ' + task.project + ' (or managerial) can tick this.');
     task.checklist = task.checklist.filter(i => i !== item);
     if (checked === true) task.checklist.push(item);
     task.updatedAt = new Date().toISOString();
+    logActivity_(checked === true ? 'Ticked' : 'Unticked', task.project, task.title, item);
     return writeTask_(sheet, row, task);
   });
 }
 
 // action: "advance" = the current step is done / approved, "revise" = a QC step sends the work
-// back to opts.to (QC Client always sends it back to Obi first), "assign" = Obi passes a client
+// back to opts.to (QC Client always sends it back to the content writer first), "assign" = the writer passes a client
 // revision on to opts.to, "undo" = take back the last move. opts.from is the step the page showed,
 // so a double click (or a change made on another device) can't move the task twice.
 // Monthly Brief tasks that share the step move together (see linkedTasks_); they come back in task.linked.
@@ -280,8 +495,13 @@ function moveTask_(id, action, opts) {
       all.push(t);
     });
     const task = all.filter(t => t.id === String(id))[0];
-    if (!task) throw new Error('Task not found. It may have been deleted - please refresh the page.');
+    if (!task || !seesProject_(user_, task.project)) throw new Error('Task not found. It may have been deleted - please refresh the page.');
     if (opts.from && opts.from !== task.stage) throw new Error('This task was already updated. Please refresh the page.');
+    // Linked Monthly Brief tasks share the project, so the same people may move them
+    if (action === 'undo' ? !canUndo_(user_, task) : !canPress_(user_, task)) {
+      throw new Error(action === 'undo' ? 'Only the person who made the last move (or managerial) can undo it.'
+        : 'This step is not yours: it is waiting for ' + waitingFor_(task) + '.');
+    }
     const now = new Date().toISOString();
     const note = String(opts.note || '').trim().slice(0, 1000);
     let moved;
@@ -309,10 +529,28 @@ function moveTask_(id, action, opts) {
     moved.forEach(o => {
       o.updatedAt = now;
       writeTask_(sheet, rows[o.id], o);
+      logActivity_(action === 'undo' ? 'Undo' : 'Moved', o.project, o.title, action === 'undo' ? 'Back to ' + stageInfo_(o.stage).name
+        : activityText_(o.history[o.history.length - 1]));
     });
     task.linked = moved.slice(1);
     return task;
   });
+}
+
+// "Design done → QC Internal: Content", "QC Client asked for a revision → Client Revision: change the logo"
+function activityText_(e) {
+  const to = e.to === 'done' ? 'Done' : stageInfo_(e.to).name;
+  const text = stageInfo_(e.from).name + (e.action === 'revision' ? ' asked for a revision → ' : e.action === 'approved' ? ' approved → ' : e.action === 'assign' ? ' passed to → ' : ' done → ') + to;
+  return text + (e.note ? ': ' + e.note : '');
+}
+
+// Who the task's current step is waiting for, e.g. "Alfid", "Kak Faza (via Obi)", "QC (Kak Hendra / Bu Riska)"
+function waitingFor_(t) {
+  const s = stageInfo_(t.stage);
+  const owner = stageOwner_(s, t);
+  if (stepActor_(t.stage) === 'manager') return 'QC (' + owner + ')';
+  const writer = (PROJECTS[t.project] || {}).writer;
+  return stepActor_(t.stage) === 'writer' && writer && owner !== writer && owner.indexOf(writer + ' ') !== 0 ? owner + ' (via ' + writer + ')' : owner;
 }
 
 // Moves one task a step (advance / revise / assign, see moveTask_). sync marks moves made together.
@@ -320,7 +558,7 @@ function stepTask_(task, action, opts, now, sync) {
   const steps = pipeline_(task.type, task.channel);
   const i = steps.indexOf(task.stage);
   const entry = (act, to) => {
-    const e = { at: now, action: act, from: task.stage, to: to, note: opts.note };
+    const e = { at: now, action: act, from: task.stage, to: to, note: opts.note, by: user_.name };
     if (sync) e.sync = sync;
     task.history.push(e);
     task.stage = to;
@@ -410,7 +648,11 @@ function addMonths_(month, n) {
 function deleteTask_(id) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
-    sheet.deleteRow(findRow_(sheet, id));
+    const row = findRow_(sheet, id);
+    const task = readVisibleTask_(sheet, row);
+    if (!managesProject_(user_, task.project)) throw new Error('Only the content writer of ' + task.project + ' (or managerial) can delete this task.');
+    sheet.deleteRow(row);
+    logActivity_('Deleted task', task.project, task.title, currentStep_(task));
     return true;
   });
 }
@@ -462,10 +704,12 @@ function currentStep_(t) {
   return s.name + ' (' + stageOwner_(s, t) + ')';
 }
 
-// Who does a step for this task; the designer / videographer come from the task itself
+// Who does a step for this task; the designer / videographer come from the task itself, the content
+// writer from its project
 function stageOwner_(s, t) {
-  if (s.key === 'shoot') return 'Obi & ' + (t.videographer || 'Videographer');
-  return s.person || (s.role === 'Graphic Designer' ? t.designer : s.role === 'Videographer' ? t.videographer : '') || s.role;
+  const writer = (PROJECTS[t.project] || {}).writer || 'Content Writer';
+  if (s.key === 'shoot') return writer + ' & ' + (t.videographer || 'Videographer');
+  return s.person || (s.role === 'Graphic Designer' ? t.designer : s.role === 'Videographer' ? t.videographer : s.role === 'Content Writer' ? writer : '') || s.role;
 }
 
 function cleanTask_(d) {
@@ -492,6 +736,7 @@ function cleanTask_(d) {
   if (!PROJECTS.hasOwnProperty(t.project)) throw new Error('Please choose the project.');
   const p = PROJECTS[t.project];
   if (!collateral && p.orgOnly && t.channel !== 'ORG') throw new Error(t.project + ' is organic only. Use ORG in the title.');
+  if (!collateral && p.adsOnly && t.channel !== 'ADS') throw new Error(t.project + ' runs ADS only. Use ADS in the title.');
   t.designer = p.designer;
   if (!t.type) throw new Error('Please choose the content type.');
   // Every project can get Collateral; the other types only where the project makes them
@@ -581,7 +826,8 @@ function getSheet_(name, headers) {
 // "Are you sure?" warning; the website itself still writes to them as usual.
 const PROTECTED_COLUMNS = {
   'Links': ['ID', 'Reminder IDs'],
-  'Tasks': ['ID', 'Stage', 'Current Step', 'Revisions', 'History', 'Checklist']
+  'Tasks': ['ID', 'Stage', 'Current Step', 'Revisions', 'History', 'Checklist'],
+  'Activity': ACTIVITY_HEADERS
 };
 
 // Adds the warnings once per sheet (again if the sheet was recreated); existing ones are kept

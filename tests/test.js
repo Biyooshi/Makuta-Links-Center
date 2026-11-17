@@ -31,19 +31,29 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   page.on("dialog", d => d.accept());
   await page.setViewport({ width: 1300, height: 900 });
   await page.goto(pathToFileURL(file).href);
-  await page.waitForFunction(() => state.loaded);
+  // Logs in through the login screen (preview accounts: team password "demo", owner "owner" / "owner")
+  const loginAs = async (username, password = "demo") => {
+    await page.waitForSelector("#lockModal.show");
+    await page.$eval("#lockUser", e => e.value = "");
+    await page.type("#lockUser", username);
+    await page.type("#lockInput", password);
+    await page.click("#lockBtn");
+    await page.waitForFunction(() => state.loaded);
+  };
+  await loginAs("owner", "owner");
 
   /* ---------- 1. Server logic (Code.gs) ---------- */
   console.log("Server logic");
   const r = await page.evaluate(() => {
     const out = {};
     const tryErr = fn => { try { fn(); return ""; } catch (e) { return e.message; } };
-    ["Links", "Tasks"].forEach(n => { mockSheet(n).data = []; mockSheet(n).save(); });
+    ["Links", "Tasks", "Activity"].forEach(n => { mockSheet(n).data = []; mockSheet(n).save(); });
+    GAS.actAs("owner");
     const cfg = GAS.getInitialData().taskConfig;
     // Every project x content type x channel runs from brief to done
     out.flows = [];
     Object.keys(cfg.projects).forEach(p => (cfg.projects[p].types || cfg.contentTypes.filter(t => t !== cfg.eventType && t !== cfg.collateralType)).forEach(type =>
-      ["ORG", "ADS"].filter(c => !(cfg.projects[p].orgOnly && c === "ADS")).forEach(ch => {
+      ["ORG", "ADS"].filter(c => !(cfg.projects[p].orgOnly && c === "ADS") && !(cfg.projects[p].adsOnly && c === "ORG")).forEach(ch => {
         let t = GAS.addTask({ title: `TEST ${ch} DEC ${p}`, project: p, type, deadline: "2026-12-20", videographer: cfg.projects[p].videographer ? "" : "Arif" });
         const visited = [t.stage];
         for (let i = 0; i < 30 && t.stage !== "done"; i++) { t = GAS.moveTask(t.id, "advance", { from: t.stage }); visited.push(t.stage); }
@@ -156,7 +166,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     return out;
   });
   const flow = (p, type, ch) => r.flows.find(f => f.p === p && f.type === type && f.ch === ch);
-  ok(r.flows.length === 17, `17 project/type/channel combinations created (got ${r.flows.length})`);
+  ok(r.flows.length === 31, `31 project/type/channel combinations created (got ${r.flows.length})`);
   ok(r.flows.every(f => f.visited.endsWith(">done")), "every combination reaches Done by pressing the main button");
   ok(flow("VTB", "Static", "ORG").visited === "brief>qcBrief>design>qcContent>toClient>qcClient>post>done", "Static ORG timeline");
   ok(flow("KRR", "Video (Shooting)", "ADS").visited === "brief>qcBrief>shoot>video>qcCut>motion>qcContent>toClient>qcClient>ads>done", "Video Shooting ADS timeline (Shooting before CTC)");
@@ -465,38 +475,194 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   // Footer credit opens Instagram in a new tab
   ok(await page.$eval(".credit a", a => a.textContent.trim() === "Made by Muhammad Nurul Qolbi" && a.href === "https://www.instagram.com/biyoosh.i/" && a.target === "_blank" && a.rel === "noopener"), "footer: Made by Muhammad Nurul Qolbi -> Instagram (new tab)");
 
-  // Passcode: the server refuses every call without the right passcode
-  const lockErr = await page.evaluate(() => {
+  /* ---------- 3. Logins and who may do what ---------- */
+  console.log("Logins & permissions");
+  // Server: tickets, wrong passwords, ending sessions
+  const auth = await page.evaluate(() => {
     const err = fn => { try { fn(); return ""; } catch (e) { return e.message; } };
-    return {
-      wrong: err(() => GAS.api("nope", "getLinks", [])),
-      empty: err(() => GAS.api("", "deleteLink", ["x"])),
-      unknown: err(() => GAS.api("preview", "getSheet_", [])),
-      ok: Array.isArray(GAS.api("preview", "getLinks", [])),
-    };
+    const hex = t => sha256Bytes(t).map(b => ("0" + (b & 255).toString(16)).slice(-2)).join("");
+    const out = {};
+    const obi = GAS.login(" Obi ", "demo", "test").ticket;
+    out.wrong = err(() => GAS.login("obi", "salah"));
+    out.unknownUser = err(() => GAS.login("budi", "demo"));
+    out.ownerWithTeamPassword = err(() => GAS.login("owner", "demo"));
+    out.teamWithOwnerPassword = err(() => GAS.login("obi", "owner"));
+    out.badTicket = err(() => GAS.api("nope", "getLinks", []));
+    out.noTicket = err(() => GAS.api("", "deleteLink", ["x"]));
+    out.unknownFn = err(() => GAS.api(obi, "getSheet_", []));
+    out.ok = Array.isArray(GAS.api(obi, "getLinks", []));
+    out.notOwnerAdmin = err(() => GAS.api(obi, "getAdminData", []));
+    out.notOwnerViewAs = err(() => GAS.api(obi, "getTasks", [], "alfid"));
+    // Only the ticket's hash is stored
+    out.hashedOnly = !!mockProps["SESSION_" + hex(obi)] && !JSON.stringify(mockProps).includes(obi);
+    // The owner's username is never sent to the page
+    const owner = GAS.login("owner", "owner", "test").ticket;
+    out.ownerUser = GAS.api(owner, "getInitialData", []).user;
+    out.viewAsWrite = err(() => GAS.api(owner, "addLink", [{ title: "x", url: "https://x.com", category: "Other" }], "obi"));
+    out.viewAsRead = GAS.api(owner, "getInitialData", [], "alfid").user;
+    // 10 wrong passwords lock that account only
+    for (let i = 0; i < 10; i++) err(() => GAS.login("riska", "salah"));
+    out.lockedRiska = err(() => GAS.login("riska", "demo"));
+    out.hendraStillOk = !!GAS.login("hendra", "demo").ticket;
+    delete mockCache.wrongLogin_riska;
+    // A login ends after 30 days, on logout, or when the owner ends it
+    const old = GAS.login("puput", "demo").ticket;
+    const k = "SESSION_" + hex(old), sess = JSON.parse(mockProps[k]);
+    sess.start -= 31 * 864e5;
+    mockProps[k] = JSON.stringify(sess);
+    out.expired = err(() => GAS.api(old, "getLinks", []));
+    out.expiredRemoved = !mockProps[k];
+    GAS.api(obi, "logout", []);
+    out.afterLogout = err(() => GAS.api(obi, "getLinks", []));
+    const wawan = GAS.login("wawan", "demo").ticket;
+    const admin = GAS.api(owner, "getAdminData", []);
+    out.sessionsListed = admin.sessions.some(x => x.name === "Wawan") && admin.sessions.some(x => x.self && x.name === "Owner");
+    out.ended = GAS.api(owner, "endSessions", ["all"]);
+    out.wawanEnded = err(() => GAS.api(wawan, "getLinks", []));
+    out.ownerKept = Array.isArray(GAS.api(owner, "getLinks", []));
+    out.activity = GAS.api(owner, "getAdminData", []).activity.map(e => e.who + ":" + e.action);
+    out.failedUnknown = out.activity.includes("(unknown username):Failed login");
+    GAS.actAs("owner");
+    return out;
   });
-  ok(/^LOCKED: Wrong passcode/.test(lockErr.wrong) && /^LOCKED/.test(lockErr.empty), "server: wrong / empty passcode refused");
-  ok(lockErr.unknown === "Unknown action." && lockErr.ok, "server: only listed actions can be called, right passcode works");
-  // Passcode screen: Lock, wrong passcode, then the right one
+  ok(/^LOCKED: Wrong username or password/.test(auth.wrong) && /^LOCKED: Wrong/.test(auth.unknownUser), "server: wrong password / unknown username refused");
+  ok(/^LOCKED: Wrong/.test(auth.ownerWithTeamPassword) && /^LOCKED: Wrong/.test(auth.teamWithOwnerPassword), "owner and team passwords are separate");
+  ok(/^LOCKED/.test(auth.badTicket) && /^LOCKED/.test(auth.noTicket), "server: calls without a valid login are refused");
+  ok(auth.unknownFn === "Unknown action." && auth.ok, "server: only listed actions; a valid login works (username trimmed, any case)");
+  ok(/owner/i.test(auth.notOwnerAdmin) && /owner/i.test(auth.notOwnerViewAs), "Admin data and View as are owner only");
+  ok(auth.hashedOnly, "only the hash of a login ticket is stored");
+  ok(auth.ownerUser.name === "Owner" && auth.ownerUser.role === "owner" && !("key" in auth.ownerUser) && !("username" in auth.ownerUser), "the owner's username is never sent to the page");
+  ok(/read-only/.test(auth.viewAsWrite) && auth.viewAsRead.name === "Alfid" && auth.viewAsRead.readOnly, "View as reads as that account and refuses changes");
+  ok(/Too many wrong passwords/.test(auth.lockedRiska) && auth.hendraStillOk, "10 wrong passwords lock that account only");
+  ok(/ended/.test(auth.expired) && auth.expiredRemoved, "a login older than 30 days ends (and is removed)");
+  ok(/^LOCKED/.test(auth.afterLogout), "logout ends the login");
+  ok(auth.sessionsListed && auth.ended >= 1 && /^LOCKED/.test(auth.wawanEnded) && auth.ownerKept, "owner sees who is logged in and can log out everyone else (but not themself)");
+  ok(auth.activity.includes("Wawan:Login") && auth.activity.includes("Bu Riska:Failed login") && auth.failedUnknown && auth.activity.includes("Owner:Ended logins"),
+    "Activity log records logins, failed logins (unknown usernames not written down) and ended logins");
+
+  // Server: who may do what, on the sample data. "Log out everyone else" above also ended this page's
+  // own login (another ticket than the test's owner), so log in again first.
+  await page.evaluate(() => forgetLogin());
+  await loginAs("owner", "owner");
+  await page.evaluate(() => loadTestData());
+  await page.waitForFunction(() => state.loaded && state.tasks.length > 0);
+  const perm = await page.evaluate(() => {
+    const err = fn => { try { fn(); return ""; } catch (e) { return e.message; } };
+    const as = (u, fn) => { GAS.actAs(u); try { return fn(); } finally { GAS.actAs("owner"); } };
+    const find = title => { GAS.actAs("owner"); return GAS.getTasks().find(t => t.title === title); };
+    const out = {};
+    out.alfidProjects = [...new Set(as("alfid", () => GAS.getTasks()).map(t => t.project))].sort().join();
+    out.obiProjects = [...new Set(as("obi", () => GAS.getTasks()).map(t => t.project))].sort().join();
+    out.alfidCreate = err(() => as("alfid", () => GAS.addTask({ title: "BRIEF ORG DEC KRR", project: "KRR", type: "Static" })));
+    out.obiCreateLux = err(() => as("obi", () => GAS.addTask({ title: "BRIEF ORG DEC LUX", project: "LUX", type: "Static" })));
+    out.puputCreateLux = as("puput", () => GAS.addTask({ title: "BRIEF ORG DEC LUX", project: "LUX", type: "Static" })).history[0].by;
+    out.gmOrg = err(() => as("puput", () => GAS.addTask({ title: "BRIEF ORG DEC GM", project: "GM", type: "Static" })));
+    out.gmAds = as("puput", () => GAS.addTask({ title: "BRIEF ADS DEC GM", project: "GM", type: "Static" })).channel;
+    // KRR task waiting at Design (Alfid's step)
+    const design = find("BRIEF ORG DECEMBER KRR");
+    out.designStage = design.stage;
+    out.obiPressDesign = err(() => as("obi", () => GAS.moveTask(design.id, "advance")));
+    out.wawanPressKrr = err(() => as("wawan", () => GAS.moveTask(design.id, "advance")));
+    const moved = as("alfid", () => GAS.moveTask(design.id, "advance"));
+    out.alfidPressed = moved.stage + ":" + moved.history[moved.history.length - 1].by;
+    out.obiUndoAlfid = err(() => as("obi", () => GAS.moveTask(design.id, "undo")));
+    out.alfidUndo = as("alfid", () => GAS.moveTask(design.id, "undo")).stage;
+    as("alfid", () => GAS.moveTask(design.id, "advance"));
+    out.alfidPressQc = err(() => as("alfid", () => GAS.moveTask(design.id, "advance")));
+    out.hendraQc = as("hendra", () => GAS.moveTask(design.id, "advance")).history.slice(-1)[0].by;
+    // Writer steps (Kak Faza's Send to Client) are pressed by the content writer
+    out.obiSends = as("obi", () => GAS.moveTask(design.id, "advance")).stage;
+    // Edit / delete: the project's writer and managerial only; a task can't be moved out of their projects
+    out.alfidEdit = err(() => as("alfid", () => GAS.updateTask(design.id, Object.assign({}, design, { notes: "x" }))));
+    out.obiMoveToLux = err(() => as("obi", () => GAS.updateTask(design.id, Object.assign({}, design, { project: "LUX", title: "BRIEF ORG DEC LUX" }))));
+    out.obiEdit = as("obi", () => GAS.updateTask(design.id, Object.assign({}, design, { notes: "edited" }))).notes;
+    out.puputDelete = err(() => as("puput", () => GAS.deleteTask(design.id)));
+    // Event checklist: the project's writer and designer, not other designers
+    const ev = find("EVENT ORG DECEMBER KRR");
+    out.alfidTick = as("alfid", () => GAS.setTaskItem(ev.id, "Flyer Cetak", true)).checklist.includes("Flyer Cetak");
+    out.ilhamTick = err(() => as("ilham", () => GAS.setTaskItem(ev.id, "Flyer Cetak", false)));
+    // Managerial can press every step, also a designer's
+    const fix = find("BRIEF ADS NOVEMBER KRR");
+    out.riskaAny = fix.stage === "design" && as("riska", () => GAS.moveTask(fix.id, "advance")).history.slice(-1)[0].by === "Bu Riska";
+    out.activityMoves = mockSheet("Activity").data.filter(r => r[2] === "Moved").map(r => r[1]);
+    return out;
+  });
+  ok(perm.alfidProjects === "KRR,Makuta" && perm.obiProjects === "GTR,KRR,Makuta,VTB", "each account only gets its own projects' tasks -> " + perm.alfidProjects + " / " + perm.obiProjects);
+  ok(/content writer/.test(perm.alfidCreate) && /content writer/.test(perm.obiCreateLux) && perm.puputCreateLux === "Puput", "only the project's content writer (or managerial) creates its tasks");
+  ok(/ADS only/.test(perm.gmOrg) && perm.gmAds === "ADS", "GM runs ADS only");
+  ok(perm.designStage === "design" && /waiting for Alfid/.test(perm.obiPressDesign) && /not found/.test(perm.wawanPressKrr), "Design can't be pressed by the writer or another project's designer");
+  ok(perm.alfidPressed === "qcContent:Alfid", "the designer presses Design; History records who");
+  ok(/last move/.test(perm.obiUndoAlfid) && perm.alfidUndo === "design", "Undo: whoever made the last move");
+  ok(/waiting for QC/.test(perm.alfidPressQc) && perm.hendraQc === "Kak Hendra", "QC steps are managerial's");
+  ok(perm.obiSends === "qcClient", "the content writer presses Kak Faza's Send to Client");
+  ok(/content writer/.test(perm.alfidEdit) && /content writer/.test(perm.obiMoveToLux) && perm.obiEdit === "edited" && /not found/.test(perm.puputDelete), "edit / delete: the project's writer; can't move a task out of their projects");
+  ok(perm.alfidTick && /not found/.test(perm.ilhamTick), "Event checklist: the project's designer can tick, others can't");
+  ok(perm.riskaAny, "managerial can press any step (here a designer's)");
+  ok(perm.activityMoves.includes("Alfid") && perm.activityMoves.includes("Kak Hendra"), "Activity log records each move with the person's name");
+
+  // Page: what each account sees and can press
   await page.evaluate(() => lockApp());
-  ok(await page.$eval("#lockModal", e => e.classList.contains("show")) && !(await page.evaluate(() => state.links.length)), "Lock button shows the passcode screen and hides the data");
+  await page.waitForFunction(() => !localStorage.getItem("makutaTicket"));
+  ok(await page.$eval("#lockModal", e => e.classList.contains("show")) && !(await page.evaluate(() => state.links.length)), "Logout shows the login screen and hides the data");
   await page.keyboard.press("Escape");
   await page.mouse.click(5, 5);
-  ok(await page.$eval("#lockModal", e => e.classList.contains("show")), "passcode screen cannot be closed with Esc or a click outside");
+  ok(await page.$eval("#lockModal", e => e.classList.contains("show")), "login screen cannot be closed with Esc or a click outside");
+  await page.type("#lockUser", "alfid");
   await page.type("#lockInput", "salah");
   await page.click("#lockEye");
-  ok(await page.$eval("#lockInput", e => e.type === "text" && e.value === "salah") && await page.$eval("#lockEye", e => e.classList.contains("on")), "eye button shows the passcode");
+  ok(await page.$eval("#lockInput", e => e.type === "text" && e.value === "salah") && await page.$eval("#lockEye", e => e.classList.contains("on")), "eye button shows the password");
   await page.click("#lockEye");
   ok(await page.$eval("#lockInput", e => e.type === "password" && e.value === "salah"), "eye button hides it again (text kept)");
-  await page.click("#lockEye");
-  await page.click(".lock-btn");
+  await page.click("#lockBtn");
   await page.waitForFunction(() => !document.getElementById("lockErr").hidden);
-  ok(await page.$eval("#lockErr", e => e.textContent.includes("Wrong passcode")), "wrong passcode shows an error");
-  ok(await page.$eval("#lockInput", e => e.type === "password" && e.value === ""), "after a wrong try the field is cleared and hidden again");
-  await page.type("#lockInput", "preview");
-  await page.click(".lock-btn");
+  ok(await page.$eval("#lockErr", e => e.textContent.includes("Wrong username or password")), "wrong password shows an error");
+  ok(await page.$eval("#lockInput", e => e.type === "password" && e.value === "") && await page.$eval("#lockUser", e => e.value === "alfid"), "after a wrong try the password is cleared, the username kept");
+  await page.type("#lockInput", "demo");
+  await page.click("#lockBtn");
+  await page.waitForFunction(() => state.loaded);
+  ok(await page.evaluate(() => !!localStorage.getItem("makutaTicket") && localStorage.getItem("makutaPasscode") === null), "login is remembered on this browser (ticket only)");
+  await page.evaluate(() => showView("tasks"));
+  const alfid = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll("#taskResults .task")];
+    const out = {
+      header: document.getElementById("userName").textContent + " / " + document.getElementById("userRole").textContent,
+      step: document.getElementById("tStep").value,
+      create: [...document.querySelectorAll(".task-create")].every(b => b.hidden),
+      admin: document.getElementById("tabAdmin").hidden, sheet: document.getElementById("sheetLink").hidden,
+      projects: [...document.querySelectorAll("#tProject option")].map(o => o.value).filter(Boolean).join(),
+      mine: cards.length > 0 && cards.every(c => c.querySelector('[data-tact="advance"]')),
+    };
+    document.getElementById("tStep").value = "all";
+    renderTasks();
+    out.allButtons = [...document.querySelectorAll("#taskResults .task")].filter(c => c.querySelector('[data-tact="advance"]'))
+      .every(c => /Design|Motion/.test(c.querySelector(".ms-current .ms-name").textContent));
+    out.waiting = [...document.querySelectorAll("#taskResults .waiting")].map(w => w.textContent).join(" | ");
+    out.noEditDelete = !document.querySelector('#taskResults [data-tact="edit"], #taskResults [data-tact="delete"]');
+    return out;
+  });
+  ok(alfid.header === "Alfid / Graphic Designer" && alfid.step === "mine" && alfid.mine, "designer: name in the header, opens on My Tasks (only their steps)");
+  ok(alfid.create && alfid.admin && alfid.sheet && alfid.projects === "KRR,Makuta", "designer: no task creation, no Admin, no Google Sheet button, own projects only");
+  ok(alfid.allButtons && alfid.noEditDelete, "designer: buttons only on Design / Motion steps, no Edit / Delete");
+  ok(/Waiting for QC \(Kak Hendra \/ Bu Riska\)/.test(alfid.waiting) && /\(via Obi\)/.test(alfid.waiting), "other steps show who they wait for -> " + alfid.waiting.slice(0, 120));
+  await page.screenshot({ path: `${shots}/designer-tasks.png` });
+  // Owner: Admin tab, View as
+  await page.evaluate(() => lockApp());
+  await loginAs("owner", "owner");
+  await page.evaluate(() => showView("admin"));
+  await page.waitForFunction(() => document.querySelector("#viewAsUser option") && document.querySelector("#adminActivity li"));
+  ok(await page.$eval("#adminSessions", e => e.textContent.includes("This browser")), "Admin: logged-in list shows this browser");
+  await page.screenshot({ path: `${shots}/admin.png`, fullPage: true });
+  await page.select("#viewAsUser", "puput");
+  await page.click("#viewAdmin .btn-accent");
+  await page.waitForFunction(() => state.loaded && state.user.name === "Puput");
+  ok(await page.evaluate(() => !document.getElementById("viewAsBanner").hidden && document.getElementById("tabAdmin").hidden &&
+    !document.querySelector("#taskResults [data-tact]") && getComputedStyle(document.getElementById("submitBtn")).display === "none" &&
+    state.tasks.every(t => ["GM", "LUX", "HC"].includes(t.project))), "View as Puput: her projects only, read-only (no buttons, no Submit)");
+  await page.click("#viewAsBanner button");
+  await page.waitForFunction(() => state.loaded && state.user.name === "Owner" && !state.viewAs);
+  ok(await page.evaluate(() => !document.getElementById("tabAdmin").hidden && document.getElementById("viewAsBanner").hidden), "Exit View as goes back to the owner");
+  await page.evaluate(() => loadTestData());
   await page.waitForFunction(() => state.loaded && state.links.length > 0);
-  ok(await page.evaluate(() => localStorage.getItem("makutaPasscode") === "preview"), "right passcode opens the app and is remembered on this device");
 
   // Layout: no sideways scroll on a phone, and screenshots for a visual check
   for (const [w, name] of [[1300, "desktop"], [390, "phone"]]) {

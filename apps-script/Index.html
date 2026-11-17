@@ -26,8 +26,12 @@
         <a class="btn btn-soft" id="sheetLink" href="#" target="_blank" rel="noopener">
           <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Open Google Sheet
         </a>
-        <button type="button" class="btn-soft" onclick="lockApp()" title="Lock the app and forget the passcode on this device">
-          <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Lock
+        <span class="user-chip" id="userChip" hidden>
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+          <span><b id="userName"></b> <span class="muted" id="userRole"></span></span>
+        </span>
+        <button type="button" class="btn-soft" onclick="lockApp()" title="Log out on this browser">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Logout
         </button>
         <button type="button" class="btn-soft theme-toggle" onclick="toggleTheme()" title="Toggle dark / light mode">
           <svg class="icon moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -35,6 +39,11 @@
         </button>
       </div>
     </header>
+
+    <div class="view-as-banner" id="viewAsBanner" hidden>
+      <span>👁️ Viewing as <b id="viewAsName"></b> · read-only, nothing can be changed</span>
+      <button type="button" class="btn-sm" onclick="exitViewAs()">Exit</button>
+    </div>
 
     <nav class="tabs">
       <button type="button" id="tabSubmit" class="active" onclick="showView('submit')">
@@ -45,6 +54,9 @@
       </button>
       <button type="button" id="tabTasks" onclick="showView('tasks')">
         <svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg>Milestones
+      </button>
+      <button type="button" id="tabAdmin" onclick="showView('admin')" hidden>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/></svg>Admin
       </button>
     </nav>
 
@@ -283,8 +295,8 @@
 
         <div class="meta-bar">
           <div class="meta-left">
-            <button type="button" class="btn-accent btn-sm" onclick="openBatchForm()" title="Create all tasks for one month at once">+ Monthly Brief</button>
-            <button type="button" class="btn-soft btn-sm" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single Task</button>
+            <button type="button" class="btn-accent btn-sm task-create" onclick="openBatchForm()" title="Create all tasks for one month at once">+ Monthly Brief</button>
+            <button type="button" class="btn-soft btn-sm task-create" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single Task</button>
             <span id="taskCount"></span>
           </div>
           <div class="actions">
@@ -293,6 +305,38 @@
         </div>
 
         <div id="taskResults"><div class="loading"><div class="spinner"></div>Loading your tasks...</div></div>
+      </div>
+
+      <!-- ============ ADMIN VIEW (owner only) ============ -->
+      <div id="viewAdmin" hidden>
+        <section class="admin-card">
+          <div class="admin-head">
+            <h3>👁️ View as</h3>
+            <span class="muted">See the app exactly as one account sees it. Read-only.</span>
+          </div>
+          <div class="admin-row">
+            <select id="viewAsUser" aria-label="Account to view as"></select>
+            <button type="button" class="btn-accent btn-sm" onclick="startViewAs()">View as</button>
+          </div>
+        </section>
+        <section class="admin-card">
+          <div class="admin-head">
+            <h3>🔐 Logged in</h3>
+            <button type="button" class="btn-danger btn-sm" onclick="endSessions('all')">Log out everyone else</button>
+          </div>
+          <div id="adminSessions"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+        </section>
+        <section class="admin-card">
+          <div class="admin-head">
+            <h3>📜 Activity</h3>
+            <div class="admin-row">
+              <select id="actWho" aria-label="Filter by person"><option value="">Everyone</option></select>
+              <select id="actProject" aria-label="Filter by project"><option value="">All projects</option></select>
+              <button type="button" class="btn-soft btn-sm" onclick="loadAdmin()">Refresh</button>
+            </div>
+          </div>
+          <div id="adminActivity"></div>
+        </section>
       </div>
     </div>
   </div>
@@ -441,22 +485,23 @@
     </div>
   </div>
 
-  <!-- Passcode screen (cannot be closed until the right passcode is entered) -->
+  <!-- Login screen (cannot be closed until someone logs in) -->
   <div class="modal-bg modal-lock" id="lockModal">
     <div class="modal">
       <div class="modal-emoji">🔒</div>
       <h3>Makuta Links Center</h3>
-      <p>Enter your passcode to open the app.</p>
+      <p>Log in with your username and password.</p>
       <form id="lockForm" novalidate>
+        <input id="lockUser" class="lock-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Username" aria-label="Username">
         <div class="pass-wrap">
-          <input id="lockInput" type="password" autocomplete="current-password" placeholder="Passcode">
-          <button type="button" class="pass-eye" id="lockEye" onclick="togglePasscode()" title="Show passcode" aria-label="Show passcode" aria-pressed="false">
+          <input id="lockInput" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
+          <button type="button" class="pass-eye" id="lockEye" onclick="togglePasscode()" title="Show password" aria-label="Show password" aria-pressed="false">
             <svg class="icon eye-open" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
             <svg class="icon eye-closed" viewBox="0 0 24 24"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-6.4 0-10-7-10-7a18.5 18.5 0 0 1 4.1-4.9M9.9 5.2A9.6 9.6 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2M2 2l20 20"/></svg>
           </button>
         </div>
         <div class="error" id="lockErr" hidden></div>
-        <button type="submit" class="btn-accent btn-block lock-btn">Unlock</button>
+        <button type="submit" class="btn-accent btn-block lock-btn" id="lockBtn">Log In</button>
       </form>
     </div>
   </div>

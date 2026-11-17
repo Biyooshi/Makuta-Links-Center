@@ -16,8 +16,9 @@ function backdateTask(id, ago) {
 
 function loadTestData() {
   const day = n => Utilities.formatDate(new Date(Date.now() + n * 864e5));
-  // Start from empty, so old preview data never mixes with the demo
-  ["Links", "Tasks"].forEach(name => { mockSheet(name).data = []; mockSheet(name).save(); });
+  // Start from empty, so the preview's demo data never mixes with these; made as the owner (may do everything)
+  ["Links", "Tasks", "Activity"].forEach(name => { mockSheet(name).data = []; mockSheet(name).save(); });
+  GAS.actAs("owner");
   [
     { title: "GTR Competitor Analysis Deck", url: "https://docs.google.com/presentation/d/demo-gtr/edit", category: "Google Slide", project: "GTR", status: "In Review", deadline: day(1), purpose: "Market & competitor mapping for client pitch", pinned: true,
       versions: [{ label: "Part 2", url: "https://docs.google.com/presentation/d/demo-gtr-2/edit" }] },

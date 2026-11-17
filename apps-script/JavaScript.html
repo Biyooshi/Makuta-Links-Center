@@ -17,7 +17,7 @@
     return m ? { base: m[1], source: m[2] } : { base: c, source: "" };
   }
   const categoryLabel = c => `${CATEGORY_ICONS[splitCategory(c).base] || "📌"} ${c}`;
-  const state = { links: [], tasks: [], cfg: null, app: {}, loaded: false, editingId: null, dupId: null, view: "table", editingTaskId: null, openHistory: new Set(), justMoved: null, justTicked: null };
+  const state = { links: [], tasks: [], cfg: null, app: {}, user: null, viewAs: "", loaded: false, editingId: null, dupId: null, view: "table", editingTaskId: null, openHistory: new Set(), justMoved: null, justTicked: null };
 
   const SORTERS = {
     newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
@@ -27,21 +27,27 @@
     za: (a, b) => b.title.localeCompare(a.title),
   };
 
-  /* ---------- Server calls (each one carries the passcode) ---------- */
-  const PASSCODE_KEY = "makutaPasscode";
-  let passcode = "";
-  try { passcode = localStorage.getItem(PASSCODE_KEY) || ""; } catch (e) {}
+  /* ---------- Server calls (each one carries this browser's login ticket) ---------- */
+  const TICKET_KEY = "makutaTicket";
+  let ticket = "";
+  try {
+    ticket = localStorage.getItem(TICKET_KEY) || "";
+    localStorage.removeItem("makutaPasscode");  // the passcode used before logins existed
+  } catch (e) {}
 
-  function api(fn, ...args) {
+  // Errors starting with "LOCKED:" (not logged in, login ended, wrong password) show the login screen
+  function callServer(fn, ...args) {
     return new Promise((resolve, reject) =>
       google.script.run.withSuccessHandler(resolve).withFailureHandler(err => {
         const locked = String(err && err.message).match(/LOCKED:\s*(.*)$/);
         if (locked) showLock(locked[1]);
         reject(locked ? new Error("Locked: " + locked[1]) : err);
-      }).api(passcode, fn, args));
+      })[fn](...args));
   }
+  // While the owner uses View as, every call reads the app as that account (the server refuses changes)
+  const api = (fn, ...args) => callServer("api", ticket, fn, args, state.viewAs || "");
 
-  /* ---------- Passcode screen ---------- */
+  /* ---------- Login screen ---------- */
   function showLock(message) {
     state.loaded = false;
     $("lockErr").textContent = message || "";
@@ -50,37 +56,62 @@
     togglePasscode(false);
     document.querySelectorAll(".modal-bg.show").forEach(m => m.classList.remove("show"));
     openModal("lockModal");
-    setTimeout(() => $("lockInput").focus(), 50);
+    // Unless someone already started typing in it
+    setTimeout(() => $("lockModal").contains(document.activeElement) || ($("lockUser").value ? $("lockInput") : $("lockUser")).focus(), 50);
   }
 
-  // Eye button: show the passcode to check for typos, click again to hide it
+  // Eye button: show the password to check for typos, click again to hide it
   function togglePasscode(show) {
     show = typeof show === "boolean" ? show : $("lockInput").type === "password";
     $("lockInput").type = show ? "text" : "password";
     $("lockEye").classList.toggle("on", show);
-    $("lockEye").title = show ? "Hide passcode" : "Show passcode";
+    $("lockEye").title = show ? "Hide password" : "Show password";
     $("lockEye").setAttribute("aria-label", $("lockEye").title);
     $("lockEye").setAttribute("aria-pressed", String(show));
     $("lockInput").focus();
   }
 
-  function unlock(e) {
-    e.preventDefault();
-    const value = $("lockInput").value;
-    if (!value) return;
-    passcode = value;
-    try { localStorage.setItem(PASSCODE_KEY, passcode); } catch (err) {}
-    closeModal("lockModal");
-    loadData();
+  // The browser and system, so the owner can tell sessions apart, e.g. "Chrome · Windows"
+  function deviceName() {
+    const ua = navigator.userAgent;
+    const browser = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+    const system = /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+    return system ? `${browser} · ${system}` : browser;
   }
 
-  // Forget the passcode on this device (e.g. on a shared computer)
-  function lockApp() {
-    passcode = "";
-    try { localStorage.removeItem(PASSCODE_KEY); } catch (e) {}
+  async function unlock(e) {
+    e.preventDefault();
+    const username = $("lockUser").value.trim(), password = $("lockInput").value;
+    if (!username || !password) return ($("lockErr").textContent = "Fill in your username and password.", $("lockErr").hidden = false);
+    $("lockBtn").disabled = true;
+    try {
+      const res = await callServer("login", username, password, deviceName());
+      ticket = res.ticket;
+      try { localStorage.setItem(TICKET_KEY, ticket); } catch (err) {}
+      closeModal("lockModal");
+      loadData();
+    } catch (err) {
+      // showLock already shows the reason (wrong password, account locked)
+      if (!/^Locked:/.test(err.message)) showLock(err.message);
+    } finally {
+      $("lockBtn").disabled = false;
+    }
+  }
+
+  // Ends the login on this browser (e.g. on a shared computer)
+  async function lockApp() {
+    try { await api("logout"); } catch (e) {}
+    forgetLogin();
+  }
+  function forgetLogin() {
+    ticket = "";
+    try { localStorage.removeItem(TICKET_KEY); } catch (e) {}
     state.links = [];
     state.tasks = [];
+    state.user = null;
+    state.viewAs = "";
     $("results").innerHTML = $("taskResults").innerHTML = "";
+    $("lockUser").value = "";
     showLock();
   }
 
@@ -207,7 +238,7 @@
 
   /* ---------- Views ---------- */
   function showView(name) {
-    const views = { submit: "Submit", links: "Links", tasks: "Tasks" };
+    const views = { submit: "Submit", links: "Links", tasks: "Tasks", admin: "Admin" };
     Object.keys(views).forEach(v => {
       $("view" + views[v]).hidden = name !== v;
       $("tab" + views[v]).classList.toggle("active", name === v);
@@ -215,11 +246,31 @@
     $("container").classList.toggle("wide", name !== "submit");
     if (name === "links") render();
     if (name === "tasks") renderTasks();
+    if (name === "admin") loadAdmin();
     // Restart the fade-in of the view that just opened
     const view = $("view" + views[name]);
     view.classList.remove("view-in");
     void view.offsetWidth;
     view.classList.add("view-in");
+  }
+
+  /* ---------- Who is logged in ---------- */
+  // Header name, the owner's Admin tab, and the View as banner (everything that changes data is hidden)
+  function showUser() {
+    const u = state.user;
+    $("userChip").hidden = false;
+    $("userName").textContent = u.name;
+    // "Obi Content Writer", but just "Owner" for the owner
+    $("userRole").textContent = u.roleName === u.name ? "" : u.roleName;
+    // While viewing as someone else the Admin tab is hidden too (the banner's Exit brings it back)
+    const owner = u.role === "owner";
+    $("tabAdmin").hidden = !owner;
+    // The Google Sheet holds every project, so only managerial and the owner get its button
+    $("sheetLink").hidden = !["owner", "manager"].includes(u.role);
+    $("viewAsBanner").hidden = !state.viewAs;
+    if (state.viewAs) $("viewAsName").textContent = `${u.name} (${u.roleName})`;
+    document.body.classList.toggle("read-only", !!u.readOnly);
+    if (!owner && !$("viewAdmin").hidden) showView("tasks");
   }
 
   /* ---------- Data loading ---------- */
@@ -229,9 +280,11 @@
       state.links = data.links;
       state.tasks = data.tasks;
       state.cfg = data.taskConfig;
+      state.user = data.user;
       state.app = data;
       state.loaded = true;
       if (data.sheetUrl) $("sheetLink").href = data.sheetUrl;
+      showUser();
       refreshOptions();
       setupTaskOptions();
       render();
@@ -726,7 +779,7 @@
   const STEP_GROUPS = {
     current: { label: `Active + done in the last ${RECENT_DONE_DAYS} days`, test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
     active: { label: "All active tasks", test: t => t.stage !== "done" },
-    obi: { label: "My to-do (Obi)", test: t => ["brief", "revision", "shoot", "post"].includes(t.stage) },
+    mine: { label: "My Tasks", test: t => isMyStep(t) },
     qc: { label: "Waiting QC Internal", test: t => ["qcBrief", "qcCut", "qcContent"].includes(t.stage) },
     production: { label: "In production (VO / CTC / design / ToV)", test: t => ["vo", "video", "design", "motion"].includes(t.stage) },
     client: { label: "At client", test: t => ["toClient", "qcClient"].includes(t.stage) },
@@ -740,10 +793,47 @@
   const TYPE_ICONS = { video: "🎬", event: "🎪", collateral: "🖨️", static: "🖼️" };
   const typeKind = type => isVideoType(type) ? "video" : isEventType(type) ? "event" : isCollateralType(type) ? "collateral" : "static";
   const stageOf = key => state.cfg.stages.find(s => s.key === key) || { key, name: key, role: "" };
+  // "Content Writer: Obi · Graphic Designer: Alfid" and " · Organic only" / " · ADS only"
+  const projectTeam = p => `Content Writer: ${escapeHtml(p.writer || "-")} · Graphic Designer: ${escapeHtml(p.designer || "-")}`;
+  const channelNote = p => p.orgOnly ? " · Organic only" : p.adsOnly ? " · ADS only" : "";
+  const projectWriter = t => (state.cfg.projects[t.project] || {}).writer || "Content Writer";
   // Who does this step for this task (mirrors stageOwner_ in Code.gs)
   function stageOwner(s, t) {
-    if (s.key === "shoot") return `Obi & ${t.videographer || "Videographer"}`;
-    return s.person || (s.role === "Graphic Designer" ? t.designer : s.role === "Videographer" ? t.videographer : "") || s.role;
+    if (s.key === "shoot") return `${projectWriter(t)} & ${t.videographer || "Videographer"}`;
+    return s.person || (s.role === "Graphic Designer" ? t.designer : s.role === "Videographer" ? t.videographer : s.role === "Content Writer" ? projectWriter(t) : "") || s.role;
+  }
+
+  /* ---------- Who may do what (mirrors the rules in Code.gs, which enforces them) ---------- */
+  // While the owner uses View as, nothing can be changed
+  const me = () => state.user || { role: "", name: "", projects: [] };
+  const isBoss = () => ["owner", "manager"].includes(me().role) && !me().readOnly;
+  const stepActor = key => state.cfg.stepActors[key] || "writer";
+  // The project's content writer, managerial and the owner create, edit and delete its tasks
+  const managesProject = project => !me().readOnly && (isBoss() || (me().role === "writer" && (state.cfg.projects[project] || {}).writer === me().name));
+  function canPress(t) {
+    if (me().readOnly || t.stage === "done") return false;
+    if (isBoss()) return true;
+    const actor = stepActor(t.stage);
+    return me().role === actor && (state.cfg.projects[t.project] || {})[actor] === me().name;
+  }
+  function canUndo(t) {
+    const last = t.history[t.history.length - 1] || {};
+    return !me().readOnly && (isBoss() || (last.by ? last.by === me().name : managesProject(t.project)));
+  }
+  const canTick = t => managesProject(t.project) || (!me().readOnly && me().role === "designer" && (state.cfg.projects[t.project] || {}).designer === me().name);
+  // My Tasks: the steps I am responsible for (not every step managerial could press). Bu Riska also
+  // has the Voice Over steps, which carry her name.
+  function isMyStep(t) {
+    if (t.stage === "done") return false;
+    const actor = stepActor(t.stage), u = me();
+    if (u.role === "manager") return actor === "manager" || stageOf(t.stage).person === u.name;
+    return u.role === actor && (state.cfg.projects[t.project] || {})[actor] === u.name;
+  }
+  // "Alfid", "Kak Faza (via Obi)", "QC (Kak Hendra / Bu Riska)" (mirrors waitingFor_ in Code.gs)
+  function waitingFor(t) {
+    const owner = stageOwner(stageOf(t.stage), t), actor = stepActor(t.stage), writer = projectWriter(t);
+    if (actor === "manager") return `QC (${owner})`;
+    return actor === "writer" && owner !== writer && !owner.startsWith(writer + " ") ? `${owner} (via ${writer})` : owner;
   }
   const doneLabel = t => isCollateralType(t.type) ? "Approved by Client" : t.channel === "ADS" ? "Live on Ads" : "Scheduled / Posted";
   // Mirrors channelFromTitle_ in Code.gs: "BRIEF ORG NOV KRR" -> "ORG" ("" when neither or both)
@@ -781,19 +871,26 @@
     const types = cfg.contentTypes.map(v => `<option>${escapeHtml(v)}</option>`).join("");
     $("tType").innerHTML = `<option value="">All types</option>` + types;
     $("tfVideographer").innerHTML = `<option value="">-- Select --</option>` + cfg.videographers.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)} (VG-${escapeHtml(v)})</option>`).join("");
+    // New tasks only for the projects this account looks after
     $("tfProject").innerHTML = $("bfProject").innerHTML = `<option value="">-- Select --</option>` +
-      Object.keys(cfg.projects).map(p => `<option value="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}</option>`).join("");
+      Object.keys(cfg.projects).filter(managesProject).map(p => `<option value="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}</option>`).join("");
     $("bfVideographer").innerHTML = $("tfVideographer").innerHTML;
+    // The owner has no steps of their own, so no My Tasks
+    const groups = Object.keys(STEP_GROUPS).filter(k => k !== "mine" || me().role !== "owner");
     $("tStep").innerHTML =
-      `<optgroup label="Quick filters">${Object.keys(STEP_GROUPS).map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("")}</optgroup>` +
+      `<optgroup label="Quick filters">${groups.map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("")}</optgroup>` +
       `<optgroup label="Exact step">${cfg.stages.map(s => `<option value="${s.key}">${escapeHtml(s.name)} (${escapeHtml(s.person || s.role)})</option>`).join("")}</optgroup>`;
-    $("tStep").value = "current";
+    $("tStep").value = defaultStep();
+    // Only the content writers, managerial and the owner create tasks
+    document.querySelectorAll(".task-create").forEach(b => b.hidden = !Object.keys(cfg.projects).some(managesProject));
     refreshTaskProjects();
   }
+  // Graphic designers start on their own steps; everyone else on all current work
+  const defaultStep = () => me().role === "designer" ? "mine" : "current";
 
-  // Configured projects first (VTB, KRR, ...), then any other project used in a task
+  // This account's projects first (VTB, KRR, ...), then any other project used in a task it can see
   function taskProjects() {
-    const known = Object.keys(state.cfg.projects);
+    const known = Object.keys(state.cfg.projects).filter(p => me().projects.includes(p));
     const extra = [...new Set(state.tasks.map(t => t.project))].filter(p => p && !known.includes(p)).sort((a, b) => a.localeCompare(b));
     return known.concat(extra);
   }
@@ -894,7 +991,8 @@
     }
     $("tfDesigner").innerHTML = !p ? ""
       : !collateral && p.orgOnly && channel === "ADS" ? `<span class="text-danger">${escapeHtml($("tfProject").value)} is organic only. Use ORG in the title.</span>`
-      : `Graphic Designer: ${escapeHtml(p.designer)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "chosen per video"}${p.orgOnly ? " · Organic only" : ""}`;
+      : !collateral && p.adsOnly && channel === "ORG" ? `<span class="text-danger">${escapeHtml($("tfProject").value)} runs ADS only. Use ADS in the title.</span>`
+      : `${projectTeam(p)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "chosen per video"}${channelNote(p)}`;
     // Event Attribute: the deadline is the event day, and the countdown posts are counted back from it
     const event = isEventType(type);
     $("tfDeadlineLabel").innerHTML = event ? `Event Date (D-Day) <span class="req">*</span>` : "Deadline";
@@ -944,6 +1042,7 @@
       : !collateral && !channelFromTitle(data.title) ? ["tfTitle", 'Write either ORG or ADS in the title, e.g. "BRIEF ORG DECEMBER KRR".']
       : !data.project ? ["tfProject", "Please choose the project."]
       : !collateral && (state.cfg.projects[data.project] || {}).orgOnly && channelFromTitle(data.title) !== "ORG" ? ["tfTitle", `${data.project} is organic only. Use ORG in the title.`]
+      : !collateral && (state.cfg.projects[data.project] || {}).adsOnly && channelFromTitle(data.title) !== "ADS" ? ["tfTitle", `${data.project} runs ADS only. Use ADS in the title.`]
       : !data.type ? ["tfType", "Please choose the content type."]
       : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]      : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
       : isEventType(data.type) && !data.deadline ? ["tfDeadline", "Please fill in the event date (D-Day)."]
@@ -1006,7 +1105,7 @@
   // comment and cuts the rest of the line, which broke the brief link input
   function renderBatchRows() {
     const project = $("bfProject").value, month = $("bfMonth").value, p = state.cfg.projects[project];
-    $("bfTeam").innerHTML = p ? `Graphic Designer: ${escapeHtml(p.designer)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "choose one above"}${p.orgOnly ? " · Organic only" : ""}` : "";
+    $("bfTeam").innerHTML = p ? `${projectTeam(p)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "choose one above"}${channelNote(p)}` : "";
     if (!p || !/^\d{4}-\d{2}$/.test(month)) {
       $("bfRows").innerHTML = `<div class="help">Choose the project and month to see the tasks.</div>`;
       updateBatchForm();
@@ -1014,7 +1113,7 @@
     }
     const existing = new Set(state.tasks.map(t => t.title.trim().toUpperCase()));
     const types = projectTypes(p).filter(v => !isEventType(v) && !isCollateralType(v));
-    const channels = Object.keys(state.cfg.channels).filter(c => !(p.orgOnly && c !== "ORG"));
+    const channels = Object.keys(state.cfg.channels).filter(c => !(p.orgOnly && c !== "ORG") && !(p.adsOnly && c !== "ADS"));
     $("bfRows").innerHTML = channels.map(ch => `<div class="batch-group">
       <div class="batch-head">
         <span class="chan chan-${ch.toLowerCase()}">${ch}</span>
@@ -1096,7 +1195,7 @@
   /* ---------- Milestones: filtering ---------- */
   function resetTaskFilters(rerender = true) {
     ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).value = "");
-    $("tStep").value = "current";
+    $("tStep").value = defaultStep();
     if (rerender) renderTasks();
   }
 
@@ -1159,7 +1258,7 @@
   }
 
   function stepper(t) {
-    // Once the client has asked for a revision, Obi's "Client Revision" step stays in the timeline,
+    // Once the client has asked for a revision, the content writer's "Client Revision" step stays in the timeline,
     // just before the step it was passed on to (or the first step that could fix it)
     const shown = [...t.steps];
     if (t.history.some(e => e.action === "revision" && e.to === "revision")) {
@@ -1202,10 +1301,12 @@
       if (e.action === "assign") return `↪ <b>${from}</b> passed to ${to} (${escapeHtml(stageOwner(stageOf(e.to), t))})`;
       return `✔ <b>${from}</b> done → ${to}`;
     };
+    // Who made the move (moves saved before logins existed have no name)
+    const by = e => e.by ? ` <span class="muted">· by ${escapeHtml(e.by)}</span>` : "";
     const open = state.openHistory.has(t.id) ? " open" : "";
     return `<details class="history" data-id="${escapeHtml(t.id)}"${open}>
       <summary>History (${t.history.length})</summary>
-      <ul>${[...t.history].reverse().map(e => `<li><span class="muted">${formatDate(e.at)}</span> ${text(e)}${e.note ? `<div class="note">"${escapeHtml(e.note)}"</div>` : ""}</li>`).join("")}</ul>
+      <ul>${[...t.history].reverse().map(e => `<li><span class="muted">${formatDate(e.at)}</span> ${text(e)}${by(e)}${e.note ? `<div class="note">"${escapeHtml(e.note)}"</div>` : ""}</li>`).join("")}</ul>
     </details>`;
   }
 
@@ -1221,7 +1322,9 @@
     const FIX_LABELS = { video: "Videographer (CTC)", design: "Graphic Designer", motion: "Graphic Designer (Motion / ToV)" };
     const together = togetherLabel(t);
     const both = together ? ` <span class="together" title="Moves every task listed here together">· ${escapeHtml(together)}</span>` : "";
+    // Only the person whose step it is (or managerial) gets the buttons; everyone else sees who it waits for
     const main = done ? ""
+      : !canPress(t) ? `<span class="waiting">⏳ Waiting for <b>${escapeHtml(waitingFor(t))}</b></span>`
       : t.stage === "revision"
       ? fixSteps(t).map(k => `<button class="btn-sm btn-accent" data-tact="assign" data-to="${k}" data-id="${id}">Send to ${FIX_LABELS[k]}: ${escapeHtml(stageOwner(stageOf(k), t))} →</button>`).join("")
       : s.qc
@@ -1252,9 +1355,9 @@
       <div class="task-actions">
         <div class="row-actions">${main}</div>
         <div class="row-actions">
-          ${t.history.length > 1 ? `<button class="btn-sm btn-soft" data-tact="undo" data-id="${id}" title="Take back the last step">Undo</button>` : ""}
-          ${done ? "" : `<button class="btn-sm btn-soft" data-tact="edit" data-id="${id}">Edit</button>`}
-          <button class="btn-sm btn-danger" data-tact="delete" data-id="${id}">Delete</button>
+          ${t.history.length > 1 && canUndo(t) ? `<button class="btn-sm btn-soft" data-tact="undo" data-id="${id}" title="Take back the last step">Undo</button>` : ""}
+          ${done || !managesProject(t.project) ? "" : `<button class="btn-sm btn-soft" data-tact="edit" data-id="${id}">Edit</button>`}
+          ${managesProject(t.project) ? `<button class="btn-sm btn-danger" data-tact="delete" data-id="${id}">Delete</button>` : ""}
         </div>
       </div>
       ${historyList(t)}
@@ -1268,7 +1371,7 @@
     return `<div class="checklist">
       <span class="checklist-head">Event deliverables · ${done}/${items.length}</span>
       ${items.map(i => `<label class="check-item${t.checklist.includes(i.name) ? " on" : ""}${state.justTicked === t.id + "|" + i.name ? " just-ticked" : ""}">
-        <input type="checkbox" data-titem="${escapeHtml(i.name)}" data-id="${escapeHtml(t.id)}"${t.checklist.includes(i.name) ? " checked" : ""}${t.stage === "done" ? " disabled" : ""}>${escapeHtml(eventItemLabel(i, t.deadline))}</label>`).join("")}
+        <input type="checkbox" data-titem="${escapeHtml(i.name)}" data-id="${escapeHtml(t.id)}"${t.checklist.includes(i.name) ? " checked" : ""}${t.stage === "done" || !canTick(t) ? " disabled" : ""}>${escapeHtml(eventItemLabel(i, t.deadline))}</label>`).join("")}
     </div>`;
   }
 
@@ -1283,7 +1386,7 @@
     if (!state.loaded) return;
     renderTaskStats();
     ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
-    $("tStep").classList.toggle("is-active", $("tStep").value !== "current");
+    $("tStep").classList.toggle("is-active", $("tStep").value !== defaultStep());
     const list = getFilteredTasks();
     $("taskCount").innerHTML = `Showing <b>${list.length}</b> of ${plural(state.tasks.length, "task")}`;
     if (!list.length) {
@@ -1308,7 +1411,7 @@
       return `<section class="group">
         <div class="group-head">
           <h3>${projectAvatar(name)}${escapeHtml(name)}</h3>
-          <span>${plural(items.length, "task")} &middot; ${active} active${p.designer ? ` &middot; Graphic Designer: ${escapeHtml(p.designer)}` : ""}${p.orgOnly ? " &middot; Organic only" : ""}</span>
+          <span>${plural(items.length, "task")} &middot; ${active} active${p.designer ? ` &middot; ${projectTeam(p)}` : ""}${channelNote(p).replace(" · ", " &middot; ")}</span>
         </div>
         ${projectCards(items)}
       </section>`;
@@ -1375,7 +1478,7 @@
     $("reviseChannelsField").hidden = !t.workMonth || !channels.length;
     if (t.workMonth && channels.length) {
       $("reviseToField").hidden = true;
-      $("reviseText").textContent = `${t.project} briefs written in ${monthLabel(t.workMonth)}. The brief(s) you tick go back to ${stageOf("brief").person}; after the fix they come straight back to QC.`;
+      $("reviseText").textContent = `${t.project} briefs written in ${monthLabel(t.workMonth)}. The brief(s) you tick go back to ${projectWriter(t)}; after the fix they come straight back to QC.`;
       $("reviseChannels").innerHTML = channels.map(c => `<label class="check-item"><input type="checkbox" value="${c}"${channels.length === 1 || c === t.channel ? " checked" : ""}>
         <span class="chan chan-${c.toLowerCase()}">${c}</span> ${escapeHtml(group.filter(o => o.channel === c).map(o => typeShort(o.type)).join(" + "))}</label>`).join("");
       $("reviseNote").value = "";
@@ -1390,11 +1493,11 @@
     const i = t.steps.indexOf(t.stage);
     // Revisions go back to the people who make the work (not to QC or to sending)
     const targets = t.steps.slice(0, i).filter(k => !stageOf(k).qc && k !== "toClient");
-    // QC Client always sends the revision back to Obi, who then passes it on
+    // QC Client always sends the revision back to the content writer, who then passes it on
     const fromClient = t.stage === "qcClient";
     $("reviseToField").hidden = fromClient;
     $("reviseText").textContent = fromClient
-      ? `"${t.title}": the client's revision goes back to ${stageOf("revision").person} first, who then sends it to ${fixSteps(t).includes("video") ? "the videographer (CTC) or the graphic designer" : "the graphic designer"}. After the fix it goes through QC Internal again, then Kak Faza sends it to the client.`
+      ? `"${t.title}": the client's revision goes back to ${projectWriter(t)} first, who then sends it to ${fixSteps(t).includes("video") ? "the videographer (CTC) or the graphic designer" : "the graphic designer"}. After the fix it goes through QC Internal again, then Kak Faza sends it to the client.`
       : `"${t.title}" at ${stageOf(t.stage).name}. Which step has to fix it? After the fix, it goes straight back to QC.`;
     $("reviseTo").innerHTML = targets.map(k => `<option value="${k}">${escapeHtml(stageOf(k).name)} (${escapeHtml(stageOwner(stageOf(k), t))})</option>`).join("");
     $("reviseTo").value = targets[targets.length - 1];
@@ -1453,6 +1556,65 @@
     }
   }
 
+  /* ---------- Admin (owner only): who is logged in, activity, View as ---------- */
+  async function loadAdmin() {
+    if (!state.user || state.user.role !== "owner") return;
+    try {
+      state.admin = await api("getAdminData");
+    } catch (err) {
+      $("adminSessions").innerHTML = `<div class="empty">Could not load: ${escapeHtml(err.message)}</div>`;
+      return;
+    }
+    const a = state.admin;
+    const pick = $("viewAsUser").value;
+    $("viewAsUser").innerHTML = a.users.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} · ${escapeHtml(u.role)}</option>`).join("");
+    if (pick) $("viewAsUser").value = pick;
+    $("adminSessions").innerHTML = a.sessions.length ? `<ul class="admin-list">${a.sessions.map(s => `<li>
+        <span><b>${escapeHtml(s.name)}</b> <span class="muted">${s.role && s.role !== s.name ? escapeHtml(s.role) + " · " : ""}${escapeHtml(s.device || "Unknown device")}</span><br>
+        <span class="muted">Logged in ${formatDate(s.start)} · last active ${formatDate(s.seen)}</span></span>
+        ${s.self ? `<span class="tag">This browser</span>` : `<button type="button" class="btn-danger btn-sm" data-session="${escapeHtml(s.id)}">Log out</button>`}
+      </li>`).join("")}</ul>` : `<div class="empty">Nobody is logged in.</div>`;
+    fillSelect("actWho", [...new Set(a.activity.map(e => e.who).filter(Boolean))].sort(), "Everyone");
+    fillSelect("actProject", [...new Set(a.activity.map(e => e.project).filter(Boolean))].sort(), "All projects");
+    renderActivity();
+  }
+
+  function renderActivity() {
+    const who = $("actWho").value, project = $("actProject").value;
+    const list = ((state.admin || {}).activity || []).filter(e => (!who || e.who === who) && (!project || e.project === project));
+    $("adminActivity").innerHTML = list.length ? `<ul class="admin-list">${list.map(e => `<li>
+        <span class="act-when">${formatDate(e.at)}</span>
+        <span class="act-main"><b>${escapeHtml(e.who)}</b> · ${escapeHtml(e.action)}${e.task ? ` · ${escapeHtml(e.task)}` : ""}${e.project ? ` <span class="muted">(${escapeHtml(e.project)})</span>` : ""}
+          ${e.details ? `<span class="act-details">${escapeHtml(e.details)}</span>` : ""}</span>
+      </li>`).join("")}</ul>` : `<div class="empty">No activity yet.</div>`;
+  }
+
+  async function endSessions(ids) {
+    const all = ids === "all";
+    if (!await confirmDialog({ emoji: "🔐", title: all ? "Log out everyone else?" : "Log out this session?", ok: "Log out",
+      message: all ? "Everyone except you has to log in again." : "That browser has to log in again." })) return;
+    try {
+      const n = await api("endSessions", ids);
+      toast(`${plural(n, "session")} ended`);
+      loadAdmin();
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  // View as: the app is loaded again as that account, read-only, until Exit
+  function startViewAs() {
+    const username = $("viewAsUser").value;
+    if (!username) return;
+    state.viewAs = username;
+    showView("tasks");
+    loadData();
+  }
+  function exitViewAs() {
+    state.viewAs = "";
+    loadData().then(() => showView("admin"));
+  }
+
   /* ---------- Init ---------- */
   $("linkForm").addEventListener("submit", submitForm);
   $("url").addEventListener("input", checkDuplicate);
@@ -1498,6 +1660,12 @@
     render();
   }));
 
+  $("adminSessions").addEventListener("click", e => {
+    const btn = e.target.closest("[data-session]");
+    if (btn) endSessions([btn.dataset.session]);
+  });
+  ["actWho", "actProject"].forEach(id => $(id).addEventListener("input", renderActivity));
+
   $("lockForm").addEventListener("submit", unlock);
-  if (passcode) loadData(); else showLock();
+  if (ticket) loadData(); else showLock();
 </script>

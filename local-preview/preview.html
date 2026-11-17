@@ -204,6 +204,7 @@
   .modal-lock .error { text-align: left; }
   .lock-btn { margin-top: 14px; }
   /* Passcode field with a show / hide (eye) button inside it */
+  .lock-user { margin-bottom: 10px; }
   .pass-wrap { position: relative; }
   .pass-wrap input { padding-right: 46px; }
   .pass-eye { position: absolute; top: 6px; bottom: 6px; right: 6px; padding: 0 8px; background: none; color: var(--muted); font-size: 18px; border-radius: 6px; }
@@ -505,6 +506,31 @@
   .task-moved .ms-current .dot, .task-moved .ms-finish.ms-done .dot { animation: dot-pop .4s ease-out, ring 2s ease-out .4s infinite; }
   .task-moved .ms-current::before, .task-moved .ms-finish.ms-done::before { transform-origin: left center; animation: line-fill .45s ease-out; }
   .task-moved .ms-current .ms-name, .task-moved .ms-current .ms-date { animation: fade-in .4s ease-out; }
+  /* Logins: who is logged in, the owner's View as banner and Admin tab */
+  .user-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 10px; font-size: 14px; color: var(--heading); background: var(--panel-bg); box-shadow: inset 0 0 0 1px var(--border); }
+  .user-chip .muted { font-size: 12px; }
+  .view-as-banner { display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 16px; font-size: 13px; color: #fff; background: #4f46e5; }
+  .view-as-banner button { background: rgba(255, 255, 255, .2); color: #fff; }
+  .view-as-banner button:hover { background: rgba(255, 255, 255, .35); }
+  .waiting { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+  .waiting b { color: var(--heading); }
+  /* View as: whatever would change data is hidden (the server refuses it anyway) */
+  body.read-only #submitBtn, body.read-only .task-create, body.read-only #results [data-act="edit"], body.read-only #results [data-act="delete"], body.read-only #results [data-act="pin"] { display: none; }
+  body.read-only #linkForm::before { content: "View as is read-only: links cannot be submitted."; display: block; margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; font-size: 13px; background: var(--primary-soft); color: var(--heading); }
+  .admin-card { border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 16px; background: var(--card-bg); }
+  .admin-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .admin-head h3 { font-size: 16px; color: var(--heading); }
+  .admin-head .muted { font-size: 13px; }
+  .admin-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .admin-row select { width: auto; min-width: 180px; padding: 8px 10px; }
+  .admin-list { list-style: none; }
+  .admin-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-top: 1px dashed var(--border); font-size: 14px; }
+  .admin-list li:first-child { border-top: none; }
+  .admin-list .muted { font-size: 12px; }
+  .act-when { min-width: 120px; font-size: 12px; color: var(--muted); }
+  .act-main { flex: 1; min-width: 200px; }
+  .act-details { display: block; font-size: 12px; color: var(--muted); word-break: break-word; }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
     button:hover, .btn:hover, .stat:hover, .ms-step:hover .dot { transform: none !important; }
@@ -555,8 +581,9 @@
 </head>
 <body>
 <div class="preview-banner">
-  <strong>LOCAL PREVIEW</strong> &middot; data is saved in this browser only, not in Google Sheets.
-  <button type="button" onclick="previewClear()">Clear all data</button>
+  <span><strong>LOCAL PREVIEW</strong> &middot; demo data, saved in this browser only, not in Google Sheets.</span>
+  <span>Logins: obi, puput, hendra, riska, alfid, ilham, wawan (password <b>demo</b>) &middot; owner (password <b>owner</b>)</span>
+  <button type="button" onclick="previewReset()">Reset demo data</button>
 </div>
 <style>
   .preview-banner { margin: -40px -16px 24px; z-index: 30; background: #7c3aed; color: #fff; font-size: 12px; padding: 6px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
@@ -574,8 +601,12 @@
         <a class="btn btn-soft" id="sheetLink" href="#" target="_blank" rel="noopener">
           <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Open Google Sheet
         </a>
-        <button type="button" class="btn-soft" onclick="lockApp()" title="Lock the app and forget the passcode on this device">
-          <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Lock
+        <span class="user-chip" id="userChip" hidden>
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+          <span><b id="userName"></b> <span class="muted" id="userRole"></span></span>
+        </span>
+        <button type="button" class="btn-soft" onclick="lockApp()" title="Log out on this browser">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Logout
         </button>
         <button type="button" class="btn-soft theme-toggle" onclick="toggleTheme()" title="Toggle dark / light mode">
           <svg class="icon moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -583,6 +614,11 @@
         </button>
       </div>
     </header>
+
+    <div class="view-as-banner" id="viewAsBanner" hidden>
+      <span>👁️ Viewing as <b id="viewAsName"></b> · read-only, nothing can be changed</span>
+      <button type="button" class="btn-sm" onclick="exitViewAs()">Exit</button>
+    </div>
 
     <nav class="tabs">
       <button type="button" id="tabSubmit" class="active" onclick="showView('submit')">
@@ -593,6 +629,9 @@
       </button>
       <button type="button" id="tabTasks" onclick="showView('tasks')">
         <svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg>Milestones
+      </button>
+      <button type="button" id="tabAdmin" onclick="showView('admin')" hidden>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/></svg>Admin
       </button>
     </nav>
 
@@ -831,8 +870,8 @@
 
         <div class="meta-bar">
           <div class="meta-left">
-            <button type="button" class="btn-accent btn-sm" onclick="openBatchForm()" title="Create all tasks for one month at once">+ Monthly Brief</button>
-            <button type="button" class="btn-soft btn-sm" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single Task</button>
+            <button type="button" class="btn-accent btn-sm task-create" onclick="openBatchForm()" title="Create all tasks for one month at once">+ Monthly Brief</button>
+            <button type="button" class="btn-soft btn-sm task-create" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single Task</button>
             <span id="taskCount"></span>
           </div>
           <div class="actions">
@@ -841,6 +880,38 @@
         </div>
 
         <div id="taskResults"><div class="loading"><div class="spinner"></div>Loading your tasks...</div></div>
+      </div>
+
+      <!-- ============ ADMIN VIEW (owner only) ============ -->
+      <div id="viewAdmin" hidden>
+        <section class="admin-card">
+          <div class="admin-head">
+            <h3>👁️ View as</h3>
+            <span class="muted">See the app exactly as one account sees it. Read-only.</span>
+          </div>
+          <div class="admin-row">
+            <select id="viewAsUser" aria-label="Account to view as"></select>
+            <button type="button" class="btn-accent btn-sm" onclick="startViewAs()">View as</button>
+          </div>
+        </section>
+        <section class="admin-card">
+          <div class="admin-head">
+            <h3>🔐 Logged in</h3>
+            <button type="button" class="btn-danger btn-sm" onclick="endSessions('all')">Log out everyone else</button>
+          </div>
+          <div id="adminSessions"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+        </section>
+        <section class="admin-card">
+          <div class="admin-head">
+            <h3>📜 Activity</h3>
+            <div class="admin-row">
+              <select id="actWho" aria-label="Filter by person"><option value="">Everyone</option></select>
+              <select id="actProject" aria-label="Filter by project"><option value="">All projects</option></select>
+              <button type="button" class="btn-soft btn-sm" onclick="loadAdmin()">Refresh</button>
+            </div>
+          </div>
+          <div id="adminActivity"></div>
+        </section>
       </div>
     </div>
   </div>
@@ -989,22 +1060,23 @@
     </div>
   </div>
 
-  <!-- Passcode screen (cannot be closed until the right passcode is entered) -->
+  <!-- Login screen (cannot be closed until someone logs in) -->
   <div class="modal-bg modal-lock" id="lockModal">
     <div class="modal">
       <div class="modal-emoji">🔒</div>
       <h3>Makuta Links Center</h3>
-      <p>Enter your passcode to open the app.</p>
+      <p>Log in with your username and password.</p>
       <form id="lockForm" novalidate>
+        <input id="lockUser" class="lock-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Username" aria-label="Username">
         <div class="pass-wrap">
-          <input id="lockInput" type="password" autocomplete="current-password" placeholder="Passcode">
-          <button type="button" class="pass-eye" id="lockEye" onclick="togglePasscode()" title="Show passcode" aria-label="Show passcode" aria-pressed="false">
+          <input id="lockInput" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
+          <button type="button" class="pass-eye" id="lockEye" onclick="togglePasscode()" title="Show password" aria-label="Show password" aria-pressed="false">
             <svg class="icon eye-open" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
             <svg class="icon eye-closed" viewBox="0 0 24 24"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-6.4 0-10-7-10-7a18.5 18.5 0 0 1 4.1-4.9M9.9 5.2A9.6 9.6 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2M2 2l20 20"/></svg>
           </button>
         </div>
         <div class="error" id="lockErr" hidden></div>
-        <button type="submit" class="btn-accent btn-block lock-btn">Unlock</button>
+        <button type="submit" class="btn-accent btn-block lock-btn" id="lockBtn">Log In</button>
       </form>
     </div>
   </div>
@@ -1014,9 +1086,8 @@
   
 <script>
 // ---- Local stand-in for Google Sheets / Apps Script services ----
-const PREVIEW_KEY = "makutaPreviewData";
-// Data saved under the old key was demo data only: remove it once
-try { ["makutaPreviewSheet", "makutaPreviewSheet:Tasks"].forEach(k => localStorage.removeItem(k)); } catch (e) {}
+// Demo data lives under its own keys, apart from anything saved by older previews
+const PREVIEW_KEY = "makutaDemo";
 const mockSheets = {};
 // One fake sheet per name ("Links", "Tasks"), each saved under its own localStorage key
 function mockSheet(name) {
@@ -1064,12 +1135,20 @@ const SpreadsheetApp = { getActiveSpreadsheet: () => ({
   getUrl: () => "",  // no real sheet in the preview; the page shows a notice instead
   getSpreadsheetTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
 }) };
-// The preview's passcode is "preview" (filled in automatically the first time)
-const mockProps = { APP_PASSCODE: "preview" };
-const PropertiesService = { getScriptProperties: () => ({ getProperty: k => mockProps[k] || null, setProperty: (k, v) => { mockProps[k] = v; } }) };
-try { if (localStorage.getItem("makutaPasscode") === null) localStorage.setItem("makutaPasscode", "preview"); } catch (e) {}
+// Script Properties with demo passwords only (the real ones are never in this repository).
+// Saved in the browser, so logins (sessions) survive a reload like on the real app.
+const PROPS_KEY = PREVIEW_KEY + ":props";
+const mockProps = Object.assign((() => { try { return JSON.parse(localStorage.getItem(PROPS_KEY)) || {}; } catch (e) { return {}; } })(),
+  { DEFAULT_PASSWORD: "demo", OWNER_USERNAME: "owner", OWNER_PASSWORD: "owner" });
+const saveProps = () => { try { localStorage.setItem(PROPS_KEY, JSON.stringify(mockProps)); } catch (e) {} };
+const PropertiesService = { getScriptProperties: () => ({
+  getProperty: k => mockProps[k] ?? null,
+  setProperty(k, v) { mockProps[k] = String(v); saveProps(); },
+  deleteProperty(k) { delete mockProps[k]; saveProps(); },
+  getProperties: () => Object.assign({}, mockProps),
+}) };
 const mockCache = {};
-const CacheService = { getScriptCache: () => ({ get: k => mockCache[k] || null, put: (k, v) => { mockCache[k] = v; } }) };
+const CacheService = { getScriptCache: () => ({ get: k => mockCache[k] || null, put: (k, v) => { mockCache[k] = v; }, remove: k => { delete mockCache[k]; } }) };
 SpreadsheetApp.ProtectionType = { RANGE: "RANGE" };
 const LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
 const HtmlService = {};
@@ -1084,7 +1163,40 @@ const CalendarApp = { getDefaultCalendar: () => ({
   },
   getEventById: id => ({ deleteEvent() { console.log("[preview] calendar reminder removed:", mockEvents[id] || id); delete mockEvents[id]; } }),
 }) };
+// SHA-256 like Utilities.computeDigest (the browser's own is async only)
+function sha256Bytes(text) {
+  const r = (x, n) => (x >>> n) | (x << (32 - n));
+  const k = [], h = [];
+  for (let n = 2, c = 0; c < 64; n++) {
+    let prime = true;
+    for (let i = 2; i * i <= n; i++) if (n % i === 0) { prime = false; break; }
+    if (!prime) continue;
+    if (c < 8) h[c] = (Math.pow(n, 1 / 2) % 1) * 4294967296 | 0;
+    k[c++] = (Math.pow(n, 1 / 3) % 1) * 4294967296 | 0;
+  }
+  const bytes = [...new TextEncoder().encode(text)], bits = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bits >>> (i * 8)) & 255);
+  for (let j = 0; j < bytes.length; j += 64) {
+    const w = [];
+    for (let i = 0; i < 64; i++) {
+      w[i] = i < 16 ? (bytes[j + 4 * i] << 24) | (bytes[j + 4 * i + 1] << 16) | (bytes[j + 4 * i + 2] << 8) | bytes[j + 4 * i + 3]
+        : (w[i - 16] + (r(w[i - 15], 7) ^ r(w[i - 15], 18) ^ (w[i - 15] >>> 3)) + w[i - 7] + (r(w[i - 2], 17) ^ r(w[i - 2], 19) ^ (w[i - 2] >>> 10))) | 0;
+    }
+    let [a, b, c, d, e, f, g, hh] = h;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (hh + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + k[i] + w[i]) | 0;
+      const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    [a, b, c, d, e, f, g, hh].forEach((v, i) => h[i] = (h[i] + v) | 0);
+  }
+  return h.flatMap(v => [v >>> 24, (v >>> 16) & 255, (v >>> 8) & 255, v & 255].map(x => x > 127 ? x - 256 : x));
+}
 const Utilities = {
+  DigestAlgorithm: { SHA_256: "SHA_256" },
+  computeDigest: (alg, text) => sha256Bytes(text),
   getUuid: () => ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c => (c ^ Math.random() * 16 >> c / 4).toString(16)),
   formatDate: d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"),
 };
@@ -1111,15 +1223,38 @@ const REMINDER_HOUR = 9;
 /* ---------- Milestones setup: edit names here when the team changes ---------- */
 const TASK_SHEET = 'Tasks';
 const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Link', 'Notes', 'History', 'Checklist', 'Work Month', 'For Month', 'Item'];
-// Each project: its graphic designer and videographer (both filled in automatically; no videographer =
-// chosen for every video task), its icon (also used in All Links), the content types it makes
-// (all except Event Attribute when not set) and whether it only runs organic content
+// Each project: its content writer and graphic designer (names of the accounts in USERS), its videographer
+// (filled in automatically; no videographer = chosen for every video task), its icon (also used in All Links),
+// the content types it makes (all except Event Attribute when not set) and whether it only runs organic
+// (orgOnly) or only ads (adsOnly) content
 const PROJECTS = {
-  'VTB': { designer: 'Ilham', videographer: 'Anno', icon: '🏙️', types: ['Static', 'Video (Shooting)'] },
-  'KRR': { designer: 'Alfid', videographer: 'Anno', icon: '🌴', types: ['Static', 'Video (Shooting)', 'Event Attribute'] },
-  'Makuta': { designer: 'Alfid', videographer: '', icon: '👑', orgOnly: true },
-  'GTR': { designer: 'Wawan', videographer: 'Anno', icon: '🏡', types: ['Static', 'Video (Non-Shooting)'] }
+  'VTB': { writer: 'Obi', designer: 'Ilham', videographer: 'Anno', icon: '🏙️', types: ['Static', 'Video (Shooting)'] },
+  'KRR': { writer: 'Obi', designer: 'Alfid', videographer: 'Anno', icon: '🌴', types: ['Static', 'Video (Shooting)', 'Event Attribute'] },
+  'Makuta': { writer: 'Obi', designer: 'Alfid', videographer: '', icon: '👑', orgOnly: true },
+  'GTR': { writer: 'Obi', designer: 'Wawan', videographer: 'Anno', icon: '🏡', types: ['Static', 'Video (Non-Shooting)'] },
+  'GM': { writer: 'Puput', designer: 'Wawan', videographer: 'Arif', icon: '🏢', adsOnly: true, types: ['Static', 'Video (Shooting)', 'Event Attribute'] },
+  'HC': { writer: 'Puput', designer: 'Ilham', videographer: 'Arif', icon: '🏥', adsOnly: true, types: ['Static', 'Video (Shooting)', 'Event Attribute'] },
+  'LUX': { writer: 'Puput', designer: 'Wawan', videographer: 'Arif', icon: '💎', types: ['Static', 'Video (Non-Shooting)', 'Video (Shooting)', 'Event Attribute'] }
 };
+// Team accounts (username: name and role). Content writers and graphic designers see the projects they
+// are set on above; managerial accounts and the owner see every project.
+// Passwords are not in this code (it is public on GitHub). Set them in Project Settings > Script Properties:
+//   DEFAULT_PASSWORD                  the password of every team account below
+//   OWNER_USERNAME / OWNER_PASSWORD   the owner (superadmin) account, shown everywhere only as "Owner"
+const USERS = {
+  hendra: { name: 'Kak Hendra', role: 'manager' },
+  riska: { name: 'Bu Riska', role: 'manager' },
+  obi: { name: 'Obi', role: 'writer' },
+  puput: { name: 'Puput', role: 'writer' },
+  alfid: { name: 'Alfid', role: 'designer' },
+  ilham: { name: 'Ilham', role: 'designer' },
+  wawan: { name: 'Wawan', role: 'designer' }
+};
+const ROLE_NAMES = { owner: 'Owner', manager: 'Managerial', writer: 'Content Writer', designer: 'Graphic Designer' };
+// Who presses each step's button: the QC steps are for managerial, Design and Motion for the project's
+// graphic designer, every other step (also those of Kak Faza, the client and the freelance videographers
+// and ads team) for the project's content writer. Managerial and the owner can press every step.
+const STEP_ACTORS = { qcBrief: 'manager', qcCut: 'manager', qcContent: 'manager', design: 'designer', motion: 'designer' };
 // Videographers that can be picked when editing a task (new tasks use the project's videographer)
 const VIDEOGRAPHERS = ['Anno', 'Arif'];
 // Static = carousel, single image and motion (all made by the graphic designer).
@@ -1147,9 +1282,9 @@ const BRIEF_MONTHS_AHEAD = { 'ORG': 1, 'ADS': 0 };
 // Every possible step, in order. Each task uses only the steps that fit its content type and channel (see pipeline_).
 // qc: the step approves or sends work back. person: who does it (empty = the task's designer/videographer).
 const STAGES = [
-  { key: 'brief', name: 'Drafting Brief', role: 'Content Writer', person: 'Obi', action: 'Submit Brief for QC' },
-  // Only used after the client asks for a revision: Obi decides who fixes it (not part of the normal timeline)
-  { key: 'revision', name: 'Client Revision', role: 'Content Writer', person: 'Obi', extra: true },
+  { key: 'brief', name: 'Drafting Brief', role: 'Content Writer', person: '', action: 'Submit Brief for QC' },
+  // Only used after the client asks for a revision: the content writer decides who fixes it (not part of the normal timeline)
+  { key: 'revision', name: 'Client Revision', role: 'Content Writer', person: '', extra: true },
   { key: 'qcBrief', name: 'QC Internal: Brief', role: 'Head Manager Content', person: 'Kak Hendra / Bu Riska', qc: true },
   { key: 'vo', name: 'Voice Over', role: 'Voice Over', person: 'Bu Riska', action: 'Voice Over Received' },
   { key: 'shoot', name: 'Shooting', role: 'Shooting', person: '', action: 'Shooting Done' },
@@ -1161,7 +1296,7 @@ const STAGES = [
   { key: 'qcContent', name: 'QC Internal: Content', role: 'Head Manager Content', person: 'Kak Hendra / Bu Riska', qc: true },
   { key: 'toClient', name: 'Send to Client', role: 'Assistant Manager', person: 'Kak Faza', action: 'Sent to Client' },
   { key: 'qcClient', name: 'QC Client', role: 'Client', person: 'Client', qc: true },
-  { key: 'post', name: 'Scheduling Post', role: 'Content Writer', person: 'Obi', action: 'Scheduled on Meta Business Suite' },
+  { key: 'post', name: 'Scheduling Post', role: 'Content Writer', person: '', action: 'Scheduled on Meta Business Suite' },
   { key: 'ads', name: 'Run Ads', role: 'Ads Team', person: 'Musthofa', action: 'Mark as Live on Ads' }
 ];
 
@@ -1177,46 +1312,213 @@ function include(name) {
   return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
-/* ---------- Passcode: the web app is open to "Anyone" (so it also works inside the Vercel page), ----------
-   so every call from the page carries the passcode, checked here before anything is read or changed. */
-const PASSCODE_PROPERTY = 'APP_PASSCODE';  // set in Project Settings > Script Properties
-const MAX_WRONG_PASSCODES = 10;            // then everything stays locked for 15 minutes
+/* ---------- Login: the web app is open to "Anyone" (so it also works inside the Vercel page), ----------
+   so every call from the page carries the login ticket of this browser, checked here before anything
+   is read or changed. The ticket itself is never stored, only its SHA-256 (see hash_). */
+const ACCOUNT_PROPERTIES = ['DEFAULT_PASSWORD', 'OWNER_USERNAME', 'OWNER_PASSWORD'];
+const OWNER_KEY = '@owner';            // how the owner is stored in sessions (never the real username)
+const SESSION_PREFIX = 'SESSION_';     // Script Properties key of a session: SESSION_<hash of the ticket>
+const SESSION_DAYS = 30;               // a login is remembered this long in one browser
+const MAX_WRONG_PASSWORDS = 10;        // then that account stays locked for 15 minutes
 
 // What the page may do. Every other function ends in "_", so google.script.run cannot call it.
 const API = {
   getInitialData: getInitialData_, getLinks: getLinks_, addLink: addLink_, updateLink: updateLink_,
   setPinned: setPinned_, deleteLink: deleteLink_, getTasks: getTasks_, addTask: addTask_, addTasks: addTasks_,
-  updateTask: updateTask_, setTaskItem: setTaskItem_, moveTask: moveTask_, deleteTask: deleteTask_
+  updateTask: updateTask_, setTaskItem: setTaskItem_, moveTask: moveTask_, deleteTask: deleteTask_,
+  logout: logout_, getAdminData: getAdminData_, endSessions: endSessions_
 };
+// Only these work while the owner uses View as (seeing the app as someone else changes nothing)
+const READ_ONLY_API = ['getInitialData', 'getLinks', 'getTasks'];
+const OWNER_API = ['getAdminData', 'endSessions'];
 
-// The only entry point for the page: api(passcode, "addLink", [data])
-function api(passcode, fn, args) {
-  checkPasscode_(passcode);
+// The account making the current call (set by api and login)
+let user_ = null;
+
+// The only entry point for the page: api(ticket, "addLink", [data]). viewAs: the owner sees the app
+// as that team account, read-only.
+function api(ticket, fn, args, viewAs) {
+  user_ = checkSession_(ticket);
   if (!API.hasOwnProperty(fn)) throw new Error('Unknown action.');
+  if (OWNER_API.indexOf(fn) >= 0 && user_.role !== 'owner') throw new Error('Only the owner can do this.');
+  if (viewAs) {
+    if (user_.role !== 'owner' || !USERS.hasOwnProperty(viewAs)) throw new Error('Only the owner can use View as.');
+    if (READ_ONLY_API.indexOf(fn) < 0) throw new Error('View as is read-only. Exit View as to make changes.');
+    user_ = Object.assign(account_(viewAs), { readOnly: true, session: user_.session });
+  }
   return API[fn].apply(null, Array.isArray(args) ? args : []);
 }
 
-// Errors starting with "LOCKED:" make the page show the passcode screen
-function checkPasscode_(passcode) {
-  const real = PropertiesService.getScriptProperties().getProperty(PASSCODE_PROPERTY);
-  if (!real) throw new Error('LOCKED: No passcode is set up yet. Add ' + PASSCODE_PROPERTY + ' in Apps Script > Project Settings > Script Properties.');
+// Called by the login screen: checks the username and password and returns a new ticket for this browser.
+// Errors starting with "LOCKED:" make the page show the login screen.
+function login(username, password, device) {
+  const props = PropertiesService.getScriptProperties();
+  const shared = props.getProperty('DEFAULT_PASSWORD');
+  if (!shared) throw new Error('LOCKED: The accounts are not set up yet. Add ' + ACCOUNT_PROPERTIES.join(', ') + ' in Apps Script > Project Settings > Script Properties.');
+  const name = String(username == null ? '' : username).trim().toLowerCase();
+  const owner = String(props.getProperty('OWNER_USERNAME') || '').trim().toLowerCase();
+  const key = owner && name === owner ? OWNER_KEY : USERS.hasOwnProperty(name) ? name : '';
+  const real = key === OWNER_KEY ? props.getProperty('OWNER_PASSWORD') : shared;
   const cache = CacheService.getScriptCache();
-  const wrong = Number(cache.get('wrongPasscodes') || 0);
-  if (wrong >= MAX_WRONG_PASSCODES) throw new Error('LOCKED: Too many wrong passcodes. Please try again in 15 minutes.');
-  if (String(passcode == null ? '' : passcode) !== real) {
-    cache.put('wrongPasscodes', String(wrong + 1), 15 * 60);
-    throw new Error('LOCKED: Wrong passcode.');
+  // Wrong tries are counted per account (all unknown usernames share one count)
+  const wrongKey = 'wrongLogin_' + (key || '?');
+  const wrong = Number(cache.get(wrongKey) || 0);
+  if (wrong >= MAX_WRONG_PASSWORDS) throw new Error('LOCKED: Too many wrong passwords for this account. Please try again in 15 minutes.');
+  return withLock_(() => {
+    if (!key || !real || String(password == null ? '' : password) !== real) {
+      cache.put(wrongKey, String(wrong + 1), 15 * 60);
+      // An unknown username is not written down (it could be a mistyped owner username)
+      logActivity_('Failed login', '', '', '', key ? account_(key).name : '(unknown username)');
+      throw new Error('LOCKED: Wrong username or password.');
+    }
+    cache.remove(wrongKey);
+    const ticket = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    const now = Date.now();
+    endOldSessions_(props, now);
+    props.setProperty(SESSION_PREFIX + hash_(ticket), JSON.stringify({ u: key, start: now, seen: now, device: String(device || '').slice(0, 120) }));
+    user_ = account_(key);
+    logActivity_('Login', '', '', String(device || '').slice(0, 120));
+    return { ticket: ticket };
+  });
+}
+
+// The account a session belongs to (a team username or OWNER_KEY), with the projects it sees
+function account_(key) {
+  const u = key === OWNER_KEY ? { name: 'Owner', role: 'owner' } : USERS[key];
+  if (!u) return null;
+  const all = u.role === 'owner' || u.role === 'manager';
+  return { key: key, name: u.name, role: u.role, all: all,
+    projects: Object.keys(PROJECTS).filter(p => all || PROJECTS[p][u.role] === u.name) };
+}
+
+function checkSession_(ticket) {
+  if (!ticket) throw new Error('LOCKED: ');
+  const props = PropertiesService.getScriptProperties();
+  const id = SESSION_PREFIX + hash_(String(ticket));
+  let s = null;
+  try { s = JSON.parse(props.getProperty(id) || 'null'); } catch (e) {}
+  const account = s && Date.now() < s.start + SESSION_DAYS * 864e5 ? account_(s.u) : null;
+  if (!account) {
+    if (s) props.deleteProperty(id);
+    throw new Error('LOCKED: ' + (s ? 'Your login has ended. Please log in again.' : 'Please log in again.'));
+  }
+  // "Last active" for the owner's session list, saved at most every 10 minutes
+  if (Date.now() - s.seen > 10 * 60000) {
+    s.seen = Date.now();
+    props.setProperty(id, JSON.stringify(s));
+  }
+  account.session = id;
+  return account;
+}
+
+function logout_() {
+  return withLock_(() => {
+    PropertiesService.getScriptProperties().deleteProperty(user_.session);
+    logActivity_('Logout', '', '', '');
+    return true;
+  });
+}
+
+// Removes the sessions older than SESSION_DAYS
+function endOldSessions_(props, now) {
+  const all = props.getProperties();
+  Object.keys(all).forEach(k => {
+    if (k.indexOf(SESSION_PREFIX) !== 0) return;
+    let s = null;
+    try { s = JSON.parse(all[k]); } catch (e) {}
+    if (!s || now >= s.start + SESSION_DAYS * 864e5) props.deleteProperty(k);
+  });
+}
+
+function hash_(text) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text)
+    .map(b => ('0' + (b & 255).toString(16)).slice(-2)).join('');
+}
+
+/* ---------- Owner only: who is logged in, the activity log, and ending sessions ---------- */
+
+function getAdminData_() {
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const sessions = Object.keys(props).filter(k => k.indexOf(SESSION_PREFIX) === 0).map(k => {
+    let s = {};
+    try { s = JSON.parse(props[k]); } catch (e) {}
+    const a = account_(s.u) || { name: '?', role: '' };
+    return { id: k, name: a.name, role: ROLE_NAMES[a.role] || '', device: s.device || '', start: new Date(s.start).toISOString(),
+      seen: new Date(s.seen).toISOString(), self: k === user_.session };
+  }).filter(s => s.name !== '?').sort((a, b) => b.seen.localeCompare(a.seen));
+  const sheet = getSheet_(ACTIVITY_SHEET, ACTIVITY_HEADERS);
+  const last = sheet.getLastRow();
+  const from = Math.max(2, last - MAX_ACTIVITY_SHOWN + 1);
+  const activity = last < 2 ? [] : sheet.getRange(from, 1, last - from + 1, ACTIVITY_HEADERS.length).getValues()
+    .map(r => ({ at: toIso_(r[0]), who: text_(r[1]), action: text_(r[2]), project: text_(r[3]), task: text_(r[4]), details: text_(r[5]) }))
+    .reverse();
+  const users = Object.keys(USERS).map(k => ({ username: k, name: USERS[k].name, role: ROLE_NAMES[USERS[k].role] }));
+  return { sessions: sessions, activity: activity, users: users };
+}
+
+// ids: the sessions to end (from getAdminData), or "all" for everyone except the owner's own session
+function endSessions_(ids) {
+  return withLock_(() => {
+    const props = PropertiesService.getScriptProperties();
+    const all = Object.keys(props.getProperties()).filter(k => k.indexOf(SESSION_PREFIX) === 0 && k !== user_.session);
+    const ended = ids === 'all' ? all : all.filter(k => Array.isArray(ids) && ids.indexOf(k) >= 0);
+    ended.forEach(k => props.deleteProperty(k));
+    logActivity_('Ended logins', '', '', ids === 'all' ? 'Everyone (' + ended.length + ')' : String(ended.length));
+    return ended.length;
+  });
+}
+
+/* ---------- Activity log: every login and change, in its own sheet (kept after a task is deleted) ---------- */
+const ACTIVITY_SHEET = 'Activity';
+const ACTIVITY_HEADERS = ['Time', 'Who', 'Action', 'Project', 'Task', 'Details'];
+const MAX_ACTIVITY_SHOWN = 500;
+
+// Always called inside withLock_. who: only for a failed login (otherwise the current account).
+function logActivity_(action, project, task, details, who) {
+  try {
+    const sheet = getSheet_(ACTIVITY_SHEET, ACTIVITY_HEADERS);
+    const row = sheet.getLastRow() + 1;
+    const missing = row - sheet.getMaxRows();
+    if (missing > 0) sheet.insertRowsAfter(sheet.getMaxRows(), missing);
+    sheet.getRange(row, 1, 1, ACTIVITY_HEADERS.length).setNumberFormat('@').setValues([[
+      new Date().toISOString(), who || (user_ ? user_.name : ''), action, project || '', task || '', String(details || '').slice(0, 1000)
+    ].map(safe_)]);
+  } catch (e) {
+    // The log never stops the change itself
   }
 }
 
-// Run once from the Apps Script editor: asks for the permissions and creates the Links and Tasks sheets
+/* ---------- Who may do what (the page shows the same rules, but they are enforced here) ---------- */
+const isBoss_ = u => u.role === 'owner' || u.role === 'manager';
+const seesProject_ = (u, project) => u.all || u.projects.indexOf(project) >= 0;
+// Create, edit and delete a project's tasks: its content writer, managerial and the owner
+const managesProject_ = (u, project) => isBoss_(u) || (u.role === 'writer' && (PROJECTS[project] || {}).writer === u.name);
+const stepActor_ = key => STEP_ACTORS[key] || 'writer';
+// Press the button of the task's current step
+function canPress_(u, t) {
+  if (isBoss_(u)) return true;
+  const actor = stepActor_(t.stage);
+  return u.role === actor && (PROJECTS[t.project] || {})[actor] === u.name;
+}
+// Take back the last move: whoever made it, managerial and the owner (moves saved before logins
+// existed have no name: the project's content writer too)
+function canUndo_(u, t) {
+  const last = t.history[t.history.length - 1] || {};
+  return isBoss_(u) || (last.by ? last.by === u.name : managesProject_(u, t.project));
+}
+// Tick Event Attribute deliverables: the content writer and graphic designer of the project, managerial, the owner
+const canTick_ = (u, t) => managesProject_(u, t.project) || (u.role === 'designer' && (PROJECTS[t.project] || {}).designer === u.name);
+
+// Run once from the Apps Script editor: asks for the permissions and creates the sheets
 // (with the edit warnings on their protected columns, see protectSheet_)
 function setup() {
   getSheet_();
   getSheet_(TASK_SHEET, TASK_HEADERS);
+  getSheet_(ACTIVITY_SHEET, ACTIVITY_HEADERS);
   CalendarApp.getDefaultCalendar();
-  const ready = !!PropertiesService.getScriptProperties().getProperty(PASSCODE_PROPERTY);
-  Logger.log(ready ? 'Setup done. The passcode is set.' : 'Setup done. Now add ' + PASSCODE_PROPERTY + ' in Project Settings > Script Properties.');
+  const props = PropertiesService.getScriptProperties();
+  const missing = ACCOUNT_PROPERTIES.filter(k => !props.getProperty(k));
+  Logger.log(missing.length ? 'Setup done. Now add ' + missing.join(', ') + ' in Project Settings > Script Properties.' : 'Setup done. The accounts are set.');
 }
 
 /* ---------- Server functions used by the page (through api) ---------- */
@@ -1226,7 +1528,9 @@ function getInitialData_() {
   return {
     links: getLinks_(),
     tasks: getTasks_(),
-    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS },
+    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS },
+    // Who is logged in (the owner's username is never sent)
+    user: { name: user_.name, role: user_.role, roleName: ROLE_NAMES[user_.role], projects: user_.projects, all: user_.all, readOnly: !!user_.readOnly },
     sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl()
   };
 }
@@ -1247,6 +1551,7 @@ function addLink_(data) {
     const link = Object.assign(clean_(data), { id: newId_(), createdAt: now, updatedAt: now });
     const warning = syncReminders_(link, []);
     writeRows_(sheet, sheet.getLastRow() + 1, [linkToRow_(link)]);
+    logActivity_('Added link', link.project, link.title, link.url);
     return publicLink_(link, warning);
   });
 }
@@ -1259,6 +1564,7 @@ function updateLink_(id, data) {
     const link = Object.assign(clean_(data), { id: old.id, createdAt: old.createdAt, updatedAt: new Date().toISOString() });
     const warning = syncReminders_(link, old.reminders);
     writeRows_(sheet, row, [linkToRow_(link)]);
+    logActivity_('Edited link', link.project, link.title, '');
     return publicLink_(link, warning);
   });
 }
@@ -1269,6 +1575,8 @@ function setPinned_(id, pinned) {
     const row = findRow_(sheet, id);
     sheet.getRange(row, PINNED_COL).setValue(pinned === true);
     sheet.getRange(row, UPDATED_COL).setValue(new Date().toISOString());
+    const link = rowToLink_(sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0]);
+    logActivity_(pinned === true ? 'Pinned link' : 'Unpinned link', link.project, link.title, '');
     return true;
   });
 }
@@ -1277,8 +1585,10 @@ function deleteLink_(id) {
   return withLock_(() => {
     const sheet = getSheet_();
     const row = findRow_(sheet, id);
-    deleteReminders_(parseLines_(sheet.getRange(row, REMINDERS_COL).getValue()));
+    const link = rowToLink_(sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0]);
+    deleteReminders_(link.reminders);
     sheet.deleteRow(row);
+    logActivity_('Deleted link', link.project, link.title, link.url);
     return true;
   });
 }
@@ -1291,7 +1601,15 @@ function getTasks_() {
   if (last < 2) return [];
   return sheet.getRange(2, 1, last - 1, TASK_HEADERS.length).getValues()
     .filter(r => r[0] !== '')
-    .map(rowToTask_);
+    .map(rowToTask_)
+    .filter(t => seesProject_(user_, t.project));
+}
+
+// The task in that row, if the current account may see it (otherwise it is "not found")
+function readVisibleTask_(sheet, row) {
+  const task = readTask_(sheet, row);
+  if (!seesProject_(user_, task.project)) throw new Error('Task not found. It may have been deleted - please refresh the page.');
+  return task;
 }
 
 function addTask_(data) {
@@ -1308,6 +1626,7 @@ function addTasks_(list, workMonth) {
   const tasks = list.map(d => {
     try {
       const t = cleanTask_(d);
+      if (!managesProject_(user_, t.project)) throw new Error('Only the content writer of ' + t.project + ' (or managerial) can create its tasks.');
       t.workMonth = month;
       t.forMonth = month ? addMonths_(month, BRIEF_MONTHS_AHEAD[t.channel] || 0) : '';
       return t;
@@ -1321,7 +1640,8 @@ function addTasks_(list, workMonth) {
     const first = sheet.getLastRow() + 1;
     return tasks.map((t, i) => {
       Object.assign(t, { id: newId_('T'), createdAt: now, updatedAt: now, stage: 'brief', checklist: [] });
-      t.history = [{ at: now, action: 'created', from: '', to: 'brief', note: '' }];
+      t.history = [{ at: now, action: 'created', from: '', to: 'brief', note: '', by: user_.name }];
+      logActivity_('Created task', t.project, t.title, month ? 'Monthly Brief ' + month : t.type);
       return writeTask_(sheet, first + i, t);
     });
   });
@@ -1331,9 +1651,14 @@ function updateTask_(id, data) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const row = findRow_(sheet, id);
-    const task = Object.assign(readTask_(sheet, row), cleanTask_(data), { updatedAt: new Date().toISOString() });
+    const old = readVisibleTask_(sheet, row);
+    const changes = cleanTask_(data);
+    // A task can only be moved to a project its editor also looks after
+    if (!managesProject_(user_, old.project) || !managesProject_(user_, changes.project)) throw new Error('Only the content writer of ' + old.project + ' (or managerial) can edit this task.');
+    const task = Object.assign(old, changes, { updatedAt: new Date().toISOString() });
     task.stage = fitStage_(task);
     if (task.type !== EVENT_TYPE) task.checklist = [];
+    logActivity_('Edited task', task.project, task.title, '');
     return writeTask_(sheet, row, task);
   });
 }
@@ -1343,17 +1668,19 @@ function setTaskItem_(id, item, checked) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const row = findRow_(sheet, id);
-    const task = readTask_(sheet, row);
+    const task = readVisibleTask_(sheet, row);
     if (task.type !== EVENT_TYPE || !EVENT_ITEMS.some(i => i.name === item)) throw new Error('This task has no such item.');
+    if (!canTick_(user_, task)) throw new Error('Only the content writer or graphic designer of ' + task.project + ' (or managerial) can tick this.');
     task.checklist = task.checklist.filter(i => i !== item);
     if (checked === true) task.checklist.push(item);
     task.updatedAt = new Date().toISOString();
+    logActivity_(checked === true ? 'Ticked' : 'Unticked', task.project, task.title, item);
     return writeTask_(sheet, row, task);
   });
 }
 
 // action: "advance" = the current step is done / approved, "revise" = a QC step sends the work
-// back to opts.to (QC Client always sends it back to Obi first), "assign" = Obi passes a client
+// back to opts.to (QC Client always sends it back to the content writer first), "assign" = the writer passes a client
 // revision on to opts.to, "undo" = take back the last move. opts.from is the step the page showed,
 // so a double click (or a change made on another device) can't move the task twice.
 // Monthly Brief tasks that share the step move together (see linkedTasks_); they come back in task.linked.
@@ -1372,8 +1699,13 @@ function moveTask_(id, action, opts) {
       all.push(t);
     });
     const task = all.filter(t => t.id === String(id))[0];
-    if (!task) throw new Error('Task not found. It may have been deleted - please refresh the page.');
+    if (!task || !seesProject_(user_, task.project)) throw new Error('Task not found. It may have been deleted - please refresh the page.');
     if (opts.from && opts.from !== task.stage) throw new Error('This task was already updated. Please refresh the page.');
+    // Linked Monthly Brief tasks share the project, so the same people may move them
+    if (action === 'undo' ? !canUndo_(user_, task) : !canPress_(user_, task)) {
+      throw new Error(action === 'undo' ? 'Only the person who made the last move (or managerial) can undo it.'
+        : 'This step is not yours: it is waiting for ' + waitingFor_(task) + '.');
+    }
     const now = new Date().toISOString();
     const note = String(opts.note || '').trim().slice(0, 1000);
     let moved;
@@ -1401,10 +1733,28 @@ function moveTask_(id, action, opts) {
     moved.forEach(o => {
       o.updatedAt = now;
       writeTask_(sheet, rows[o.id], o);
+      logActivity_(action === 'undo' ? 'Undo' : 'Moved', o.project, o.title, action === 'undo' ? 'Back to ' + stageInfo_(o.stage).name
+        : activityText_(o.history[o.history.length - 1]));
     });
     task.linked = moved.slice(1);
     return task;
   });
+}
+
+// "Design done → QC Internal: Content", "QC Client asked for a revision → Client Revision: change the logo"
+function activityText_(e) {
+  const to = e.to === 'done' ? 'Done' : stageInfo_(e.to).name;
+  const text = stageInfo_(e.from).name + (e.action === 'revision' ? ' asked for a revision → ' : e.action === 'approved' ? ' approved → ' : e.action === 'assign' ? ' passed to → ' : ' done → ') + to;
+  return text + (e.note ? ': ' + e.note : '');
+}
+
+// Who the task's current step is waiting for, e.g. "Alfid", "Kak Faza (via Obi)", "QC (Kak Hendra / Bu Riska)"
+function waitingFor_(t) {
+  const s = stageInfo_(t.stage);
+  const owner = stageOwner_(s, t);
+  if (stepActor_(t.stage) === 'manager') return 'QC (' + owner + ')';
+  const writer = (PROJECTS[t.project] || {}).writer;
+  return stepActor_(t.stage) === 'writer' && writer && owner !== writer && owner.indexOf(writer + ' ') !== 0 ? owner + ' (via ' + writer + ')' : owner;
 }
 
 // Moves one task a step (advance / revise / assign, see moveTask_). sync marks moves made together.
@@ -1412,7 +1762,7 @@ function stepTask_(task, action, opts, now, sync) {
   const steps = pipeline_(task.type, task.channel);
   const i = steps.indexOf(task.stage);
   const entry = (act, to) => {
-    const e = { at: now, action: act, from: task.stage, to: to, note: opts.note };
+    const e = { at: now, action: act, from: task.stage, to: to, note: opts.note, by: user_.name };
     if (sync) e.sync = sync;
     task.history.push(e);
     task.stage = to;
@@ -1502,7 +1852,11 @@ function addMonths_(month, n) {
 function deleteTask_(id) {
   return withLock_(() => {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
-    sheet.deleteRow(findRow_(sheet, id));
+    const row = findRow_(sheet, id);
+    const task = readVisibleTask_(sheet, row);
+    if (!managesProject_(user_, task.project)) throw new Error('Only the content writer of ' + task.project + ' (or managerial) can delete this task.');
+    sheet.deleteRow(row);
+    logActivity_('Deleted task', task.project, task.title, currentStep_(task));
     return true;
   });
 }
@@ -1554,10 +1908,12 @@ function currentStep_(t) {
   return s.name + ' (' + stageOwner_(s, t) + ')';
 }
 
-// Who does a step for this task; the designer / videographer come from the task itself
+// Who does a step for this task; the designer / videographer come from the task itself, the content
+// writer from its project
 function stageOwner_(s, t) {
-  if (s.key === 'shoot') return 'Obi & ' + (t.videographer || 'Videographer');
-  return s.person || (s.role === 'Graphic Designer' ? t.designer : s.role === 'Videographer' ? t.videographer : '') || s.role;
+  const writer = (PROJECTS[t.project] || {}).writer || 'Content Writer';
+  if (s.key === 'shoot') return writer + ' & ' + (t.videographer || 'Videographer');
+  return s.person || (s.role === 'Graphic Designer' ? t.designer : s.role === 'Videographer' ? t.videographer : s.role === 'Content Writer' ? writer : '') || s.role;
 }
 
 function cleanTask_(d) {
@@ -1584,6 +1940,7 @@ function cleanTask_(d) {
   if (!PROJECTS.hasOwnProperty(t.project)) throw new Error('Please choose the project.');
   const p = PROJECTS[t.project];
   if (!collateral && p.orgOnly && t.channel !== 'ORG') throw new Error(t.project + ' is organic only. Use ORG in the title.');
+  if (!collateral && p.adsOnly && t.channel !== 'ADS') throw new Error(t.project + ' runs ADS only. Use ADS in the title.');
   t.designer = p.designer;
   if (!t.type) throw new Error('Please choose the content type.');
   // Every project can get Collateral; the other types only where the project makes them
@@ -1673,7 +2030,8 @@ function getSheet_(name, headers) {
 // "Are you sure?" warning; the website itself still writes to them as usual.
 const PROTECTED_COLUMNS = {
   'Links': ['ID', 'Reminder IDs'],
-  'Tasks': ['ID', 'Stage', 'Current Step', 'Revisions', 'History', 'Checklist']
+  'Tasks': ['ID', 'Stage', 'Current Step', 'Revisions', 'History', 'Checklist'],
+  'Activity': ACTIVITY_HEADERS
 };
 
 // Adds the warnings once per sheet (again if the sheet was recreated); existing ones are kept
@@ -1895,7 +2253,8 @@ function rowToLink_(r) {
   };
 }
 
-return Object.assign({ api }, API);
+// actAs: run the server functions directly as that account (the demo data and the tests use it)
+return Object.assign({ api, login, actAs: key => { user_ = account_(key === "owner" ? OWNER_KEY : key); } }, API);
 })();</script>
 <script>
 const google = { script: {
@@ -1912,11 +2271,198 @@ const google = { script: {
   } }),
 } };
 
-function previewClear() {
-  if (!confirm("Delete all data in this local preview?")) return;
-  ["Links", "Tasks"].forEach(name => { mockSheet(name).data = []; mockSheet(name).save(); });
-  loadData();
-  toast("Preview data cleared");
+// Demo data for the local preview only (never part of the real app): links, and tasks in every project
+// at different steps. Each step is pressed by the account whose step it is, so History and the owner's
+// Activity log show real names. Change DEMO_VERSION to load it again in browsers that already have it.
+const DEMO_VERSION = "users-1";
+const DEMO_WRITERS = { VTB: "obi", KRR: "obi", Makuta: "obi", GTR: "obi", GM: "puput", HC: "puput", LUX: "puput" };
+const DEMO_DESIGNERS = { VTB: "ilham", KRR: "alfid", Makuta: "alfid", GTR: "wawan", GM: "wawan", HC: "ilham", LUX: "wawan" };
+const DEMO_MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+let demoQcTurn = 0;
+
+// Whose button the task's current step is (QC takes turns between Kak Hendra and Bu Riska)
+function demoActor(t) {
+  if (["qcBrief", "qcCut", "qcContent"].includes(t.stage)) return ["hendra", "riska"][demoQcTurn++ % 2];
+  if (["design", "motion"].includes(t.stage)) return DEMO_DESIGNERS[t.project];
+  return DEMO_WRITERS[t.project];
+}
+
+function demoTask(id) {
+  GAS.actAs("owner");
+  return GAS.getTasks().find(t => t.id === id);
+}
+
+// "a" = the current step is done / approved, "r:<step>|<note>" = QC sends it back,
+// "s:<step>" = the content writer passes a client revision on, "end" = advance until done
+function demoMoves(id, moves) {
+  moves.forEach(m => {
+    if (m === "end") {
+      while (demoTask(id).stage !== "done") demoMoves(id, ["a"]);
+      return;
+    }
+    GAS.actAs(demoActor(demoTask(id)));
+    const [to, note] = m.slice(2).split("|");
+    if (m === "a") GAS.moveTask(id, "advance");
+    else if (m.startsWith("s:")) GAS.moveTask(id, "assign", { to });
+    else GAS.moveTask(id, "revise", { to, note });
+  });
+}
+
+// "2026-11" plus n months
+function demoMonth(n) {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// A Monthly Brief made by the project's writer: { "BRIEF ORG": id, "VIDEO ADS": id, "VIDEO NS ORG": id, ... }
+function demoMonthly(project, workMonth, types, channels, deadline, videographers = {}) {
+  const both = types.filter(t => t.startsWith("Video")).length > 1;
+  const list = [];
+  channels.forEach(ch => types.forEach(type => {
+    const d = new Date(Number(workMonth.slice(0, 4)), Number(workMonth.slice(5, 7)) - 1 + (ch === "ORG" ? 1 : 0), 1);
+    const kind = type === "Static" ? "BRIEF" : both && type === "Video (Non-Shooting)" ? "VIDEO CTC NON-SHOOTING" : "VIDEO CTC";
+    list.push({ title: `${kind} ${ch} ${DEMO_MONTHS[d.getMonth()]} ${project.toUpperCase()}`, project, type, deadline,
+      videographer: videographers[type] || "", notes: "" });
+  }));
+  GAS.actAs(DEMO_WRITERS[project]);
+  const out = {};
+  GAS.addTasks(list, workMonth).forEach(t => {
+    const key = (t.type === "Static" ? "BRIEF" : t.type === "Video (Non-Shooting)" && both ? "VIDEO NS" : "VIDEO") + " " + t.channel;
+    out[key] = t.id;
+  });
+  return out;
+}
+
+function demoSingle(data) {
+  GAS.actAs(DEMO_WRITERS[data.project]);
+  return GAS.addTask(Object.assign({ notes: "", deadline: "" }, data)).id;
+}
+
+// Spreads a task's history over the past "ago" days, so the dates are not all "now"
+function demoBackdate(id, ago) {
+  const sheet = mockSheet("Tasks");
+  const row = sheet.data.find(r => r[0] === id);
+  const history = JSON.parse(row[15]);
+  const start = Date.now() - ago * 864e5;
+  const gap = ago * 864e5 * 0.85 / Math.max(1, history.length - 1);
+  history.forEach((h, i) => h.at = new Date(start + i * gap + (i % 3) * 2 * 36e5).toISOString());
+  row[1] = history[0].at;
+  row[2] = history[history.length - 1].at;
+  row[15] = JSON.stringify(history);
+  sheet.save();
+}
+
+function loadDemoData() {
+  ["Links", "Tasks", "Activity"].forEach(name => { mockSheet(name).data = []; mockSheet(name).save(); });
+  demoQcTurn = 0;
+  const day = n => Utilities.formatDate(new Date(Date.now() + n * 864e5));
+  const now = demoMonth(0), last = demoMonth(-1);
+  const S = "Static", VS = "Video (Shooting)", VN = "Video (Non-Shooting)";
+  const ago = {};
+  const backdate = (ids, days) => Object.values(ids).forEach(id => ago[id] = days);
+
+  // Links: anyone logged in can add them
+  [
+    ["obi", { title: "KRR Content Calendar", url: "https://docs.google.com/spreadsheets/d/demo-krr/edit", category: "Google Spreadsheets", project: "KRR", status: "In Progress", deadline: day(6), purpose: "Instagram feeds for this month" }],
+    ["obi", { title: "VTB Competitor Analysis Deck", url: "https://docs.google.com/presentation/d/demo-vtb/edit", category: "Google Slide", project: "VTB", status: "In Review", deadline: day(2), pinned: true, purpose: "Market & competitor mapping" }],
+    ["alfid", { title: "Makuta Reels CTC", url: "https://drive.google.com/file/d/demo-makuta-reels/view", category: "CTC-Video [VG-Arif]", project: "Makuta", status: "In Review", deadline: day(4), purpose: "CTC for this month's shooting" }],
+    ["puput", { title: "LUX Brand Guideline", url: "https://drive.google.com/drive/folders/demo-lux", category: "Drive Folder", project: "LUX", status: "Done", purpose: "Logo, colours and fonts" }],
+    ["puput", { title: "GM Ads Copy Bank", url: "https://docs.google.com/document/d/demo-gm/edit", category: "Google Docs", project: "GM", status: "Draft", deadline: day(9), purpose: "Headlines and CTAs for the ads" }],
+    ["wawan", { title: "GTR Key Visual", url: "https://www.figma.com/file/demo-gtr", category: "Other", project: "GTR", status: "Revision", deadline: day(-1), purpose: "Main visual for the campaign" }],
+    ["ilham", { title: "HC Moodboard", url: "https://pinterest.com/demo-hc", category: "Reference", project: "REFERENCE", status: "Draft", purpose: "Visual references for HC" }],
+  ].forEach(([who, link]) => { GAS.actAs(who); GAS.addLink(link); });
+
+  // Last month: finished work
+  const luxOld = demoMonthly("LUX", last, [S, VN, VS], ["ORG", "ADS"], day(-20));
+  Object.values(luxOld).forEach(id => demoMoves(id, ["end"]));
+  backdate(luxOld, 40);
+  const krrOld = demoMonthly("KRR", last, [S, VS], ["ADS"], day(-18));
+  demoMoves(krrOld["BRIEF ADS"], ["a", "a", "a", "a", "a", "r:|Client: harga promo di slide 3 diganti", "s:design", "end"]);
+  demoMoves(krrOld["VIDEO ADS"], ["end"]);
+  backdate(krrOld, 38);
+
+  // KRR (Obi · Alfid): briefs approved, design and CTC under way, an exhibition coming up
+  const krr = demoMonthly("KRR", now, [S, VS], ["ORG", "ADS"], day(10));
+  demoMoves(krr["BRIEF ADS"], ["a"]);
+  demoMoves(krr["BRIEF ORG"], ["a"]);
+  demoMoves(krr["BRIEF ADS"], ["a"]);          // QC Brief approves all four together
+  demoMoves(krr["VIDEO ADS"], ["a"]);          // one shooting for both videos
+  demoMoves(krr["BRIEF ADS"], ["a"]);
+  demoMoves(krr["VIDEO ADS"], ["a", "a"]);
+  backdate(krr, 8);
+  const krrEvent = demoSingle({ title: `EVENT ORG ${DEMO_MONTHS[Number(demoMonth(1).slice(5)) - 1]} KRR`, project: "KRR", type: "Event Attribute", deadline: day(12), notes: "Pameran KRR di mall, booth 2x3 m" });
+  demoMoves(krrEvent, ["a", "a", "a"]);
+  GAS.actAs("alfid");
+  GAS.setTaskItem(krrEvent, "Countdown H-5", true);
+  ago[krrEvent] = 5;
+  const krrFlyer = demoSingle({ title: "FLYER KRR", project: "KRR", type: "Collateral", item: "Flyer", deadline: day(7) });
+  demoMoves(krrFlyer, ["a", "a"]);
+  ago[krrFlyer] = 3;
+
+  // VTB (Obi · Ilham): the client asked for a revision; a video waits at QC Client
+  const vtb = demoMonthly("VTB", now, [S, VS], ["ORG", "ADS"], day(8));
+  demoMoves(vtb["BRIEF ADS"], ["a"]);
+  demoMoves(vtb["BRIEF ORG"], ["a"]);
+  demoMoves(vtb["BRIEF ADS"], ["a"]);
+  demoMoves(vtb["VIDEO ADS"], ["a"]);
+  demoMoves(vtb["BRIEF ADS"], ["a", "a", "a", "r:|Client: ganti headline promo cicilan", "s:design"]);
+  demoMoves(vtb["VIDEO ADS"], ["a", "a", "a", "a", "a"]);
+  backdate(vtb, 10);
+
+  // GTR (Obi · Wawan): a voice over is waiting, the ADS static is ready to run
+  const gtr = demoMonthly("GTR", now, [S, VN], ["ORG", "ADS"], day(5));
+  demoMoves(gtr["BRIEF ADS"], ["a"]);
+  demoMoves(gtr["BRIEF ORG"], ["a"]);
+  demoMoves(gtr["BRIEF ADS"], ["a"]);
+  demoMoves(gtr["VIDEO ADS"], ["a"]);
+  demoMoves(gtr["BRIEF ADS"], ["a", "a", "a", "a"]);
+  demoMoves(gtr["BRIEF ORG"], ["a"]);
+  backdate(gtr, 9);
+
+  // Makuta (Obi · Alfid, organic only): this month's briefs wait for QC
+  const makuta = demoMonthly("Makuta", now, [S, VN, VS], ["ORG"], day(14), { [VS]: "Arif", [VN]: "Anno" });
+  demoMoves(makuta["BRIEF ORG"], ["a"]);
+  backdate(makuta, 3);
+
+  // GM (Puput · Wawan, ADS only): QC sent the design back, the shooting is planned
+  const gm = demoMonthly("GM", now, [S, VS], ["ADS"], day(6));
+  demoMoves(gm["BRIEF ADS"], ["a", "a", "a", "r:design|Warna CTA kurang kontras"]);
+  backdate(gm, 7);
+  const gmEvent = demoSingle({ title: `EVENT ADS ${DEMO_MONTHS[Number(now.slice(5)) - 1]} GM`, project: "GM", type: "Event Attribute", deadline: day(20), notes: "Grand opening showroom" });
+  ago[gmEvent] = 1;
+
+  // HC (Puput · Ilham, ADS only): just started
+  const hc = demoMonthly("HC", now, [S, VS], ["ADS"], day(15));
+  backdate(hc, 1);
+  const hcBanner = demoSingle({ title: "ROLL-UP BANNER HC", project: "HC", type: "Collateral", item: "Roll-up Banner", deadline: day(9) });
+  demoMoves(hcBanner, ["a"]);
+  ago[hcBanner] = 2;
+
+  // LUX (Puput · Wawan): videos in CTC, the ADS static is with Kak Faza
+  const lux = demoMonthly("LUX", now, [S, VN, VS], ["ORG", "ADS"], day(11));
+  demoMoves(lux["BRIEF ADS"], ["a"]);
+  demoMoves(lux["BRIEF ORG"], ["a"]);
+  demoMoves(lux["BRIEF ADS"], ["a"]);
+  demoMoves(lux["VIDEO ADS"], ["a"]);
+  demoMoves(lux["BRIEF ADS"], ["a", "a"]);
+  demoMoves(lux["VIDEO NS ADS"], ["a"]);
+  backdate(lux, 6);
+
+  Object.keys(ago).forEach(id => demoBackdate(id, ago[id]));
+  GAS.actAs("owner");
+  try { localStorage.setItem(PREVIEW_KEY + ":version", DEMO_VERSION); } catch (e) {}
+}
+
+// The demo data is added the first time (and again when it changes); logins stay
+if ((() => { try { return localStorage.getItem(PREVIEW_KEY + ":version"); } catch (e) { return ""; } })() !== DEMO_VERSION) loadDemoData();
+
+function previewReset() {
+  if (!confirm("Replace everything in this local preview with fresh demo data?")) return;
+  loadDemoData();
+  if (state.user) loadData();
+  toast("Demo data loaded");
 }
 </script><script>
   const STATUSES = ["Draft", "In Progress", "In Review", "Revision", "Done"];
@@ -1937,7 +2483,7 @@ function previewClear() {
     return m ? { base: m[1], source: m[2] } : { base: c, source: "" };
   }
   const categoryLabel = c => `${CATEGORY_ICONS[splitCategory(c).base] || "📌"} ${c}`;
-  const state = { links: [], tasks: [], cfg: null, app: {}, loaded: false, editingId: null, dupId: null, view: "table", editingTaskId: null, openHistory: new Set(), justMoved: null, justTicked: null };
+  const state = { links: [], tasks: [], cfg: null, app: {}, user: null, viewAs: "", loaded: false, editingId: null, dupId: null, view: "table", editingTaskId: null, openHistory: new Set(), justMoved: null, justTicked: null };
 
   const SORTERS = {
     newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
@@ -1947,21 +2493,27 @@ function previewClear() {
     za: (a, b) => b.title.localeCompare(a.title),
   };
 
-  /* ---------- Server calls (each one carries the passcode) ---------- */
-  const PASSCODE_KEY = "makutaPasscode";
-  let passcode = "";
-  try { passcode = localStorage.getItem(PASSCODE_KEY) || ""; } catch (e) {}
+  /* ---------- Server calls (each one carries this browser's login ticket) ---------- */
+  const TICKET_KEY = "makutaTicket";
+  let ticket = "";
+  try {
+    ticket = localStorage.getItem(TICKET_KEY) || "";
+    localStorage.removeItem("makutaPasscode");  // the passcode used before logins existed
+  } catch (e) {}
 
-  function api(fn, ...args) {
+  // Errors starting with "LOCKED:" (not logged in, login ended, wrong password) show the login screen
+  function callServer(fn, ...args) {
     return new Promise((resolve, reject) =>
       google.script.run.withSuccessHandler(resolve).withFailureHandler(err => {
         const locked = String(err && err.message).match(/LOCKED:\s*(.*)$/);
         if (locked) showLock(locked[1]);
         reject(locked ? new Error("Locked: " + locked[1]) : err);
-      }).api(passcode, fn, args));
+      })[fn](...args));
   }
+  // While the owner uses View as, every call reads the app as that account (the server refuses changes)
+  const api = (fn, ...args) => callServer("api", ticket, fn, args, state.viewAs || "");
 
-  /* ---------- Passcode screen ---------- */
+  /* ---------- Login screen ---------- */
   function showLock(message) {
     state.loaded = false;
     $("lockErr").textContent = message || "";
@@ -1970,37 +2522,62 @@ function previewClear() {
     togglePasscode(false);
     document.querySelectorAll(".modal-bg.show").forEach(m => m.classList.remove("show"));
     openModal("lockModal");
-    setTimeout(() => $("lockInput").focus(), 50);
+    // Unless someone already started typing in it
+    setTimeout(() => $("lockModal").contains(document.activeElement) || ($("lockUser").value ? $("lockInput") : $("lockUser")).focus(), 50);
   }
 
-  // Eye button: show the passcode to check for typos, click again to hide it
+  // Eye button: show the password to check for typos, click again to hide it
   function togglePasscode(show) {
     show = typeof show === "boolean" ? show : $("lockInput").type === "password";
     $("lockInput").type = show ? "text" : "password";
     $("lockEye").classList.toggle("on", show);
-    $("lockEye").title = show ? "Hide passcode" : "Show passcode";
+    $("lockEye").title = show ? "Hide password" : "Show password";
     $("lockEye").setAttribute("aria-label", $("lockEye").title);
     $("lockEye").setAttribute("aria-pressed", String(show));
     $("lockInput").focus();
   }
 
-  function unlock(e) {
-    e.preventDefault();
-    const value = $("lockInput").value;
-    if (!value) return;
-    passcode = value;
-    try { localStorage.setItem(PASSCODE_KEY, passcode); } catch (err) {}
-    closeModal("lockModal");
-    loadData();
+  // The browser and system, so the owner can tell sessions apart, e.g. "Chrome · Windows"
+  function deviceName() {
+    const ua = navigator.userAgent;
+    const browser = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+    const system = /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+    return system ? `${browser} · ${system}` : browser;
   }
 
-  // Forget the passcode on this device (e.g. on a shared computer)
-  function lockApp() {
-    passcode = "";
-    try { localStorage.removeItem(PASSCODE_KEY); } catch (e) {}
+  async function unlock(e) {
+    e.preventDefault();
+    const username = $("lockUser").value.trim(), password = $("lockInput").value;
+    if (!username || !password) return ($("lockErr").textContent = "Fill in your username and password.", $("lockErr").hidden = false);
+    $("lockBtn").disabled = true;
+    try {
+      const res = await callServer("login", username, password, deviceName());
+      ticket = res.ticket;
+      try { localStorage.setItem(TICKET_KEY, ticket); } catch (err) {}
+      closeModal("lockModal");
+      loadData();
+    } catch (err) {
+      // showLock already shows the reason (wrong password, account locked)
+      if (!/^Locked:/.test(err.message)) showLock(err.message);
+    } finally {
+      $("lockBtn").disabled = false;
+    }
+  }
+
+  // Ends the login on this browser (e.g. on a shared computer)
+  async function lockApp() {
+    try { await api("logout"); } catch (e) {}
+    forgetLogin();
+  }
+  function forgetLogin() {
+    ticket = "";
+    try { localStorage.removeItem(TICKET_KEY); } catch (e) {}
     state.links = [];
     state.tasks = [];
+    state.user = null;
+    state.viewAs = "";
     $("results").innerHTML = $("taskResults").innerHTML = "";
+    $("lockUser").value = "";
     showLock();
   }
 
@@ -2127,7 +2704,7 @@ function previewClear() {
 
   /* ---------- Views ---------- */
   function showView(name) {
-    const views = { submit: "Submit", links: "Links", tasks: "Tasks" };
+    const views = { submit: "Submit", links: "Links", tasks: "Tasks", admin: "Admin" };
     Object.keys(views).forEach(v => {
       $("view" + views[v]).hidden = name !== v;
       $("tab" + views[v]).classList.toggle("active", name === v);
@@ -2135,11 +2712,31 @@ function previewClear() {
     $("container").classList.toggle("wide", name !== "submit");
     if (name === "links") render();
     if (name === "tasks") renderTasks();
+    if (name === "admin") loadAdmin();
     // Restart the fade-in of the view that just opened
     const view = $("view" + views[name]);
     view.classList.remove("view-in");
     void view.offsetWidth;
     view.classList.add("view-in");
+  }
+
+  /* ---------- Who is logged in ---------- */
+  // Header name, the owner's Admin tab, and the View as banner (everything that changes data is hidden)
+  function showUser() {
+    const u = state.user;
+    $("userChip").hidden = false;
+    $("userName").textContent = u.name;
+    // "Obi Content Writer", but just "Owner" for the owner
+    $("userRole").textContent = u.roleName === u.name ? "" : u.roleName;
+    // While viewing as someone else the Admin tab is hidden too (the banner's Exit brings it back)
+    const owner = u.role === "owner";
+    $("tabAdmin").hidden = !owner;
+    // The Google Sheet holds every project, so only managerial and the owner get its button
+    $("sheetLink").hidden = !["owner", "manager"].includes(u.role);
+    $("viewAsBanner").hidden = !state.viewAs;
+    if (state.viewAs) $("viewAsName").textContent = `${u.name} (${u.roleName})`;
+    document.body.classList.toggle("read-only", !!u.readOnly);
+    if (!owner && !$("viewAdmin").hidden) showView("tasks");
   }
 
   /* ---------- Data loading ---------- */
@@ -2149,9 +2746,11 @@ function previewClear() {
       state.links = data.links;
       state.tasks = data.tasks;
       state.cfg = data.taskConfig;
+      state.user = data.user;
       state.app = data;
       state.loaded = true;
       if (data.sheetUrl) $("sheetLink").href = data.sheetUrl;
+      showUser();
       refreshOptions();
       setupTaskOptions();
       render();
@@ -2646,7 +3245,7 @@ function previewClear() {
   const STEP_GROUPS = {
     current: { label: `Active + done in the last ${RECENT_DONE_DAYS} days`, test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
     active: { label: "All active tasks", test: t => t.stage !== "done" },
-    obi: { label: "My to-do (Obi)", test: t => ["brief", "revision", "shoot", "post"].includes(t.stage) },
+    mine: { label: "My Tasks", test: t => isMyStep(t) },
     qc: { label: "Waiting QC Internal", test: t => ["qcBrief", "qcCut", "qcContent"].includes(t.stage) },
     production: { label: "In production (VO / CTC / design / ToV)", test: t => ["vo", "video", "design", "motion"].includes(t.stage) },
     client: { label: "At client", test: t => ["toClient", "qcClient"].includes(t.stage) },
@@ -2660,10 +3259,47 @@ function previewClear() {
   const TYPE_ICONS = { video: "🎬", event: "🎪", collateral: "🖨️", static: "🖼️" };
   const typeKind = type => isVideoType(type) ? "video" : isEventType(type) ? "event" : isCollateralType(type) ? "collateral" : "static";
   const stageOf = key => state.cfg.stages.find(s => s.key === key) || { key, name: key, role: "" };
+  // "Content Writer: Obi · Graphic Designer: Alfid" and " · Organic only" / " · ADS only"
+  const projectTeam = p => `Content Writer: ${escapeHtml(p.writer || "-")} · Graphic Designer: ${escapeHtml(p.designer || "-")}`;
+  const channelNote = p => p.orgOnly ? " · Organic only" : p.adsOnly ? " · ADS only" : "";
+  const projectWriter = t => (state.cfg.projects[t.project] || {}).writer || "Content Writer";
   // Who does this step for this task (mirrors stageOwner_ in Code.gs)
   function stageOwner(s, t) {
-    if (s.key === "shoot") return `Obi & ${t.videographer || "Videographer"}`;
-    return s.person || (s.role === "Graphic Designer" ? t.designer : s.role === "Videographer" ? t.videographer : "") || s.role;
+    if (s.key === "shoot") return `${projectWriter(t)} & ${t.videographer || "Videographer"}`;
+    return s.person || (s.role === "Graphic Designer" ? t.designer : s.role === "Videographer" ? t.videographer : s.role === "Content Writer" ? projectWriter(t) : "") || s.role;
+  }
+
+  /* ---------- Who may do what (mirrors the rules in Code.gs, which enforces them) ---------- */
+  // While the owner uses View as, nothing can be changed
+  const me = () => state.user || { role: "", name: "", projects: [] };
+  const isBoss = () => ["owner", "manager"].includes(me().role) && !me().readOnly;
+  const stepActor = key => state.cfg.stepActors[key] || "writer";
+  // The project's content writer, managerial and the owner create, edit and delete its tasks
+  const managesProject = project => !me().readOnly && (isBoss() || (me().role === "writer" && (state.cfg.projects[project] || {}).writer === me().name));
+  function canPress(t) {
+    if (me().readOnly || t.stage === "done") return false;
+    if (isBoss()) return true;
+    const actor = stepActor(t.stage);
+    return me().role === actor && (state.cfg.projects[t.project] || {})[actor] === me().name;
+  }
+  function canUndo(t) {
+    const last = t.history[t.history.length - 1] || {};
+    return !me().readOnly && (isBoss() || (last.by ? last.by === me().name : managesProject(t.project)));
+  }
+  const canTick = t => managesProject(t.project) || (!me().readOnly && me().role === "designer" && (state.cfg.projects[t.project] || {}).designer === me().name);
+  // My Tasks: the steps I am responsible for (not every step managerial could press). Bu Riska also
+  // has the Voice Over steps, which carry her name.
+  function isMyStep(t) {
+    if (t.stage === "done") return false;
+    const actor = stepActor(t.stage), u = me();
+    if (u.role === "manager") return actor === "manager" || stageOf(t.stage).person === u.name;
+    return u.role === actor && (state.cfg.projects[t.project] || {})[actor] === u.name;
+  }
+  // "Alfid", "Kak Faza (via Obi)", "QC (Kak Hendra / Bu Riska)" (mirrors waitingFor_ in Code.gs)
+  function waitingFor(t) {
+    const owner = stageOwner(stageOf(t.stage), t), actor = stepActor(t.stage), writer = projectWriter(t);
+    if (actor === "manager") return `QC (${owner})`;
+    return actor === "writer" && owner !== writer && !owner.startsWith(writer + " ") ? `${owner} (via ${writer})` : owner;
   }
   const doneLabel = t => isCollateralType(t.type) ? "Approved by Client" : t.channel === "ADS" ? "Live on Ads" : "Scheduled / Posted";
   // Mirrors channelFromTitle_ in Code.gs: "BRIEF ORG NOV KRR" -> "ORG" ("" when neither or both)
@@ -2701,19 +3337,26 @@ function previewClear() {
     const types = cfg.contentTypes.map(v => `<option>${escapeHtml(v)}</option>`).join("");
     $("tType").innerHTML = `<option value="">All types</option>` + types;
     $("tfVideographer").innerHTML = `<option value="">-- Select --</option>` + cfg.videographers.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)} (VG-${escapeHtml(v)})</option>`).join("");
+    // New tasks only for the projects this account looks after
     $("tfProject").innerHTML = $("bfProject").innerHTML = `<option value="">-- Select --</option>` +
-      Object.keys(cfg.projects).map(p => `<option value="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}</option>`).join("");
+      Object.keys(cfg.projects).filter(managesProject).map(p => `<option value="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}</option>`).join("");
     $("bfVideographer").innerHTML = $("tfVideographer").innerHTML;
+    // The owner has no steps of their own, so no My Tasks
+    const groups = Object.keys(STEP_GROUPS).filter(k => k !== "mine" || me().role !== "owner");
     $("tStep").innerHTML =
-      `<optgroup label="Quick filters">${Object.keys(STEP_GROUPS).map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("")}</optgroup>` +
+      `<optgroup label="Quick filters">${groups.map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("")}</optgroup>` +
       `<optgroup label="Exact step">${cfg.stages.map(s => `<option value="${s.key}">${escapeHtml(s.name)} (${escapeHtml(s.person || s.role)})</option>`).join("")}</optgroup>`;
-    $("tStep").value = "current";
+    $("tStep").value = defaultStep();
+    // Only the content writers, managerial and the owner create tasks
+    document.querySelectorAll(".task-create").forEach(b => b.hidden = !Object.keys(cfg.projects).some(managesProject));
     refreshTaskProjects();
   }
+  // Graphic designers start on their own steps; everyone else on all current work
+  const defaultStep = () => me().role === "designer" ? "mine" : "current";
 
-  // Configured projects first (VTB, KRR, ...), then any other project used in a task
+  // This account's projects first (VTB, KRR, ...), then any other project used in a task it can see
   function taskProjects() {
-    const known = Object.keys(state.cfg.projects);
+    const known = Object.keys(state.cfg.projects).filter(p => me().projects.includes(p));
     const extra = [...new Set(state.tasks.map(t => t.project))].filter(p => p && !known.includes(p)).sort((a, b) => a.localeCompare(b));
     return known.concat(extra);
   }
@@ -2814,7 +3457,8 @@ function previewClear() {
     }
     $("tfDesigner").innerHTML = !p ? ""
       : !collateral && p.orgOnly && channel === "ADS" ? `<span class="text-danger">${escapeHtml($("tfProject").value)} is organic only. Use ORG in the title.</span>`
-      : `Graphic Designer: ${escapeHtml(p.designer)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "chosen per video"}${p.orgOnly ? " · Organic only" : ""}`;
+      : !collateral && p.adsOnly && channel === "ORG" ? `<span class="text-danger">${escapeHtml($("tfProject").value)} runs ADS only. Use ADS in the title.</span>`
+      : `${projectTeam(p)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "chosen per video"}${channelNote(p)}`;
     // Event Attribute: the deadline is the event day, and the countdown posts are counted back from it
     const event = isEventType(type);
     $("tfDeadlineLabel").innerHTML = event ? `Event Date (D-Day) <span class="req">*</span>` : "Deadline";
@@ -2864,6 +3508,7 @@ function previewClear() {
       : !collateral && !channelFromTitle(data.title) ? ["tfTitle", 'Write either ORG or ADS in the title, e.g. "BRIEF ORG DECEMBER KRR".']
       : !data.project ? ["tfProject", "Please choose the project."]
       : !collateral && (state.cfg.projects[data.project] || {}).orgOnly && channelFromTitle(data.title) !== "ORG" ? ["tfTitle", `${data.project} is organic only. Use ORG in the title.`]
+      : !collateral && (state.cfg.projects[data.project] || {}).adsOnly && channelFromTitle(data.title) !== "ADS" ? ["tfTitle", `${data.project} runs ADS only. Use ADS in the title.`]
       : !data.type ? ["tfType", "Please choose the content type."]
       : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]      : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
       : isEventType(data.type) && !data.deadline ? ["tfDeadline", "Please fill in the event date (D-Day)."]
@@ -2926,7 +3571,7 @@ function previewClear() {
   // comment and cuts the rest of the line, which broke the brief link input
   function renderBatchRows() {
     const project = $("bfProject").value, month = $("bfMonth").value, p = state.cfg.projects[project];
-    $("bfTeam").innerHTML = p ? `Graphic Designer: ${escapeHtml(p.designer)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "choose one above"}${p.orgOnly ? " · Organic only" : ""}` : "";
+    $("bfTeam").innerHTML = p ? `${projectTeam(p)} · Videographer: ${p.videographer ? escapeHtml(p.videographer) : "choose one above"}${channelNote(p)}` : "";
     if (!p || !/^\d{4}-\d{2}$/.test(month)) {
       $("bfRows").innerHTML = `<div class="help">Choose the project and month to see the tasks.</div>`;
       updateBatchForm();
@@ -2934,7 +3579,7 @@ function previewClear() {
     }
     const existing = new Set(state.tasks.map(t => t.title.trim().toUpperCase()));
     const types = projectTypes(p).filter(v => !isEventType(v) && !isCollateralType(v));
-    const channels = Object.keys(state.cfg.channels).filter(c => !(p.orgOnly && c !== "ORG"));
+    const channels = Object.keys(state.cfg.channels).filter(c => !(p.orgOnly && c !== "ORG") && !(p.adsOnly && c !== "ADS"));
     $("bfRows").innerHTML = channels.map(ch => `<div class="batch-group">
       <div class="batch-head">
         <span class="chan chan-${ch.toLowerCase()}">${ch}</span>
@@ -3016,7 +3661,7 @@ function previewClear() {
   /* ---------- Milestones: filtering ---------- */
   function resetTaskFilters(rerender = true) {
     ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).value = "");
-    $("tStep").value = "current";
+    $("tStep").value = defaultStep();
     if (rerender) renderTasks();
   }
 
@@ -3079,7 +3724,7 @@ function previewClear() {
   }
 
   function stepper(t) {
-    // Once the client has asked for a revision, Obi's "Client Revision" step stays in the timeline,
+    // Once the client has asked for a revision, the content writer's "Client Revision" step stays in the timeline,
     // just before the step it was passed on to (or the first step that could fix it)
     const shown = [...t.steps];
     if (t.history.some(e => e.action === "revision" && e.to === "revision")) {
@@ -3122,10 +3767,12 @@ function previewClear() {
       if (e.action === "assign") return `↪ <b>${from}</b> passed to ${to} (${escapeHtml(stageOwner(stageOf(e.to), t))})`;
       return `✔ <b>${from}</b> done → ${to}`;
     };
+    // Who made the move (moves saved before logins existed have no name)
+    const by = e => e.by ? ` <span class="muted">· by ${escapeHtml(e.by)}</span>` : "";
     const open = state.openHistory.has(t.id) ? " open" : "";
     return `<details class="history" data-id="${escapeHtml(t.id)}"${open}>
       <summary>History (${t.history.length})</summary>
-      <ul>${[...t.history].reverse().map(e => `<li><span class="muted">${formatDate(e.at)}</span> ${text(e)}${e.note ? `<div class="note">"${escapeHtml(e.note)}"</div>` : ""}</li>`).join("")}</ul>
+      <ul>${[...t.history].reverse().map(e => `<li><span class="muted">${formatDate(e.at)}</span> ${text(e)}${by(e)}${e.note ? `<div class="note">"${escapeHtml(e.note)}"</div>` : ""}</li>`).join("")}</ul>
     </details>`;
   }
 
@@ -3141,7 +3788,9 @@ function previewClear() {
     const FIX_LABELS = { video: "Videographer (CTC)", design: "Graphic Designer", motion: "Graphic Designer (Motion / ToV)" };
     const together = togetherLabel(t);
     const both = together ? ` <span class="together" title="Moves every task listed here together">· ${escapeHtml(together)}</span>` : "";
+    // Only the person whose step it is (or managerial) gets the buttons; everyone else sees who it waits for
     const main = done ? ""
+      : !canPress(t) ? `<span class="waiting">⏳ Waiting for <b>${escapeHtml(waitingFor(t))}</b></span>`
       : t.stage === "revision"
       ? fixSteps(t).map(k => `<button class="btn-sm btn-accent" data-tact="assign" data-to="${k}" data-id="${id}">Send to ${FIX_LABELS[k]}: ${escapeHtml(stageOwner(stageOf(k), t))} →</button>`).join("")
       : s.qc
@@ -3172,9 +3821,9 @@ function previewClear() {
       <div class="task-actions">
         <div class="row-actions">${main}</div>
         <div class="row-actions">
-          ${t.history.length > 1 ? `<button class="btn-sm btn-soft" data-tact="undo" data-id="${id}" title="Take back the last step">Undo</button>` : ""}
-          ${done ? "" : `<button class="btn-sm btn-soft" data-tact="edit" data-id="${id}">Edit</button>`}
-          <button class="btn-sm btn-danger" data-tact="delete" data-id="${id}">Delete</button>
+          ${t.history.length > 1 && canUndo(t) ? `<button class="btn-sm btn-soft" data-tact="undo" data-id="${id}" title="Take back the last step">Undo</button>` : ""}
+          ${done || !managesProject(t.project) ? "" : `<button class="btn-sm btn-soft" data-tact="edit" data-id="${id}">Edit</button>`}
+          ${managesProject(t.project) ? `<button class="btn-sm btn-danger" data-tact="delete" data-id="${id}">Delete</button>` : ""}
         </div>
       </div>
       ${historyList(t)}
@@ -3188,7 +3837,7 @@ function previewClear() {
     return `<div class="checklist">
       <span class="checklist-head">Event deliverables · ${done}/${items.length}</span>
       ${items.map(i => `<label class="check-item${t.checklist.includes(i.name) ? " on" : ""}${state.justTicked === t.id + "|" + i.name ? " just-ticked" : ""}">
-        <input type="checkbox" data-titem="${escapeHtml(i.name)}" data-id="${escapeHtml(t.id)}"${t.checklist.includes(i.name) ? " checked" : ""}${t.stage === "done" ? " disabled" : ""}>${escapeHtml(eventItemLabel(i, t.deadline))}</label>`).join("")}
+        <input type="checkbox" data-titem="${escapeHtml(i.name)}" data-id="${escapeHtml(t.id)}"${t.checklist.includes(i.name) ? " checked" : ""}${t.stage === "done" || !canTick(t) ? " disabled" : ""}>${escapeHtml(eventItemLabel(i, t.deadline))}</label>`).join("")}
     </div>`;
   }
 
@@ -3203,7 +3852,7 @@ function previewClear() {
     if (!state.loaded) return;
     renderTaskStats();
     ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
-    $("tStep").classList.toggle("is-active", $("tStep").value !== "current");
+    $("tStep").classList.toggle("is-active", $("tStep").value !== defaultStep());
     const list = getFilteredTasks();
     $("taskCount").innerHTML = `Showing <b>${list.length}</b> of ${plural(state.tasks.length, "task")}`;
     if (!list.length) {
@@ -3228,7 +3877,7 @@ function previewClear() {
       return `<section class="group">
         <div class="group-head">
           <h3>${projectAvatar(name)}${escapeHtml(name)}</h3>
-          <span>${plural(items.length, "task")} &middot; ${active} active${p.designer ? ` &middot; Graphic Designer: ${escapeHtml(p.designer)}` : ""}${p.orgOnly ? " &middot; Organic only" : ""}</span>
+          <span>${plural(items.length, "task")} &middot; ${active} active${p.designer ? ` &middot; ${projectTeam(p)}` : ""}${channelNote(p).replace(" · ", " &middot; ")}</span>
         </div>
         ${projectCards(items)}
       </section>`;
@@ -3295,7 +3944,7 @@ function previewClear() {
     $("reviseChannelsField").hidden = !t.workMonth || !channels.length;
     if (t.workMonth && channels.length) {
       $("reviseToField").hidden = true;
-      $("reviseText").textContent = `${t.project} briefs written in ${monthLabel(t.workMonth)}. The brief(s) you tick go back to ${stageOf("brief").person}; after the fix they come straight back to QC.`;
+      $("reviseText").textContent = `${t.project} briefs written in ${monthLabel(t.workMonth)}. The brief(s) you tick go back to ${projectWriter(t)}; after the fix they come straight back to QC.`;
       $("reviseChannels").innerHTML = channels.map(c => `<label class="check-item"><input type="checkbox" value="${c}"${channels.length === 1 || c === t.channel ? " checked" : ""}>
         <span class="chan chan-${c.toLowerCase()}">${c}</span> ${escapeHtml(group.filter(o => o.channel === c).map(o => typeShort(o.type)).join(" + "))}</label>`).join("");
       $("reviseNote").value = "";
@@ -3310,11 +3959,11 @@ function previewClear() {
     const i = t.steps.indexOf(t.stage);
     // Revisions go back to the people who make the work (not to QC or to sending)
     const targets = t.steps.slice(0, i).filter(k => !stageOf(k).qc && k !== "toClient");
-    // QC Client always sends the revision back to Obi, who then passes it on
+    // QC Client always sends the revision back to the content writer, who then passes it on
     const fromClient = t.stage === "qcClient";
     $("reviseToField").hidden = fromClient;
     $("reviseText").textContent = fromClient
-      ? `"${t.title}": the client's revision goes back to ${stageOf("revision").person} first, who then sends it to ${fixSteps(t).includes("video") ? "the videographer (CTC) or the graphic designer" : "the graphic designer"}. After the fix it goes through QC Internal again, then Kak Faza sends it to the client.`
+      ? `"${t.title}": the client's revision goes back to ${projectWriter(t)} first, who then sends it to ${fixSteps(t).includes("video") ? "the videographer (CTC) or the graphic designer" : "the graphic designer"}. After the fix it goes through QC Internal again, then Kak Faza sends it to the client.`
       : `"${t.title}" at ${stageOf(t.stage).name}. Which step has to fix it? After the fix, it goes straight back to QC.`;
     $("reviseTo").innerHTML = targets.map(k => `<option value="${k}">${escapeHtml(stageOf(k).name)} (${escapeHtml(stageOwner(stageOf(k), t))})</option>`).join("");
     $("reviseTo").value = targets[targets.length - 1];
@@ -3373,6 +4022,65 @@ function previewClear() {
     }
   }
 
+  /* ---------- Admin (owner only): who is logged in, activity, View as ---------- */
+  async function loadAdmin() {
+    if (!state.user || state.user.role !== "owner") return;
+    try {
+      state.admin = await api("getAdminData");
+    } catch (err) {
+      $("adminSessions").innerHTML = `<div class="empty">Could not load: ${escapeHtml(err.message)}</div>`;
+      return;
+    }
+    const a = state.admin;
+    const pick = $("viewAsUser").value;
+    $("viewAsUser").innerHTML = a.users.map(u => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name)} · ${escapeHtml(u.role)}</option>`).join("");
+    if (pick) $("viewAsUser").value = pick;
+    $("adminSessions").innerHTML = a.sessions.length ? `<ul class="admin-list">${a.sessions.map(s => `<li>
+        <span><b>${escapeHtml(s.name)}</b> <span class="muted">${s.role && s.role !== s.name ? escapeHtml(s.role) + " · " : ""}${escapeHtml(s.device || "Unknown device")}</span><br>
+        <span class="muted">Logged in ${formatDate(s.start)} · last active ${formatDate(s.seen)}</span></span>
+        ${s.self ? `<span class="tag">This browser</span>` : `<button type="button" class="btn-danger btn-sm" data-session="${escapeHtml(s.id)}">Log out</button>`}
+      </li>`).join("")}</ul>` : `<div class="empty">Nobody is logged in.</div>`;
+    fillSelect("actWho", [...new Set(a.activity.map(e => e.who).filter(Boolean))].sort(), "Everyone");
+    fillSelect("actProject", [...new Set(a.activity.map(e => e.project).filter(Boolean))].sort(), "All projects");
+    renderActivity();
+  }
+
+  function renderActivity() {
+    const who = $("actWho").value, project = $("actProject").value;
+    const list = ((state.admin || {}).activity || []).filter(e => (!who || e.who === who) && (!project || e.project === project));
+    $("adminActivity").innerHTML = list.length ? `<ul class="admin-list">${list.map(e => `<li>
+        <span class="act-when">${formatDate(e.at)}</span>
+        <span class="act-main"><b>${escapeHtml(e.who)}</b> · ${escapeHtml(e.action)}${e.task ? ` · ${escapeHtml(e.task)}` : ""}${e.project ? ` <span class="muted">(${escapeHtml(e.project)})</span>` : ""}
+          ${e.details ? `<span class="act-details">${escapeHtml(e.details)}</span>` : ""}</span>
+      </li>`).join("")}</ul>` : `<div class="empty">No activity yet.</div>`;
+  }
+
+  async function endSessions(ids) {
+    const all = ids === "all";
+    if (!await confirmDialog({ emoji: "🔐", title: all ? "Log out everyone else?" : "Log out this session?", ok: "Log out",
+      message: all ? "Everyone except you has to log in again." : "That browser has to log in again." })) return;
+    try {
+      const n = await api("endSessions", ids);
+      toast(`${plural(n, "session")} ended`);
+      loadAdmin();
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  // View as: the app is loaded again as that account, read-only, until Exit
+  function startViewAs() {
+    const username = $("viewAsUser").value;
+    if (!username) return;
+    state.viewAs = username;
+    showView("tasks");
+    loadData();
+  }
+  function exitViewAs() {
+    state.viewAs = "";
+    loadData().then(() => showView("admin"));
+  }
+
   /* ---------- Init ---------- */
   $("linkForm").addEventListener("submit", submitForm);
   $("url").addEventListener("input", checkDuplicate);
@@ -3418,8 +4126,14 @@ function previewClear() {
     render();
   }));
 
+  $("adminSessions").addEventListener("click", e => {
+    const btn = e.target.closest("[data-session]");
+    if (btn) endSessions([btn.dataset.session]);
+  });
+  ["actWho", "actProject"].forEach(id => $(id).addEventListener("input", renderActivity));
+
   $("lockForm").addEventListener("submit", unlock);
-  if (passcode) loadData(); else showLock();
+  if (ticket) loadData(); else showLock();
 </script>
 
 </body>

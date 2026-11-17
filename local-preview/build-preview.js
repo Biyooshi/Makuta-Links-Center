@@ -7,8 +7,9 @@ const read = f => fs.readFileSync(path.join(src, f), "utf8");
 
 const banner = `
 <div class="preview-banner">
-  <strong>LOCAL PREVIEW</strong> &middot; data is saved in this browser only, not in Google Sheets.
-  <button type="button" onclick="previewClear()">Clear all data</button>
+  <span><strong>LOCAL PREVIEW</strong> &middot; demo data, saved in this browser only, not in Google Sheets.</span>
+  <span>Logins: obi, puput, hendra, riska, alfid, ilham, wawan (password <b>demo</b>) &middot; owner (password <b>owner</b>)</span>
+  <button type="button" onclick="previewReset()">Reset demo data</button>
 </div>
 <style>
   .preview-banner { margin: -40px -16px 24px; z-index: 30; background: #7c3aed; color: #fff; font-size: 12px; padding: 6px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
@@ -20,9 +21,8 @@ const banner = `
 const mock = `
 <script>
 // ---- Local stand-in for Google Sheets / Apps Script services ----
-const PREVIEW_KEY = "makutaPreviewData";
-// Data saved under the old key was demo data only: remove it once
-try { ["makutaPreviewSheet", "makutaPreviewSheet:Tasks"].forEach(k => localStorage.removeItem(k)); } catch (e) {}
+// Demo data lives under its own keys, apart from anything saved by older previews
+const PREVIEW_KEY = "makutaDemo";
 const mockSheets = {};
 // One fake sheet per name ("Links", "Tasks"), each saved under its own localStorage key
 function mockSheet(name) {
@@ -70,12 +70,20 @@ const SpreadsheetApp = { getActiveSpreadsheet: () => ({
   getUrl: () => "",  // no real sheet in the preview; the page shows a notice instead
   getSpreadsheetTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
 }) };
-// The preview's passcode is "preview" (filled in automatically the first time)
-const mockProps = { APP_PASSCODE: "preview" };
-const PropertiesService = { getScriptProperties: () => ({ getProperty: k => mockProps[k] || null, setProperty: (k, v) => { mockProps[k] = v; } }) };
-try { if (localStorage.getItem("makutaPasscode") === null) localStorage.setItem("makutaPasscode", "preview"); } catch (e) {}
+// Script Properties with demo passwords only (the real ones are never in this repository).
+// Saved in the browser, so logins (sessions) survive a reload like on the real app.
+const PROPS_KEY = PREVIEW_KEY + ":props";
+const mockProps = Object.assign((() => { try { return JSON.parse(localStorage.getItem(PROPS_KEY)) || {}; } catch (e) { return {}; } })(),
+  { DEFAULT_PASSWORD: "demo", OWNER_USERNAME: "owner", OWNER_PASSWORD: "owner" });
+const saveProps = () => { try { localStorage.setItem(PROPS_KEY, JSON.stringify(mockProps)); } catch (e) {} };
+const PropertiesService = { getScriptProperties: () => ({
+  getProperty: k => mockProps[k] ?? null,
+  setProperty(k, v) { mockProps[k] = String(v); saveProps(); },
+  deleteProperty(k) { delete mockProps[k]; saveProps(); },
+  getProperties: () => Object.assign({}, mockProps),
+}) };
 const mockCache = {};
-const CacheService = { getScriptCache: () => ({ get: k => mockCache[k] || null, put: (k, v) => { mockCache[k] = v; } }) };
+const CacheService = { getScriptCache: () => ({ get: k => mockCache[k] || null, put: (k, v) => { mockCache[k] = v; }, remove: k => { delete mockCache[k]; } }) };
 SpreadsheetApp.ProtectionType = { RANGE: "RANGE" };
 const LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
 const HtmlService = {};
@@ -90,14 +98,48 @@ const CalendarApp = { getDefaultCalendar: () => ({
   },
   getEventById: id => ({ deleteEvent() { console.log("[preview] calendar reminder removed:", mockEvents[id] || id); delete mockEvents[id]; } }),
 }) };
+// SHA-256 like Utilities.computeDigest (the browser's own is async only)
+function sha256Bytes(text) {
+  const r = (x, n) => (x >>> n) | (x << (32 - n));
+  const k = [], h = [];
+  for (let n = 2, c = 0; c < 64; n++) {
+    let prime = true;
+    for (let i = 2; i * i <= n; i++) if (n % i === 0) { prime = false; break; }
+    if (!prime) continue;
+    if (c < 8) h[c] = (Math.pow(n, 1 / 2) % 1) * 4294967296 | 0;
+    k[c++] = (Math.pow(n, 1 / 3) % 1) * 4294967296 | 0;
+  }
+  const bytes = [...new TextEncoder().encode(text)], bits = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bits >>> (i * 8)) & 255);
+  for (let j = 0; j < bytes.length; j += 64) {
+    const w = [];
+    for (let i = 0; i < 64; i++) {
+      w[i] = i < 16 ? (bytes[j + 4 * i] << 24) | (bytes[j + 4 * i + 1] << 16) | (bytes[j + 4 * i + 2] << 8) | bytes[j + 4 * i + 3]
+        : (w[i - 16] + (r(w[i - 15], 7) ^ r(w[i - 15], 18) ^ (w[i - 15] >>> 3)) + w[i - 7] + (r(w[i - 2], 17) ^ r(w[i - 2], 19) ^ (w[i - 2] >>> 10))) | 0;
+    }
+    let [a, b, c, d, e, f, g, hh] = h;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (hh + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + k[i] + w[i]) | 0;
+      const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    [a, b, c, d, e, f, g, hh].forEach((v, i) => h[i] = (h[i] + v) | 0);
+  }
+  return h.flatMap(v => [v >>> 24, (v >>> 16) & 255, (v >>> 8) & 255, v & 255].map(x => x > 127 ? x - 256 : x));
+}
 const Utilities = {
+  DigestAlgorithm: { SHA_256: "SHA_256" },
+  computeDigest: (alg, text) => sha256Bytes(text),
   getUuid: () => ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c => (c ^ Math.random() * 16 >> c / 4).toString(16)),
   formatDate: d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"),
 };
 </script>
 <script>const GAS = (function () {
 ${read("Code.gs")}
-return Object.assign({ api }, API);
+// actAs: run the server functions directly as that account (the demo data and the tests use it)
+return Object.assign({ api, login, actAs: key => { user_ = account_(key === "owner" ? OWNER_KEY : key); } }, API);
 })();</script>
 <script>
 const google = { script: {
@@ -114,11 +156,15 @@ const google = { script: {
   } }),
 } };
 
-function previewClear() {
-  if (!confirm("Delete all data in this local preview?")) return;
-  ["Links", "Tasks"].forEach(name => { mockSheet(name).data = []; mockSheet(name).save(); });
-  loadData();
-  toast("Preview data cleared");
+${fs.readFileSync(path.join(__dirname, "demo-data.js"), "utf8")}
+// The demo data is added the first time (and again when it changes); logins stay
+if ((() => { try { return localStorage.getItem(PREVIEW_KEY + ":version"); } catch (e) { return ""; } })() !== DEMO_VERSION) loadDemoData();
+
+function previewReset() {
+  if (!confirm("Replace everything in this local preview with fresh demo data?")) return;
+  loadDemoData();
+  if (state.user) loadData();
+  toast("Demo data loaded");
 }
 </script>`;
 
