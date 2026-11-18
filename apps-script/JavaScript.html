@@ -72,7 +72,8 @@
 
   async function unlock(e) {
     e.preventDefault();
-    const username = $("lockUser").value.trim(), password = $("lockInput").value;
+    // A space typed or pasted before / after the password (phone keyboards add one) is not part of it
+    const username = $("lockUser").value.trim(), password = $("lockInput").value.trim();
     if (!username || !password) return ($("lockErr").textContent = "Fill in your username and password.", $("lockErr").hidden = false);
     $("lockBtn").disabled = true;
     try {

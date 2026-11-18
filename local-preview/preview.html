@@ -1225,6 +1225,8 @@
       <div class="modal-emoji">🔒</div>
       <h3>Makuta Links Center</h3>
       <p>Log in with your username and password.</p>
+      <p class="demo-login"><b>Demo:</b> password = username + <b>demo</b>, e.g. <b>hendra</b> / <b>hendrademo</b>. Owner: <b>owner</b> / <b>owner</b>.<br>The passwords of the real app do not work here.</p>
+      <style>.demo-login { margin-top: -6px; padding: 8px 10px; border-radius: 10px; background: rgba(124, 58, 237, .12); color: inherit; font-size: 13px; }</style>
       <form id="lockForm" novalidate>
         <input id="lockUser" class="lock-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Username" aria-label="Username">
         <div class="pass-wrap">
@@ -2709,7 +2711,8 @@ function previewReset() {
 
   async function unlock(e) {
     e.preventDefault();
-    const username = $("lockUser").value.trim(), password = $("lockInput").value;
+    // A space typed or pasted before / after the password (phone keyboards add one) is not part of it
+    const username = $("lockUser").value.trim(), password = $("lockInput").value.trim();
     if (!username || !password) return ($("lockErr").textContent = "Fill in your username and password.", $("lockErr").hidden = false);
     $("lockBtn").disabled = true;
     try {
