@@ -278,7 +278,6 @@
   .req { color: var(--danger); }
   .help { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
   .help.help-top { margin: -2px 0 8px; }
-  .help .status { margin-right: 4px; }
   input, select, textarea {
     width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
     font: inherit; font-size: 14px; background: var(--input-bg); color: var(--text);
@@ -329,23 +328,6 @@
   .modal .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   .modal.modal-left .actions { justify-content: flex-end; }
 
-  /* Stat cards: each has its own color */
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
-  .stat {
-    --c: #3b6fd6;
-    justify-content: flex-start; gap: 12px; text-align: left;
-    background: var(--panel-bg); border: 1px solid var(--border); border-left: 4px solid var(--c);
-    border-radius: 12px; padding: 14px 16px; color: var(--text); box-shadow: var(--box-shadow);
-  }
-  .stat:hover { background: color-mix(in srgb, var(--c) 8%, var(--panel-bg)); }
-  .stat.active { background: color-mix(in srgb, var(--c) 14%, var(--panel-bg)); box-shadow: 0 0 0 2px var(--c), var(--box-shadow); }
-  .stat-week { --c: #16a34a; }
-  .stat-open { --c: #d97706; }
-  .stat-overdue { --c: #dc2626; }
-  .stat-icon { font-size: 22px; width: 42px; height: 42px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: color-mix(in srgb, var(--c) 14%, transparent); }
-  .stat .num { display: block; font-size: 24px; font-weight: 700; color: var(--c); line-height: 1.15; }
-  [data-theme="dark"] .stat .num { color: color-mix(in srgb, var(--c) 55%, white); }
-  .stat .label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); }
 
   /* Filters */
   .filter-panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: var(--box-shadow); }
@@ -354,6 +336,7 @@
   .search-box input { padding-left: 38px; }
   .filters { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
   .filters .field { margin-bottom: 0; }
+  .filters.filters-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .filters input, .filters select { padding: 9px 10px; }
   .filter-toggle { display: none; float: right; margin: 0 0 0 8px; height: 46px; }
   .filter-panel .is-active { border-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
@@ -372,10 +355,11 @@
   .links-table { table-layout: fixed; }
   .links-table .c-pin { width: 44px; }
   .links-table .c-cat { width: 172px; }
-  .links-table .c-proj { width: 112px; }
-  .links-table .c-status { width: 120px; }
-  .links-table .c-due { width: 140px; }
+  .links-table .c-proj { width: 136px; }
   .links-table .c-act { width: 120px; }
+  .links-table .c-link { width: 130px; }
+  .link-task { padding: 0; background: none; color: var(--heading); font-size: 14px; font-weight: 600; text-align: left; border-radius: 0; overflow-wrap: anywhere; }
+  .link-task:hover { background: none; text-decoration: underline; }
   .link-meta { margin-top: 4px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
   .link-desc { color: var(--text); white-space: pre-wrap; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -384,7 +368,7 @@
   .links-table th:last-child, .links-table td:last-child { padding-right: 12px; }
   .links-table th { white-space: normal; }
   /* Pills may wrap between words, never inside one */
-  .links-table .cat, .links-table .status, .links-table .due { white-space: normal; overflow-wrap: normal; max-width: 100%; }
+  .links-table .cat, .links-table .due { white-space: normal; overflow-wrap: normal; max-width: 100%; }
   .links-table .proj { font-size: 12px; }
   .links-table .cat { white-space: nowrap; }
   .links-table .desc { min-width: 0; max-width: none; }
@@ -399,7 +383,6 @@
   th { background: var(--panel-bg); font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; }
   tbody tr { transition: background .15s; }
   tbody tr.row-pinned { background: var(--row-pinned); }
-  tbody tr.row-overdue { background: var(--row-overdue); box-shadow: inset 4px 0 0 var(--danger); }
   tbody tr:hover { background: var(--panel-bg); }
   .title-cell { min-width: 0; }
   a.main-link { display: block; color: var(--primary); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -416,7 +399,7 @@
   .nowrap { white-space: nowrap; }
 
   /* Colored pills: each sets --c, the rest is shared */
-  .cat, .status, .due, .tag {
+  .cat, .due, .tag {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 3px 9px; border-radius: 999px;
     font-size: 11px; font-weight: 700; white-space: nowrap;
@@ -428,6 +411,18 @@
   .tag-finished { --c: #16a34a; }
   .tag-link { --c: #2563eb; text-decoration: none; }
   .tag-link:hover { text-decoration: underline; }
+  /* The brief or result the current step works from, next to its buttons */
+  a.link-open { text-decoration: none; }
+  /* Drafting Brief, Design and Motion open their link from the timeline */
+  a.ms-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+  a.ms-link:hover { color: var(--accent); }
+
+  /* Resources: two tabs; the filters and buttons that only fit the resources hide on the other tab */
+  .page-tabs { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 8px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; }
+  .page-tabs button { padding: 7px 14px; background: none; color: var(--muted); font-size: 14px; border-radius: 9px; }
+  .page-tabs button:hover { background: var(--card-bg); color: var(--text); }
+  .page-tabs button.active { background: var(--card-bg); color: var(--heading); font-weight: 600; box-shadow: var(--box-shadow); }
+  #viewLinks.tab-tasks .res-only { display: none !important; }
   .cat-google-docs { --c: #2563eb; }
   .cat-google-spreadsheets { --c: #16a34a; }
   .cat-google-slide { --c: #ea580c; }
@@ -438,18 +433,10 @@
   .cat-type-video { --c: #db2777; }
   .cat-type-event { --c: #0d9488; }
   .cat-type-collateral { --c: #4f46e5; }
-  .status { --c: #64748b; cursor: help; }
-  .status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-  .status-in-progress { --c: #2563eb; }
-  .status-in-review { --c: #9333ea; }
-  .status-revision { --c: #d97706; }
-  .status-done { --c: #16a34a; }
   .due { --c: #64748b; font-weight: 600; }
   .due-soon { --c: #d97706; }
   .due-overdue { --c: #dc2626; }
   .due-done { --c: #16a34a; }
-  .due-date { display: block; font-size: 11px; color: var(--muted); margin: 3px 0 0 4px; }
-  .meta-line .due-date { display: inline; margin: 0; }
 
   /* Project chip + avatar: color comes from --h (hue), set per project */
   .proj { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; white-space: nowrap; background: hsl(var(--h) 60% 50% / .14); }
@@ -475,7 +462,6 @@
   .group-head > span { font-size: 12px; color: var(--muted); }
   .group-item { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-top: 1px solid var(--border); }
   .group-item.row-pinned { background: var(--row-pinned); }
-  .group-item.row-overdue { background: var(--row-overdue); box-shadow: inset 4px 0 0 var(--danger); }
   .group-item .main { flex: 1; min-width: 0; }
   .group-item .desc { max-width: none; margin-top: 6px; font-size: 13px; }
   .meta-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--muted); }
@@ -489,9 +475,6 @@
 
   /* Milestones */
   .modal.modal-wide { max-width: 640px; }
-  .stat-qc { --c: #9333ea; }
-  .stat-client { --c: #0891b2; }
-  .filters.filters-5 { grid-template-columns: repeat(5, 1fr); }
   .btn-ok { background: var(--success); color: #fff; }
   .btn-ok:hover { background: #15803d; }
   .chan { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: .4px; color: #fff; background: #0891b2; }
@@ -607,9 +590,6 @@
   button:not(:disabled):hover, .btn:hover { transform: translateY(-1px); }
   .tabs button:hover, .segmented button:hover, .pin:hover, .reset-link:hover { transform: none; }
   .pin:hover { transform: scale(1.15); }
-  .stat { transition: background .2s, box-shadow .2s, transform .2s; }
-  .stat:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(15, 23, 42, .14); }
-  .stat.active:hover { box-shadow: 0 0 0 2px var(--c), 0 6px 18px rgba(15, 23, 42, .14); }
   .tabs button { transition: background .2s, color .2s, border-color .25s; }
   .task, .group-item { transition: background .2s; }
   .task:not(.row-overdue):hover, .group-item:not(.row-overdue):not(.row-pinned):hover { background: color-mix(in srgb, var(--panel-bg) 55%, transparent); }
@@ -650,7 +630,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
-    button:hover, .btn:hover, .stat:hover, .ms-step:hover .dot { transform: none !important; }
+    button:hover, .btn:hover, .ms-step:hover .dot { transform: none !important; }
   }
 
   /* The table needs about 860px of page; below that each row becomes a card */
@@ -661,7 +641,6 @@
     .links-table thead, .links-table colgroup { display: none; }
     .links-table tbody tr { display: flex; flex-wrap: wrap; gap: 10px 16px; padding: 14px 16px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); box-shadow: var(--box-shadow); }
     .links-table tbody tr.row-pinned { background: var(--row-pinned); }
-    .links-table tbody tr.row-overdue { background: var(--row-overdue); box-shadow: inset 4px 0 0 var(--danger), var(--box-shadow); }
     .links-table td { display: block; padding: 0 !important; border: none; }
     .links-table .pin-cell { order: 0; flex: 0 0 auto; }
     .links-table .title-cell { order: 1; flex: 1 1 calc(100% - 60px); }
@@ -734,15 +713,11 @@
     .drawer-head { margin: 0 -14px 14px; padding: 10px 8px 10px 14px; }
   }
   @media (max-width: 1000px) {
-    .filters.filters-5 { grid-template-columns: repeat(3, 1fr); }
     .filters { grid-template-columns: repeat(3, 1fr); }
-    .stats { grid-template-columns: repeat(2, 1fr); }
     .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 640px) {
-    .grid-2, .filters, .filters.filters-5 { grid-template-columns: 1fr; }
-    .stat { padding: 12px; gap: 8px; }
-    .stat-icon { width: 34px; height: 34px; font-size: 18px; }
+    .grid-2, .filters, .filters.filters-3 { grid-template-columns: 1fr; }
     .version-row { grid-template-columns: 1fr auto; }
     .batch-group { display: block; }
     .batch-row { grid-template-columns: auto 1fr; column-gap: 8px; }
@@ -766,7 +741,7 @@
       <nav class="side-nav" aria-label="Pages">
         <button type="button" id="tabHome" class="active" onclick="showView('home')" title="Home"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span class="nav-label">Home</span></button>
         <button type="button" id="tabTasks" onclick="showView('tasks')" title="Milestones"><svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg><span class="nav-label">Milestones</span><span class="nav-count" id="navTurn" hidden></span></button>
-        <button type="button" id="tabLinks" onclick="showView('links')" title="Links"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span class="nav-label">Links</span></button>
+        <button type="button" id="tabLinks" onclick="showView('links')" title="Resources"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span class="nav-label">Resources</span></button>
         <button type="button" id="tabAdmin" onclick="showView('admin')" title="Admin" hidden><svg class="icon" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/></svg><span class="nav-label">Admin</span></button>
       </nav>
       <div class="side-section">
@@ -793,7 +768,7 @@
     <main class="main">
 <div class="preview-banner">
   <span><strong>LOCAL PREVIEW</strong> &middot; demo data, saved in this browser only, not in Google Sheets.</span>
-  <span>Logins: obi, puput, hendra, riska, alfid, ilham, wawan (password <b>demo</b>) &middot; owner (password <b>owner</b>)</span>
+  <span>Logins: hendra, riska, faza, obi, puput, alfid, ilham, wawan &middot; password = username + <b>demo</b> (e.g. <b>obidemo</b>) &middot; owner / <b>owner</b></span>
   <button type="button" onclick="previewReset()">Reset demo data</button>
 </div>
 <style>
@@ -809,7 +784,7 @@
           <div class="new-menu" id="newMenu" hidden>
             <button type="button" class="task-create" onclick="newItem('brief')"><b>Monthly Brief</b><span>All of a month's tasks at once</span></button>
             <button type="button" class="task-create" onclick="newItem('task')"><b>Single task</b><span>Event Attribute, Collateral, one-off</span></button>
-            <button type="button" class="link-create" onclick="newItem('link')"><b>Link</b><span>Save a Docs, Drive or Figma link</span></button>
+            <button type="button" class="link-create" onclick="newItem('link')"><b>Resource</b><span>Brand guideline, moodboard, reference</span></button>
           </div>
         </div>
       </header>
@@ -855,7 +830,7 @@
       <!-- ============ ADD / EDIT LINK (side panel) ============ -->
       <div id="viewSubmit" class="drawer" hidden role="dialog" aria-labelledby="drawerTitle">
         <div class="drawer-head">
-          <h2 id="drawerTitle">Add link</h2>
+          <h2 id="drawerTitle">Add resource</h2>
           <button type="button" class="icon-btn" onclick="closeLinkPanel()" aria-label="Close"><svg class="icon" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <div class="edit-banner" id="editBanner" hidden>
@@ -865,16 +840,16 @@
 
         <form id="linkForm" novalidate>
           <div class="section">
-            <h3><span class="step">1</span>Link Info <small>What would you like to submit today?</small></h3>
+            <h3><span class="step">1</span>Link <small>A file or page the team keeps coming back to</small></h3>
             <div class="field">
               <label for="title">Title <span class="req">*</span></label>
-              <input id="title" placeholder="e.g. GTR Competitor Analysis Deck">
+              <input id="title" placeholder="e.g. GTR Brand Guideline">
               <div class="error" id="titleErr" hidden>Title is required.</div>
             </div>
             <div class="field">
               <label for="url">Main Link <span class="req">*</span></label>
               <input id="url" placeholder="https://...">
-              <div class="help">Paste a link from Google Drive, Figma, Canva, or anywhere else.</div>
+              <div class="help">Paste a link from Google Drive, Figma, Canva, or anywhere else. Briefs and finished work go in their task in Milestones.</div>
               <div class="error" id="urlErr" hidden>Please enter a valid link.</div>
               <div class="warn" id="dupWarning" hidden>
                 <strong>This link already exists</strong>
@@ -922,120 +897,73 @@
                 <input id="project" list="projectList" placeholder="e.g. GTR">
                 <datalist id="projectList"></datalist>
               </div>
-              <div class="field">
-                <label for="status">Status</label>
-                <select id="status">
-                  <option>Draft</option>
-                  <option>In Progress</option>
-                  <option>In Review</option>
-                  <option>Revision</option>
-                  <option>Done</option>
-                </select>
-                <div class="help" id="statusHint"></div>
-              </div>
-              <div class="field">
-                <label for="deadline">Deadline</label>
-                <input id="deadline" type="date">
-                <div class="help">Optional. A [MAKUTA] reminder is added to your Google Calendar 2 days and 1 day before.</div>
-              </div>
             </div>
             <div class="field">
-              <label for="purpose">Description / Purpose</label>
+              <label for="purpose">Description</label>
               <textarea id="purpose" placeholder="What is this link for? Any extra notes..."></textarea>
             </div>
-            <label class="check-row"><input type="checkbox" id="pinned"> 📌 Pin this link to the top of the list</label>
+            <label class="check-row"><input type="checkbox" id="pinned"> 📌 Pin to the top of the list</label>
           </div>
 
           <button type="submit" class="btn-accent btn-block" id="submitBtn">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg><span id="submitLabel">Submit Link</span>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg><span id="submitLabel">Save resource</span>
           </button>
           <p class="hint">Fields marked <span class="req">*</span> are required. <button type="button" class="reset-link" onclick="resetForm()">Clear form</button></p>
         </form>
       </div>
 
-      <!-- ============ ALL LINKS VIEW ============ -->
+      <!-- ============ RESOURCES VIEW: links kept for the team, and every task's brief and result ============ -->
       <div id="viewLinks" hidden>
-        <div class="stats">
-          <button type="button" class="stat stat-total" id="card-all" onclick="applyStat('all')" title="Show all links">
-            <span class="stat-icon">🔗</span><span><span class="num" id="stat-all">0</span><span class="label">Total Links</span></span>
-          </button>
-          <button type="button" class="stat stat-week" id="card-week" onclick="applyStat('week')" title="Show links added in the last 7 days">
-            <span class="stat-icon">🆕</span><span><span class="num" id="stat-week">0</span><span class="label">Added This Week</span></span>
-          </button>
-          <button type="button" class="stat stat-open" id="card-open" onclick="applyStat('open')" title="Show links that are not Done yet">
-            <span class="stat-icon">⏳</span><span><span class="num" id="stat-open">0</span><span class="label">Not Done Yet</span></span>
-          </button>
-          <button type="button" class="stat stat-overdue" id="card-overdue" onclick="applyStat('overdue')" title="Show links past their deadline">
-            <span class="stat-icon">⚠️</span><span><span class="num" id="stat-overdue">0</span><span class="label">Overdue</span></span>
-          </button>
+        <div class="page-tabs" role="tablist" aria-label="Resources">
+          <button type="button" role="tab" class="active" data-ltab="resources" aria-selected="true">Resources</button>
+          <button type="button" role="tab" data-ltab="tasks" aria-selected="false">Brief &amp; result links</button>
         </div>
+        <p class="block-note" id="linkTabNote"></p>
 
         <div class="filter-panel">
           <button type="button" class="btn-soft btn-sm filter-toggle" onclick="this.closest('.filter-panel').classList.toggle('open')">Filters</button>
           <div class="search-box">
             <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input id="search" type="search" placeholder="Search title, link, category, project, status, or description...">
+            <input id="search" type="search" placeholder="Search title, link or project...">
           </div>
-          <div class="filters">
-            <div class="field">
-              <label for="fCategory">Category</label>
-              <select id="fCategory"><option value="">All categories</option></select>
-            </div>
+          <div class="filters filters-3">
             <div class="field">
               <label for="fProject">Project</label>
               <select id="fProject"><option value="">All projects</option></select>
             </div>
-            <div class="field">
-              <label for="fStatus">Status</label>
-              <select id="fStatus">
-                <option value="">All statuses</option>
-                <option value="open">Not Done yet</option>
-                <option value="overdue">Overdue</option>
-                <option>Draft</option>
-                <option>In Progress</option>
-                <option>In Review</option>
-                <option>Revision</option>
-                <option>Done</option>
-              </select>
+            <div class="field res-only">
+              <label for="fCategory">Category</label>
+              <select id="fCategory"><option value="">All categories</option></select>
             </div>
-            <div class="field">
-              <label for="dateFrom">Added from</label>
-              <input id="dateFrom" type="date">
-            </div>
-            <div class="field">
-              <label for="dateTo">Added to</label>
-              <input id="dateTo" type="date">
-            </div>
-            <div class="field">
+            <div class="field res-only">
               <label for="sort">Sort by</label>
               <select id="sort">
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
-                <option value="deadline">Nearest deadline</option>
                 <option value="az">Title A-Z</option>
                 <option value="za">Title Z-A</option>
               </select>
             </div>
           </div>
-          <label class="check-row" style="margin-top:12px"><input type="checkbox" id="pinnedOnly"> Show pinned links only</label>
+          <label class="check-row res-only" style="margin-top:12px"><input type="checkbox" id="pinnedOnly"> Pinned only</label>
         </div>
 
         <div class="meta-bar">
           <div class="meta-left">
-            <div class="segmented">
+            <div class="segmented res-only">
               <button type="button" class="active" data-view="table">Table</button>
-              <button type="button" data-view="groups">By Project</button>
+              <button type="button" data-view="groups">By project</button>
             </div>
             <span id="count"></span>
           </div>
           <div class="actions">
-            <button class="btn-accent btn-sm link-create page-create" onclick="newItem('link')">+ Add link</button>
-            <button class="btn-soft btn-sm" onclick="resetFilters()">Reset Filters</button>
-            <button class="btn-soft btn-sm" onclick="exportExcel()">Export to Excel</button>
+            <button class="btn-accent btn-sm link-create page-create res-only" onclick="newItem('link')">+ Add resource</button>
+            <button class="btn-soft btn-sm" onclick="resetFilters()">Reset filters</button>
+            <button class="btn-soft btn-sm res-only" onclick="exportExcel()">Export to Excel</button>
           </div>
         </div>
 
-        <div id="results"><div class="loading"><div class="spinner"></div>Loading your links...</div></div>
+        <div id="results"><div class="loading"><div class="spinner"></div>Loading...</div></div>
       </div>
 
       <!-- ============ MILESTONES VIEW ============ -->
@@ -1044,9 +972,13 @@
           <button type="button" class="btn-soft btn-sm filter-toggle" onclick="this.closest('.filter-panel').classList.toggle('open')">Filters</button>
           <div class="search-box">
             <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input id="tSearch" type="search" placeholder="Search title, project, person, or notes...">
+            <input id="tSearch" type="search" placeholder="Search title, ORG, ADS, name...">
           </div>
-          <div class="filters filters-5">
+          <div class="filters filters-3">
+            <div class="field">
+              <label for="tStep">Show</label>
+              <select id="tStep"></select>
+            </div>
             <div class="field">
               <label for="tProject">Project</label>
               <select id="tProject"><option value="">All projects</option></select>
@@ -1055,35 +987,17 @@
               <label for="tMonth">Month</label>
               <select id="tMonth" title="The month the content is for (tasks without one: their deadline month)"><option value="">All months</option></select>
             </div>
-            <div class="field">
-              <label for="tType">Content Type</label>
-              <select id="tType"><option value="">All types</option></select>
-            </div>
-            <div class="field">
-              <label for="tChannel">ORG / ADS / Other</label>
-              <select id="tChannel">
-                <option value="">All</option>
-                <option value="ORG">ORG (Organic)</option>
-                <option value="ADS">ADS (Ads Manager)</option>
-                <option value="event">🎪 Event Attribute</option>
-                <option value="collateral">🖨️ Collateral</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="tStep">Step</label>
-              <select id="tStep"></select>
-            </div>
           </div>
         </div>
 
         <div class="meta-bar">
           <div class="meta-left">
             <button type="button" class="btn-accent btn-sm task-create page-create" onclick="openBatchForm()" title="Create all tasks for one month at once">+ Monthly Brief</button>
-            <button type="button" class="btn-soft btn-sm task-create page-create" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single Task</button>
+            <button type="button" class="btn-soft btn-sm task-create page-create" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single task</button>
             <span id="taskCount"></span>
           </div>
           <div class="actions">
-            <button class="btn-soft btn-sm" onclick="resetTaskFilters()">Reset Filters</button>
+            <button class="btn-soft btn-sm" onclick="resetTaskFilters()">Reset filters</button>
           </div>
         </div>
 
@@ -1133,7 +1047,7 @@
       <button type="button" data-nav="home" onclick="showView('home')"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span>Home</span></button>
       <button type="button" data-nav="tasks" onclick="showView('tasks')"><svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg><span>Milestones</span></button>
       <button type="button" class="bottom-new" onclick="toggleNewMenu()" aria-label="New"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button type="button" data-nav="links" onclick="showView('links')"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span>Links</span></button>
+      <button type="button" data-nav="links" onclick="showView('links')"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span>Resources</span></button>
       <button type="button" onclick="toggleSidebar()"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Menu</span></button>
     </nav>
   </div>
@@ -1171,9 +1085,17 @@
             <select id="tfVideographer"></select>
           </div>
         </div>
-        <div class="field">
-          <label for="tfLink">Brief / File Link</label>
-          <input id="tfLink" placeholder="https://...">
+        <div class="grid-2">
+          <div class="field">
+            <label for="tfBriefLink">Brief link</label>
+            <input id="tfBriefLink" placeholder="https://...">
+            <div class="help">Optional now: it is asked for when the brief is submitted for QC.</div>
+          </div>
+          <div class="field" id="tfResultField" hidden>
+            <label for="tfResultLink">Result link</label>
+            <input id="tfResultLink" placeholder="https://...">
+            <div class="help">Filled in by the graphic designer when the work is done.</div>
+          </div>
         </div>
         <div class="field">
           <label for="tfNotes">Notes</label>
@@ -1225,6 +1147,25 @@
     </div>
   </div>
 
+  <!-- Drafting Brief, Design and Motion: the link handed on with the step -->
+  <div class="modal-bg" id="stepLinkModal">
+    <div class="modal modal-left">
+      <h3 id="stepLinkTitle"></h3>
+      <p id="stepLinkText"></p>
+      <form id="stepLinkForm" novalidate>
+        <div class="field">
+          <label for="stepLinkInput" id="stepLinkLabel"></label>
+          <input id="stepLinkInput" placeholder="https://..." autocomplete="off">
+          <div class="error" id="stepLinkErr" hidden>Paste a valid link (starting with https://).</div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-soft" onclick="closeModal('stepLinkModal')">Cancel</button>
+          <button type="submit" class="btn-accent" id="stepLinkOk"></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Request revision popup -->
   <div class="modal-bg" id="reviseModal">
     <div class="modal modal-left">
@@ -1259,8 +1200,8 @@
       <h3 id="successTitle">Successfully Submitted!</h3>
       <p id="successText"></p>
       <div class="actions">
-        <button type="button" class="btn-accent" onclick="closeModal('successModal'); $('title').focus()">Add Another</button>
-        <button type="button" class="btn-soft" onclick="closeModal('successModal'); showView('links')">View All Links</button>
+        <button type="button" class="btn-accent" onclick="closeModal('successModal'); newItem('link')">Add another</button>
+        <button type="button" class="btn-soft" onclick="closeModal('successModal'); showView('links')">View resources</button>
       </div>
     </div>
   </div>
@@ -1269,7 +1210,7 @@
   <div class="modal-bg" id="confirmModal">
     <div class="modal">
       <div class="modal-emoji" id="confirmEmoji">🗑️</div>
-      <h3 id="confirmTitle">Delete this link?</h3>
+      <h3 id="confirmTitle">Delete this resource?</h3>
       <p id="confirmText"></p>
       <div class="actions">
         <button type="button" class="btn-soft" id="confirmCancel">Cancel</button>
@@ -1357,7 +1298,7 @@ const SpreadsheetApp = { getActiveSpreadsheet: () => ({
 // Saved in the browser, so logins (sessions) survive a reload like on the real app.
 const PROPS_KEY = PREVIEW_KEY + ":props";
 const mockProps = Object.assign((() => { try { return JSON.parse(localStorage.getItem(PROPS_KEY)) || {}; } catch (e) { return {}; } })(),
-  { DEFAULT_PASSWORD: "demo", OWNER_USERNAME: "owner", OWNER_PASSWORD: "owner" });
+  { PASSWORD_SUFFIX: "demo", OWNER_USERNAME: "owner", OWNER_PASSWORD: "owner" });
 const saveProps = () => { try { localStorage.setItem(PROPS_KEY, JSON.stringify(mockProps)); } catch (e) {} };
 const PropertiesService = { getScriptProperties: () => ({
   getProperty: k => mockProps[k] ?? null,
@@ -1422,27 +1363,24 @@ const Utilities = {
 <script>const GAS = (function () {
 /**
  * Makuta Links Center - Google Apps Script backend.
- * Data lives in the "Links" sheet of the spreadsheet this script is bound to.
+ * Data lives in the spreadsheet this script is bound to: "Links" (Resources), "Tasks" (Milestones)
+ * and "Activity" (every login and change).
  */
 const SHEET_NAME = 'Links';
 const HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Main Link', 'Category', 'Project', 'Status', 'Deadline', 'Pinned', 'Description', 'Related Links', 'Reminder IDs'];
 const PINNED_COL = HEADERS.indexOf('Pinned') + 1;
 const UPDATED_COL = HEADERS.indexOf('Updated') + 1;
 const REMINDERS_COL = HEADERS.indexOf('Reminder IDs') + 1;
-const STATUSES = ['Draft', 'In Progress', 'In Review', 'Revision', 'Done'];
 // A CTC-Video link also records whose edit it is, stored in the category as e.g. "CTC-Video [VG-Arif]"
 const VIDEO_SOURCES = ['VG-Arif', 'VG-Anno'];
 // Links in the Reference category always get this project
 const REFERENCE_PROJECT = 'REFERENCE';
-// Google Calendar reminders: this many days before the deadline, at this hour (script time zone)
-const REMINDER_DAYS = [2, 1];
-const REMINDER_HOUR = 9;
 
 /* ---------- Milestones setup: edit names here when the team changes ---------- */
 const TASK_SHEET = 'Tasks';
-const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Link', 'Notes', 'History', 'Checklist', 'Work Month', 'For Month', 'Item'];
+const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Brief Link', 'Notes', 'History', 'Checklist', 'Work Month', 'For Month', 'Item', 'Result Link'];
 // Each project: its content writer and graphic designer (names of the accounts in USERS), its videographer
-// (filled in automatically; no videographer = chosen for every video task), its icon (also used in All Links),
+// (filled in automatically; no videographer = chosen for every video task), its icon (also used in Resources),
 // the content types it makes (all except Event Attribute when not set) and whether it only runs organic
 // (orgOnly) or only ads (adsOnly) content
 const PROJECTS = {
@@ -1455,24 +1393,33 @@ const PROJECTS = {
   'LUX': { writer: 'Puput', designer: 'Wawan', videographer: 'Arif', icon: '💎', types: ['Static', 'Video (Non-Shooting)', 'Video (Shooting)', 'Event Attribute'] }
 };
 // Team accounts (username: name and role). Content writers and graphic designers see the projects they
-// are set on above; managerial accounts and the owner see every project.
+// are set on above; managerial, the assistant manager and the owner see every project.
 // Passwords are not in this code (it is public on GitHub). Set them in Project Settings > Script Properties:
-//   DEFAULT_PASSWORD                  the password of every team account below
+//   PASSWORD_SUFFIX                   a team account's password is its username followed by this
 //   OWNER_USERNAME / OWNER_PASSWORD   the owner (superadmin) account, shown everywhere only as "Owner"
 const USERS = {
   hendra: { name: 'Kak Hendra', role: 'manager' },
   riska: { name: 'Bu Riska', role: 'manager' },
+  faza: { name: 'Kak Faza', role: 'assistant' },
   obi: { name: 'Obi', role: 'writer' },
   puput: { name: 'Puput', role: 'writer' },
   alfid: { name: 'Alfid', role: 'designer' },
   ilham: { name: 'Ilham', role: 'designer' },
   wawan: { name: 'Wawan', role: 'designer' }
 };
-const ROLE_NAMES = { owner: 'Owner', manager: 'Managerial', writer: 'Content Writer', designer: 'Graphic Designer' };
+const ROLE_NAMES = { owner: 'Owner', manager: 'Managerial', assistant: 'Assistant Manager', writer: 'Content Writer', designer: 'Graphic Designer' };
+// Roles that see every project
+const ALL_PROJECT_ROLES = ['owner', 'manager', 'assistant'];
 // Who presses each step's button: the QC steps are for managerial, Design and Motion for the project's
-// graphic designer, every other step (also those of Kak Faza, the client and the freelance videographers
-// and ads team) for the project's content writer. Managerial and the owner can press every step.
-const STEP_ACTORS = { qcBrief: 'manager', qcCut: 'manager', qcContent: 'manager', design: 'designer', motion: 'designer' };
+// graphic designer, Send to Client, QC Client and Run Ads (the freelance ads team) for the assistant
+// manager (Kak Faza), every other step (also those of the freelance videographers) for the project's
+// content writer. Managerial and the owner can press every step.
+const STEP_ACTORS = { qcBrief: 'manager', qcCut: 'manager', qcContent: 'manager', design: 'designer', motion: 'designer',
+  toClient: 'assistant', qcClient: 'assistant', ads: 'assistant' };
+// The link each of these steps hands on: the content writer submits the brief (one per channel of a
+// Monthly Brief), the graphic designer the finished work (the result). QC, Send to Client and the
+// posting steps open them from the task.
+const LINK_STEPS = { brief: 'briefLink', design: 'resultLink', motion: 'resultLink' };
 // Videographers that can be picked when editing a task (new tasks use the project's videographer)
 const VIDEOGRAPHERS = ['Anno', 'Arif'];
 // Static = carousel, single image and motion (all made by the graphic designer).
@@ -1533,7 +1480,7 @@ function include(name) {
 /* ---------- Login: the web app is open to "Anyone" (so it also works inside the Vercel page), ----------
    so every call from the page carries the login ticket of this browser, checked here before anything
    is read or changed. The ticket itself is never stored, only its SHA-256 (see hash_). */
-const ACCOUNT_PROPERTIES = ['DEFAULT_PASSWORD', 'OWNER_USERNAME', 'OWNER_PASSWORD'];
+const ACCOUNT_PROPERTIES = ['PASSWORD_SUFFIX', 'OWNER_USERNAME', 'OWNER_PASSWORD'];
 const OWNER_KEY = '@owner';            // how the owner is stored in sessions (never the real username)
 const SESSION_PREFIX = 'SESSION_';     // Script Properties key of a session: SESSION_<hash of the ticket>
 const SESSION_DAYS = 30;               // a login is remembered this long in one browser
@@ -1571,12 +1518,12 @@ function api(ticket, fn, args, viewAs) {
 // Errors starting with "LOCKED:" make the page show the login screen.
 function login(username, password, device) {
   const props = PropertiesService.getScriptProperties();
-  const shared = props.getProperty('DEFAULT_PASSWORD');
-  if (!shared) throw new Error('LOCKED: The accounts are not set up yet. Add ' + ACCOUNT_PROPERTIES.join(', ') + ' in Apps Script > Project Settings > Script Properties.');
+  const suffix = props.getProperty('PASSWORD_SUFFIX');
+  if (!suffix) throw new Error('LOCKED: The accounts are not set up yet. Add ' + ACCOUNT_PROPERTIES.join(', ') + ' in Apps Script > Project Settings > Script Properties.');
   const name = String(username == null ? '' : username).trim().toLowerCase();
   const owner = String(props.getProperty('OWNER_USERNAME') || '').trim().toLowerCase();
   const key = owner && name === owner ? OWNER_KEY : USERS.hasOwnProperty(name) ? name : '';
-  const real = key === OWNER_KEY ? props.getProperty('OWNER_PASSWORD') : shared;
+  const real = key === OWNER_KEY ? props.getProperty('OWNER_PASSWORD') : key ? key + suffix : '';
   const cache = CacheService.getScriptCache();
   // Wrong tries are counted per account (all unknown usernames share one count)
   const wrongKey = 'wrongLogin_' + (key || '?');
@@ -1604,7 +1551,7 @@ function login(username, password, device) {
 function account_(key) {
   const u = key === OWNER_KEY ? { name: 'Owner', role: 'owner' } : USERS[key];
   if (!u) return null;
-  const all = u.role === 'owner' || u.role === 'manager';
+  const all = ALL_PROJECT_ROLES.indexOf(u.role) >= 0;
   return { key: key, name: u.name, role: u.role, all: all,
     projects: Object.keys(PROJECTS).filter(p => all || PROJECTS[p][u.role] === u.name) };
 }
@@ -1716,7 +1663,8 @@ const stepActor_ = key => STEP_ACTORS[key] || 'writer';
 function canPress_(u, t) {
   if (isBoss_(u)) return true;
   const actor = stepActor_(t.stage);
-  return u.role === actor && (PROJECTS[t.project] || {})[actor] === u.name;
+  // The assistant manager's steps are the same for every project
+  return u.role === actor && (actor === 'assistant' || (PROJECTS[t.project] || {})[actor] === u.name);
 }
 // Take back the last move: whoever made it, managerial and the owner (moves saved before logins
 // existed have no name: the project's content writer too)
@@ -1746,7 +1694,7 @@ function getInitialData_() {
   return {
     links: getLinks_(),
     tasks: getTasks_(),
-    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS },
+    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS, linkSteps: LINK_STEPS, assistantName: assistantName_() },
     // Who is logged in (the owner's username is never sent)
     user: { name: user_.name, role: user_.role, roleName: ROLE_NAMES[user_.role], projects: user_.projects, all: user_.all, readOnly: !!user_.readOnly },
     sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl()
@@ -1926,6 +1874,10 @@ function moveTask_(id, action, opts) {
     }
     const now = new Date().toISOString();
     const note = String(opts.note || '').trim().slice(0, 1000);
+    // Drafting Brief, Design and Motion hand on their link: the one given now, or the one the task already has
+    const linkField = action === 'advance' ? LINK_STEPS[task.stage] : '';
+    const link = linkField ? String(opts.link || '').trim().slice(0, 2000) || task[linkField] : '';
+    if (linkField && !isUrl_(link)) throw new Error('Paste the ' + (linkField === 'briefLink' ? 'brief' : 'result') + ' link first (starting with http:// or https://).');
     let moved;
     if (action === 'undo') {
       if (task.history.length < 2) throw new Error('Nothing to undo.');
@@ -1946,7 +1898,9 @@ function moveTask_(id, action, opts) {
     } else {
       moved = [task].concat(action === 'advance' ? linkedTasks_(task, all) : []);
       const sync = moved.length > 1 ? newId_('S') : '';
-      moved.forEach(o => stepTask_(o, action, { to: opts.to, note: note }, now, sync));
+      // One brief covers every task of that channel in the Monthly Brief
+      if (linkField) moved.forEach(o => o[linkField] = link);
+      moved.forEach(o => stepTask_(o, action, { to: opts.to, note: note, link: link }, now, sync));
     }
     moved.forEach(o => {
       o.updatedAt = now;
@@ -1966,13 +1920,19 @@ function activityText_(e) {
   return text + (e.note ? ': ' + e.note : '');
 }
 
-// Who the task's current step is waiting for, e.g. "Alfid", "Kak Faza (via Obi)", "QC (Kak Hendra / Bu Riska)"
+// Who the task's current step is waiting for, e.g. "Alfid", "Client (via Kak Faza)", "QC (Kak Hendra / Bu Riska)"
 function waitingFor_(t) {
   const s = stageInfo_(t.stage);
   const owner = stageOwner_(s, t);
-  if (stepActor_(t.stage) === 'manager') return 'QC (' + owner + ')';
-  const writer = (PROJECTS[t.project] || {}).writer;
-  return stepActor_(t.stage) === 'writer' && writer && owner !== writer && owner.indexOf(writer + ' ') !== 0 ? owner + ' (via ' + writer + ')' : owner;
+  const actor = stepActor_(t.stage);
+  if (actor === 'manager') return 'QC (' + owner + ')';
+  // The person who presses the button for someone without an account (the client, the freelancers)
+  const via = actor === 'writer' ? (PROJECTS[t.project] || {}).writer : actor === 'assistant' ? assistantName_() : '';
+  return via && owner !== via && owner.indexOf(via + ' ') !== 0 ? owner + ' (via ' + via + ')' : owner;
+}
+function assistantName_() {
+  const key = Object.keys(USERS).filter(k => USERS[k].role === 'assistant')[0];
+  return key ? USERS[key].name : 'Assistant Manager';
 }
 
 // Moves one task a step (advance / revise / assign, see moveTask_). sync marks moves made together.
@@ -1982,6 +1942,7 @@ function stepTask_(task, action, opts, now, sync) {
   const entry = (act, to) => {
     const e = { at: now, action: act, from: task.stage, to: to, note: opts.note, by: user_.name };
     if (sync) e.sync = sync;
+    if (opts.link) e.link = opts.link;
     task.history.push(e);
     task.stage = to;
   };
@@ -2146,7 +2107,8 @@ function cleanTask_(d) {
     designer: '',
     videographer: line(d.videographer),
     deadline: /^\d{4}-\d{2}-\d{2}$/.test(d.deadline) ? d.deadline : '',
-    link: str(d.link, 2000),
+    briefLink: str(d.briefLink, 2000),
+    resultLink: str(d.resultLink, 2000),
     notes: str(d.notes, 5000),
     item: ''
   };
@@ -2173,7 +2135,8 @@ function cleanTask_(d) {
     if (!p.videographer) throw new Error('Please choose the videographer for ' + t.project + ' (' + VIDEOGRAPHERS.join(' or ') + ').');
     t.videographer = p.videographer;
   }
-  if (t.link && !isUrl_(t.link)) throw new Error('The link must start with http:// or https://');
+  if (t.briefLink && !isUrl_(t.briefLink)) throw new Error('The brief link must start with http:// or https://');
+  if (t.resultLink && !isUrl_(t.resultLink)) throw new Error('The result link must start with http:// or https://');
   return t;
 }
 
@@ -2188,9 +2151,9 @@ function writeTask_(sheet, row, t) {
   const revisions = t.history.filter(h => h.action === 'revision').length;
   sheet.getRange(row, 1, 1, TASK_HEADERS.length).setNumberFormat('@').setValues([[
     t.id, t.createdAt, t.updatedAt, t.title, t.project, t.type, t.channel, t.designer, t.videographer, t.deadline,
-    t.stage, currentStep_(t), String(revisions), t.link, t.notes, JSON.stringify(t.history),
+    t.stage, currentStep_(t), String(revisions), t.briefLink || '', t.notes, JSON.stringify(t.history),
     t.type === EVENT_TYPE ? EVENT_ITEMS.map(i => i.name).filter(n => t.checklist.indexOf(n) >= 0).join('\n') : '',
-    t.workMonth || '', t.forMonth || '', t.type === COLLATERAL_TYPE ? t.item || '' : ''
+    t.workMonth || '', t.forMonth || '', t.type === COLLATERAL_TYPE ? t.item || '' : '', t.resultLink || ''
   ].map(safe_)]);
   t.steps = pipeline_(t.type, t.channel);
   return t;
@@ -2211,7 +2174,8 @@ function rowToTask_(r) {
     videographer: text_(r[8]),
     deadline: toDay_(r[9]),
     stage: text_(r[10]).trim(),
-    link: text_(r[13]),
+    briefLink: text_(r[13]).trim(),
+    resultLink: text_(r[20]).trim(),
     notes: text_(r[14]),
     history: Array.isArray(history) ? history : [],
     checklist: parseLines_(r[16]),
@@ -2310,33 +2274,17 @@ function isUrl_(url) {
   return /^https?:\/\/\S+$/i.test(url);
 }
 
-/* ---------- Google Calendar reminders ---------- */
+/* ---------- Google Calendar reminders (links had deadlines before they became resources) ---------- */
 
-// Replaces the link's reminders: removes the old events, then adds one for each of
-// REMINDER_DAYS that is still in the future. Links that are Done or have no deadline get none.
-// Returns a warning if the calendar could not be updated (the link itself is still saved).
+// Removes the reminders a link still has from when links had deadlines. Returns a warning if the
+// calendar could not be updated (the link itself is still saved).
 function syncReminders_(link, oldIds) {
   link.reminders = [];
   try {
     deleteReminders_(oldIds);
-    if (!link.deadline || link.status === 'Done') return '';
-    const cal = CalendarApp.getDefaultCalendar();
-    const p = link.deadline.split('-').map(Number);
-    REMINDER_DAYS.forEach(days => {
-      const start = new Date(p[0], p[1] - 1, p[2] - days, REMINDER_HOUR);
-      if (start <= new Date()) return;
-      const title = '[MAKUTA] ' + (days === 1 ? 'Due tomorrow' : 'Due in ' + days + ' days') + ': ' + link.title +
-        (link.project ? ' (' + link.project + ')' : '');
-      const event = cal.createEvent(title, start, new Date(start.getTime() + 30 * 60000), {
-        description: 'Deadline: ' + link.deadline + '\nStatus: ' + link.status + '\nCategory: ' + link.category + '\n\n' + link.url
-      });
-      event.removeAllReminders();
-      event.addPopupReminder(0);
-      link.reminders.push(event.getId());
-    });
     return '';
   } catch (e) {
-    return 'Saved, but the Google Calendar reminder could not be updated: ' + e.message;
+    return 'Saved, but the old Google Calendar reminder could not be removed: ' + e.message;
   }
 }
 
@@ -2377,8 +2325,9 @@ function clean_(d) {
     url: str(d.url, 2000),
     category: cleanCategory_(d.category),
     project: str(d.project, 100).replace(/[\r\n]+/g, ' '),
-    status: STATUSES.indexOf(d.status) >= 0 ? d.status : 'Draft',
-    deadline: /^\d{4}-\d{2}-\d{2}$/.test(d.deadline) ? d.deadline : '',
+    // Kept in the sheet for links saved before, empty for resources
+    status: '',
+    deadline: '',
     pinned: d.pinned === true,
     purpose: str(d.purpose, 5000),
     versions: (Array.isArray(d.versions) ? d.versions : [])
@@ -2435,12 +2384,6 @@ function toDay_(v) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
 }
 
-// Accepts "done", "IN REVIEW", etc. when the sheet was edited by hand
-function toStatus_(v) {
-  const s = text_(v).trim();
-  const match = STATUSES.filter(x => x.toLowerCase() === s.toLowerCase())[0];
-  return match || s || 'Draft';
-}
 
 function parseLines_(value) {
   return text_(value).split('\n').map(s => s.trim()).filter(Boolean);
@@ -2462,7 +2405,7 @@ function rowToLink_(r) {
     url: text_(r[4]),
     category: text_(r[5]),
     project: text_(r[6]),
-    status: toStatus_(r[7]),
+    status: text_(r[7]).trim(),
     deadline: toDay_(r[8]),
     pinned: r[9] === true || String(r[9]).toUpperCase() === 'TRUE',
     purpose: text_(r[10]),
@@ -2492,7 +2435,7 @@ const google = { script: {
 // Demo data for the local preview only (never part of the real app): links, and tasks in every project
 // at different steps. Each step is pressed by the account whose step it is, so History and the owner's
 // Activity log show real names. Change DEMO_VERSION to load it again in browsers that already have it.
-const DEMO_VERSION = "users-1";
+const DEMO_VERSION = "links-2";
 const DEMO_WRITERS = { VTB: "obi", KRR: "obi", Makuta: "obi", GTR: "obi", GM: "puput", HC: "puput", LUX: "puput" };
 const DEMO_DESIGNERS = { VTB: "ilham", KRR: "alfid", Makuta: "alfid", GTR: "wawan", GM: "wawan", HC: "ilham", LUX: "wawan" };
 const DEMO_MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
@@ -2502,7 +2445,16 @@ let demoQcTurn = 0;
 function demoActor(t) {
   if (["qcBrief", "qcCut", "qcContent"].includes(t.stage)) return ["hendra", "riska"][demoQcTurn++ % 2];
   if (["design", "motion"].includes(t.stage)) return DEMO_DESIGNERS[t.project];
+  if (["toClient", "qcClient", "ads"].includes(t.stage)) return "faza";
   return DEMO_WRITERS[t.project];
+}
+
+// The link a step hands on: one brief per project, month and channel; a new result after every revision
+function demoLink(t) {
+  if (t.stage === "brief") return `https://docs.google.com/document/d/demo-brief-${(t.project + "-" + (t.workMonth || t.id) + "-" + (t.channel || "x")).toLowerCase()}/edit`;
+  if (!["design", "motion"].includes(t.stage)) return "";
+  const version = t.history.filter(e => e.link && e.from === t.stage).length + 1;
+  return `https://drive.google.com/drive/folders/demo-result-${t.id.toLowerCase()}-v${version}`;
 }
 
 function demoTask(id) {
@@ -2518,9 +2470,10 @@ function demoMoves(id, moves) {
       while (demoTask(id).stage !== "done") demoMoves(id, ["a"]);
       return;
     }
-    GAS.actAs(demoActor(demoTask(id)));
+    const t = demoTask(id);
+    GAS.actAs(demoActor(t));
     const [to, note] = m.slice(2).split("|");
-    if (m === "a") GAS.moveTask(id, "advance");
+    if (m === "a") GAS.moveTask(id, "advance", demoLink(t) ? { link: demoLink(t) } : {});
     else if (m.startsWith("s:")) GAS.moveTask(id, "assign", { to });
     else GAS.moveTask(id, "revise", { to, note });
   });
@@ -2581,15 +2534,15 @@ function loadDemoData() {
   const ago = {};
   const backdate = (ids, days) => Object.values(ids).forEach(id => ago[id] = days);
 
-  // Links: anyone logged in can add them
+  // Resources: anyone logged in can add them
   [
-    ["obi", { title: "KRR Content Calendar", url: "https://docs.google.com/spreadsheets/d/demo-krr/edit", category: "Google Spreadsheets", project: "KRR", status: "In Progress", deadline: day(6), purpose: "Instagram feeds for this month" }],
-    ["obi", { title: "VTB Competitor Analysis Deck", url: "https://docs.google.com/presentation/d/demo-vtb/edit", category: "Google Slide", project: "VTB", status: "In Review", deadline: day(2), pinned: true, purpose: "Market & competitor mapping" }],
-    ["alfid", { title: "Makuta Reels CTC", url: "https://drive.google.com/file/d/demo-makuta-reels/view", category: "CTC-Video [VG-Arif]", project: "Makuta", status: "In Review", deadline: day(4), purpose: "CTC for this month's shooting" }],
-    ["puput", { title: "LUX Brand Guideline", url: "https://drive.google.com/drive/folders/demo-lux", category: "Drive Folder", project: "LUX", status: "Done", purpose: "Logo, colours and fonts" }],
-    ["puput", { title: "GM Ads Copy Bank", url: "https://docs.google.com/document/d/demo-gm/edit", category: "Google Docs", project: "GM", status: "Draft", deadline: day(9), purpose: "Headlines and CTAs for the ads" }],
-    ["wawan", { title: "GTR Key Visual", url: "https://www.figma.com/file/demo-gtr", category: "Other", project: "GTR", status: "Revision", deadline: day(-1), purpose: "Main visual for the campaign" }],
-    ["ilham", { title: "HC Moodboard", url: "https://pinterest.com/demo-hc", category: "Reference", project: "REFERENCE", status: "Draft", purpose: "Visual references for HC" }],
+    ["obi", { title: "KRR Content Calendar", url: "https://docs.google.com/spreadsheets/d/demo-krr/edit", category: "Google Spreadsheets", project: "KRR", purpose: "Instagram feeds, month by month" }],
+    ["obi", { title: "VTB Competitor Analysis Deck", url: "https://docs.google.com/presentation/d/demo-vtb/edit", category: "Google Slide", project: "VTB", pinned: true, purpose: "Market & competitor mapping" }],
+    ["alfid", { title: "Makuta Raw Footage", url: "https://drive.google.com/drive/folders/demo-makuta-footage", category: "Drive Folder", project: "Makuta", purpose: "Every shooting, sorted by month" }],
+    ["puput", { title: "LUX Brand Guideline", url: "https://drive.google.com/drive/folders/demo-lux", category: "Drive Folder", project: "LUX", purpose: "Logo, colours and fonts" }],
+    ["puput", { title: "GM Ads Copy Bank", url: "https://docs.google.com/document/d/demo-gm/edit", category: "Google Docs", project: "GM", purpose: "Headlines and CTAs for the ads" }],
+    ["wawan", { title: "GTR Key Visual", url: "https://www.figma.com/file/demo-gtr", category: "Other", project: "GTR", purpose: "Main visual for the campaign" }],
+    ["ilham", { title: "HC Moodboard", url: "https://pinterest.com/demo-hc", category: "Reference", project: "REFERENCE", purpose: "Visual references for HC" }],
   ].forEach(([who, link]) => { GAS.actAs(who); GAS.addLink(link); });
 
   // Last month: finished work
@@ -2683,14 +2636,6 @@ function previewReset() {
   toast("Demo data loaded");
 }
 </script><script>
-  const STATUSES = ["Draft", "In Progress", "In Review", "Revision", "Done"];
-  const STATUS_INFO = {
-    "Draft": "Still being drafted, not ready to share yet.",
-    "In Progress": "Actively being worked on.",
-    "In Review": "Waiting for feedback or approval.",
-    "Revision": "Needs changes after feedback.",
-    "Done": "Finished and approved.",
-  };
   const REFERENCE_PROJECT = "REFERENCE";
   const CATEGORY_ICONS = { "Google Docs": "📄", "Google Spreadsheets": "📈", "Google Slide": "📊", "Drive Folder": "📁", "CTC-Video": "🎬", "Reference": "🔖", "Other": "📌" };
   const $ = id => document.getElementById(id);
@@ -2701,12 +2646,11 @@ function previewReset() {
     return m ? { base: m[1], source: m[2] } : { base: c, source: "" };
   }
   const categoryLabel = c => `${CATEGORY_ICONS[splitCategory(c).base] || "📌"} ${c}`;
-  const state = { links: [], tasks: [], cfg: null, app: {}, user: null, viewAs: "", loaded: false, editingId: null, dupId: null, view: "table", editingTaskId: null, openHistory: new Set(), justMoved: null, justTicked: null, page: "home" };
+  const state = { links: [], tasks: [], cfg: null, app: {}, user: null, viewAs: "", loaded: false, editingId: null, dupId: null, view: "table", linkTab: "resources", editingTaskId: null, stepLinkTask: null, openHistory: new Set(), justMoved: null, justTicked: null, page: "home" };
 
   const SORTERS = {
     newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
     oldest: (a, b) => a.createdAt.localeCompare(b.createdAt),
-    deadline: (a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"),
     az: (a, b) => a.title.localeCompare(b.title),
     za: (a, b) => b.title.localeCompare(a.title),
   };
@@ -2808,7 +2752,6 @@ function previewReset() {
   const dayStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const today = () => dayStr(new Date());
   const parseDay = day => { const [y, m, d] = day.split("-").map(Number); return new Date(y, m - 1, d); };
-  const daysAgo = n => dayStr(new Date(Date.now() - n * 864e5));
   const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   function formatDate(iso) {
@@ -2827,7 +2770,6 @@ function previewReset() {
     const now = new Date();
     return Math.round((parseDay(day) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
   }
-  const isOverdue = l => !!l.deadline && l.status !== "Done" && l.deadline < today();
 
   // Add https:// when the protocol is missing
   function normalizeUrl(url) {
@@ -2935,7 +2877,7 @@ function previewReset() {
 
   /* ---------- Pages ---------- */
   const VIEWS = { home: "Home", tasks: "Tasks", links: "Links", admin: "Admin" };
-  const PAGE_TITLES = { home: "Home", tasks: "Milestones", links: "Links", admin: "Admin" };
+  const PAGE_TITLES = { home: "Home", tasks: "Milestones", links: "Resources", admin: "Admin" };
   function showView(name) {
     // The link form opens as a side panel over the page you are on
     if (name === "submit") return openLinkPanel();
@@ -2990,7 +2932,7 @@ function previewReset() {
   function openLinkPanel() {
     toggleSidebar(false);
     toggleNewMenu(false);
-    $("drawerTitle").textContent = state.editingId ? "Edit link" : "Add link";
+    $("drawerTitle").textContent = state.editingId ? "Edit resource" : "Add resource";
     $("viewSubmit").hidden = false;
     document.body.classList.add("drawer-open");
     setTimeout(() => $("viewSubmit").contains(document.activeElement) || $("title").focus(), 50);
@@ -3022,7 +2964,7 @@ function previewReset() {
 
   /* ---------- Data loading ---------- */
   function loadData() {
-    $("results").innerHTML = `<div class="loading"><div class="spinner"></div>Loading your links...</div>`;
+    $("results").innerHTML = `<div class="loading"><div class="spinner"></div>Loading...</div>`;
     return api("getInitialData").then(data => {
       state.links = data.links;
       state.tasks = data.tasks;
@@ -3059,7 +3001,9 @@ function previewReset() {
     const projects = uniqueValues("project");
     $("projectList").innerHTML = projects.map(p => `<option value="${escapeHtml(p)}">`).join("");
     fillSelect("fCategory", uniqueValues("category"), "All categories", categoryLabel);
-    fillSelect("fProject", projects, "All projects", p => `${projectIcon(p)} ${p}`);
+    // Resources may name any project; the brief & result links are from the projects of my tasks
+    const all = state.linkTab === "tasks" ? taskProjects() : projects;
+    fillSelect("fProject", all, "All projects", p => `${projectIcon(p)} ${p}`);
   }
 
   function upsertLocal(link) {
@@ -3071,11 +3015,6 @@ function previewReset() {
 
   /* ---------- Form ---------- */
   function showError(id, show) { $(id + "Err").hidden = !show; }
-
-  function updateStatusHint() {
-    const s = $("status").value;
-    $("statusHint").innerHTML = `${statusBadge(s)} ${escapeHtml(STATUS_INFO[s] || "")}`;
-  }
 
   function addVersionRow(v) {
     v = v || {};
@@ -3144,11 +3083,10 @@ function previewReset() {
     $("versionList").innerHTML = "";
     state.editingId = null;
     $("editBanner").hidden = true;
-    $("submitLabel").textContent = "Save link";
-    $("drawerTitle").textContent = "Add link";
+    $("submitLabel").textContent = "Save resource";
+    $("drawerTitle").textContent = "Add resource";
     ["title", "url", "category", "videoSource", "versions"].forEach(k => showError(k, false));
     $("dupWarning").hidden = true;
-    updateStatusHint();
     updateCategoryFields();
   }
 
@@ -3169,14 +3107,14 @@ function previewReset() {
 
   // True when the form has unsaved input (so we don't silently throw it away)
   function formIsDirty() {
-    return ["title", "url", "project", "purpose", "deadline"].some(id => $(id).value.trim()) ||
+    return ["title", "url", "project", "purpose"].some(id => $(id).value.trim()) ||
       document.querySelectorAll(".version-row").length > 0;
   }
 
   async function startEdit(link) {
     if (state.editingId !== link.id && formIsDirty() && !await confirmDialog({
       emoji: "📝", title: "Discard unsaved changes?",
-      message: "The form has text you haven't saved yet. Continue and replace it with this link?", ok: "Discard & Edit",
+      message: "The form has text you haven't saved yet. Continue and replace it with this resource?", ok: "Discard & edit",
     })) return;
     resetForm();
     state.editingId = link.id;
@@ -3189,9 +3127,6 @@ function previewReset() {
     $("project").value = link.project;
     updateCategoryFields();
     $("videoSource").value = cat.source;
-    $("status").value = STATUSES.includes(link.status) ? link.status : "Draft";
-    updateStatusHint();
-    $("deadline").value = link.deadline;
     $("purpose").value = link.purpose;
     $("pinned").checked = link.pinned;
     link.versions.forEach(v => addVersionRow(v));
@@ -3204,7 +3139,7 @@ function previewReset() {
 
   function setBusy(busy) {
     $("submitBtn").disabled = busy;
-    $("submitLabel").textContent = busy ? "Saving..." : (state.editingId ? "Save changes" : "Save link");
+    $("submitLabel").textContent = busy ? "Saving..." : (state.editingId ? "Save changes" : "Save resource");
   }
 
   async function submitForm(e) {
@@ -3216,8 +3151,6 @@ function previewReset() {
       url: normalizeUrl($("url").value),
       category: isVideo && source ? `CTC-Video [${source}]` : $("category").value,
       project: $("project").value.trim(),
-      status: $("status").value,
-      deadline: $("deadline").value,
       purpose: $("purpose").value.trim(),
       pinned: $("pinned").checked,
       versions: readVersions(),
@@ -3245,7 +3178,7 @@ function previewReset() {
       const saved = editing ? await api("updateLink", editing, data) : await api("addLink", data);
       upsertLocal(saved);
       resetForm();
-      $("successTitle").textContent = editing ? "Changes saved" : "Link saved";
+      $("successTitle").textContent = editing ? "Changes saved" : "Resource saved";
       $("successText").textContent = `"${saved.title}" has been ${editing ? "updated" : "saved"}.`;
       openModal("successModal");
       if (saved.warning) toast(saved.warning, true);
@@ -3256,49 +3189,38 @@ function previewReset() {
     }
   }
 
-  /* ---------- All Links: filtering ---------- */
+  /* ---------- Resources: filtering ---------- */
   function resetFilters(rerender = true) {
-    ["search", "fCategory", "fProject", "fStatus", "dateFrom", "dateTo"].forEach(id => $(id).value = "");
+    ["search", "fCategory", "fProject"].forEach(id => $(id).value = "");
     $("sort").value = "newest";
     $("pinnedOnly").checked = false;
     if (rerender) render();
   }
 
-  function applyStat(kind) {
-    resetFilters(false);
-    if (kind === "week") $("dateFrom").value = daysAgo(6);
-    if (kind === "open" || kind === "overdue") $("fStatus").value = kind;
-    render();
-  }
-
   function getFiltered() {
     const q = $("search").value.trim().toLowerCase();
-    const cat = $("fCategory").value, proj = $("fProject").value, status = $("fStatus").value;
-    const from = $("dateFrom").value, to = $("dateTo").value, pinnedOnly = $("pinnedOnly").checked;
-
+    const cat = $("fCategory").value, proj = $("fProject").value, pinnedOnly = $("pinnedOnly").checked;
     return state.links.filter(l => {
       if (cat && l.category !== cat) return false;
       if (proj && l.project !== proj) return false;
-      if (status === "open" && l.status === "Done") return false;
-      if (status === "overdue" && !isOverdue(l)) return false;
-      if (STATUSES.includes(status) && l.status !== status) return false;
       if (pinnedOnly && !l.pinned) return false;
-      const day = addedDay(l);
-      if (from && (!day || day < from)) return false;
-      if (to && (!day || day > to)) return false;
       if (q) {
-        const haystack = [l.title, l.url, l.category, l.project, l.status, l.purpose, ...l.versions.flatMap(v => [v.label, v.url])].join(" ").toLowerCase();
+        const haystack = [l.title, l.url, l.category, l.project, l.purpose, ...l.versions.flatMap(v => [v.label, v.url])].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     }).sort((a, b) => (b.pinned - a.pinned) || SORTERS[$("sort").value](a, b));
   }
 
-  /* ---------- All Links: rendering ---------- */
-  function statusBadge(s) {
-    return `<span class="status status-${slug(s)}" title="${escapeHtml(STATUS_INFO[s] || "")}"><i></i>${escapeHtml(s)}</span>`;
+  // Brief & result links: every task I can see that has one, last changed first
+  function getTaskLinks() {
+    const q = $("search").value.trim().toLowerCase(), proj = $("fProject").value;
+    return state.tasks.filter(t => (t.briefLink || t.resultLink) && (!proj || t.project === proj) &&
+      (!q || [t.title, t.project, t.type, t.briefLink, t.resultLink].join(" ").toLowerCase().includes(q)))
+      .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
   }
 
+  /* ---------- Resources: rendering ---------- */
   function categoryBadge(c) {
     const base = splitCategory(c).base;
     return `<span class="cat cat-${base in CATEGORY_ICONS ? slug(base) : "other"}">${escapeHtml(categoryLabel(c))}</span>`;
@@ -3335,17 +3257,7 @@ function previewReset() {
     return `<span class="proj" style="--h:${projectHue(name)}">${projectIcon(name)} ${escapeHtml(name)}</span>`;
   }
 
-  function deadlineText(l) {
-    if (!l.deadline) return `<span class="muted">-</span>`;
-    const date = formatDay(l.deadline);
-    if (l.status === "Done") return `<span class="due due-done">📅 ${date}</span>`;
-    const d = daysUntil(l.deadline);
-    if (d < 0) return `<span class="due due-overdue">⚠️ Overdue · ${plural(-d, "day")}</span><small class="due-date">${date}</small>`;
-    if (d <= 3) return `<span class="due due-soon">⏰ ${d === 0 ? "Due today" : d === 1 ? "Due tomorrow" : `In ${d} days`}</span><small class="due-date">${date}</small>`;
-    return `<span class="due">📅 ${date}</span>`;
-  }
-
-  const rowClass = l => [isOverdue(l) ? "row-overdue" : "", l.pinned ? "row-pinned" : ""].join(" ").trim();
+  const rowClass = l => l.pinned ? "row-pinned" : "";
 
   function titleBlock(l) {
     const versions = l.versions.length
@@ -3374,17 +3286,32 @@ function previewReset() {
   // When the page is too narrow for the table, each row becomes a card (see Styles)
   function renderTable(list) {
     return `<div class="table-wrap"><table class="links-table">
-      <colgroup><col class="c-pin"><col><col class="c-cat"><col class="c-proj"><col class="c-status"><col class="c-due"><col class="c-act"></colgroup>
-      <thead><tr><th><span class="sr-only">Pin</span></th><th>Title &amp; link</th><th>Category</th><th>Project</th><th>Status</th><th>Deadline</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <colgroup><col class="c-pin"><col><col class="c-cat"><col class="c-proj"><col class="c-act"></colgroup>
+      <thead><tr><th><span class="sr-only">Pin</span></th><th>Title &amp; link</th><th>Category</th><th>Project</th><th><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>${list.map(l => `
         <tr class="${rowClass(l)}">
           <td class="pin-cell">${pinButton(l)}</td>
           <td class="title-cell">${titleBlock(l)}<div class="link-meta" title="${formatDate(l.createdAt)}">Added ${addedDay(l) ? formatDay(addedDay(l)) : "-"}${l.purpose ? ` · <span class="link-desc">${escapeHtml(l.purpose)}</span>` : ""}</div></td>
           <td data-label="Category">${categoryBadge(l.category)}</td>
           <td data-label="Project">${projectChip(l.project)}</td>
-          <td data-label="Status">${statusBadge(l.status)}</td>
-          <td data-label="Deadline">${deadlineText(l)}</td>
           <td class="act-cell">${actionButtons(l)}</td>
+        </tr>`).join("")}
+      </tbody></table></div>`;
+  }
+
+  // Brief & result links of the tasks, with the step each task is at (opens the task in Milestones)
+  function renderTaskLinks(list) {
+    const open = (url, label) => url ? `<a class="tag tag-link" href="${safeHref(url)}" target="_blank" rel="noopener">${label} ↗</a>` : `<span class="muted">Not yet</span>`;
+    return `<div class="table-wrap"><table class="links-table task-links">
+      <colgroup><col><col class="c-proj"><col class="c-link"><col class="c-link"></colgroup>
+      <thead><tr><th>Task</th><th>Project</th><th>Brief</th><th>Result</th></tr></thead>
+      <tbody>${list.map(t => `
+        <tr>
+          <td class="title-cell"><button type="button" class="link-task" data-open="${escapeHtml(t.id)}" title="Open in Milestones">${escapeHtml(t.title)}</button>
+            <div class="link-meta">${t.stage === "done" ? `✓ ${escapeHtml(doneLabel(t))}` : `Now: ${escapeHtml(stageOf(t.stage).name)}`}</div></td>
+          <td data-label="Project">${projectChip(t.project)}</td>
+          <td data-label="Brief">${open(t.briefLink, "📄 Brief")}</td>
+          <td data-label="Result">${open(t.resultLink, "🎨 Result")}</td>
         </tr>`).join("")}
       </tbody></table></div>`;
   }
@@ -3395,12 +3322,10 @@ function previewReset() {
     // Projects A-Z, links without a project last
     return Object.keys(groups).sort((a, b) => (!a - !b) || a.localeCompare(b)).map(name => {
       const items = groups[name];
-      const notDone = items.filter(l => l.status !== "Done").length;
-      const overdue = items.filter(isOverdue).length;
       return `<section class="group">
         <div class="group-head">
-          <h3>${projectAvatar(name)}${escapeHtml(name) || "No Project"}</h3>
-          <span>${plural(items.length, "link")} &middot; ${notDone} not done${overdue ? ` &middot; <b class="text-danger">${overdue} overdue</b>` : ""}</span>
+          <h3>${projectAvatar(name)}${escapeHtml(name) || "No project"}</h3>
+          <span>${plural(items.length, "resource")}</span>
         </div>
         ${items.map(l => `
           <div class="group-item ${rowClass(l)}">
@@ -3409,8 +3334,6 @@ function previewReset() {
               ${titleBlock(l)}
               <div class="meta-line">
                 ${categoryBadge(l.category)}
-                ${statusBadge(l.status)}
-                ${l.deadline ? deadlineText(l) : ""}
                 <span>Added ${formatDate(l.createdAt)}</span>
               </div>
               ${l.purpose ? `<p class="desc">${escapeHtml(l.purpose)}</p>` : ""}
@@ -3421,13 +3344,6 @@ function previewReset() {
     }).join("");
   }
 
-  function renderStats() {
-    const weekStart = daysAgo(6);
-    $("stat-all").textContent = state.links.length;
-    $("stat-week").textContent = state.links.filter(l => addedDay(l) >= weekStart).length;
-    $("stat-open").textContent = state.links.filter(l => l.status !== "Done").length;
-    $("stat-overdue").textContent = state.links.filter(isOverdue).length;
-  }
 
   // Phones fold the filters behind a button; it says how many are in use (the search box stays open)
   function updateFilterToggle(view) {
@@ -3438,40 +3354,60 @@ function previewReset() {
 
   // Highlight filters that are in use, so it's obvious why the list is shorter
   function markActiveFilters() {
-    const ids = ["search", "fCategory", "fProject", "fStatus", "dateFrom", "dateTo"];
+    const tasks = state.linkTab === "tasks";
     let active = 0;
-    ids.forEach(id => {
-      const on = !!$(id).value;
+    ["search", "fProject", "fCategory"].forEach(id => {
+      const on = !!$(id).value && (!tasks || id !== "fCategory");
       $(id).classList.toggle("is-active", on);
       if (on) active++;
     });
-    if ($("pinnedOnly").checked) active++;
+    if (!tasks && $("pinnedOnly").checked) active++;
     updateFilterToggle("viewLinks");
-    const status = $("fStatus").value;
-    $("card-open").classList.toggle("active", status === "open");
-    $("card-overdue").classList.toggle("active", status === "overdue");
-    $("card-week").classList.toggle("active", $("dateFrom").value === daysAgo(6) && !status);
     return active;
+  }
+
+  const LINK_TAB_NOTES = {
+    resources: "Links the team keeps coming back to: brand guidelines, moodboards, content calendars and references.",
+    tasks: "The brief and result of every task, collected from Milestones. They are added when the step is pressed.",
+  };
+  function showLinkTab(tab) {
+    state.linkTab = tab;
+    document.querySelectorAll("[data-ltab]").forEach(b => {
+      b.classList.toggle("active", b.dataset.ltab === tab);
+      b.setAttribute("aria-selected", String(b.dataset.ltab === tab));
+    });
+    $("viewLinks").classList.toggle("tab-tasks", tab === "tasks");
+    $("search").placeholder = tab === "tasks" ? "Search task, project or link..." : "Search title, link or project...";
+    refreshOptions();
+    render();
   }
 
   function render() {
     if (!state.loaded) return;
-    renderStats();
+    $("linkTabNote").textContent = LINK_TAB_NOTES[state.linkTab];
     const active = markActiveFilters();
+    const filterNote = active ? ` <span class="filter-note">${plural(active, "filter")} active</span>` : "";
+    if (state.linkTab === "tasks") {
+      const list = getTaskLinks(), total = state.tasks.filter(t => t.briefLink || t.resultLink).length;
+      $("count").innerHTML = `Showing <b>${list.length}</b> of ${plural(total, "task")} with links` + filterNote;
+      $("results").innerHTML = list.length ? renderTaskLinks(list) : `<div class="empty">${total
+        ? `<div class="empty-emoji">🔍</div><strong>No task matches your search.</strong><br><a href="#" onclick="resetFilters(); return false;">Reset filters</a>`
+        : `<div class="empty-emoji">📭</div><strong>No brief or result links yet.</strong><br>They appear here once a brief is submitted for QC.`}</div>`;
+      return;
+    }
     const list = getFiltered();
     const total = state.links.length;
-    $("count").innerHTML = `Showing <b>${list.length}</b> of ${plural(total, "link")}` +
-      (active ? ` <span class="filter-note">${plural(active, "filter")} active</span>` : "");
+    $("count").innerHTML = `Showing <b>${list.length}</b> of ${plural(total, "resource")}` + filterNote;
     if (!list.length) {
       $("results").innerHTML = `<div class="empty">${total
-        ? `<div class="empty-emoji">🔍</div><strong>No links match your search or filters.</strong><br><a href="#" onclick="resetFilters(); return false;">Reset filters</a>`
-        : `<div class="empty-emoji">📭</div><strong>No links yet.</strong><br><a href="#" onclick="newItem('link'); return false;">Add your first link</a>`}</div>`;
+        ? `<div class="empty-emoji">🔍</div><strong>No resources match your search or filters.</strong><br><a href="#" onclick="resetFilters(); return false;">Reset filters</a>`
+        : `<div class="empty-emoji">📭</div><strong>No resources yet.</strong><br><a href="#" onclick="newItem('link'); return false;">Add the first one</a>`}</div>`;
       return;
     }
     $("results").innerHTML = state.view === "table" ? renderTable(list) : renderGroups(list);
   }
 
-  /* ---------- All Links: actions ---------- */
+  /* ---------- Resources: actions ---------- */
   function togglePin(link) {
     link.pinned = !link.pinned;
     render();
@@ -3483,6 +3419,8 @@ function previewReset() {
   }
 
   async function handleAction(e) {
+    const task = e.target.closest("[data-open]");
+    if (task) return openTask(task.dataset.open);
     const btn = e.target.closest("[data-act]");
     if (!btn) return;
     const link = state.links.find(l => l.id === btn.dataset.id);
@@ -3492,14 +3430,14 @@ function previewReset() {
     if (act === "copy") copyText(link.url);
     else if (act === "edit") startEdit(link);
     else if (act === "pin") togglePin(link);
-    else if (act === "delete" && await confirmDialog({ message: `"${link.title}" will be permanently removed, including from the Google Sheet.` })) {
+    else if (act === "delete" && await confirmDialog({ title: "Delete this resource?", message: `"${link.title}" will be permanently removed, including from the Google Sheet.` })) {
       try {
         await api("deleteLink", link.id);
         state.links = state.links.filter(l => l.id !== link.id);
         if (state.editingId === link.id) resetForm();
         refreshOptions();
         render();
-        toast("Link deleted");
+        toast("Resource deleted");
       } catch (err) {
         toast("Delete failed: " + err.message, true);
       }
@@ -3528,39 +3466,37 @@ function previewReset() {
         "Main Link": l.url,
         "Category": l.category,
         "Project": l.project,
-        "Status": l.status,
-        "Deadline": l.deadline ? formatDay(l.deadline) : "",
         "Pinned": l.pinned ? "Yes" : "No",
         "Description": l.purpose,
         "Related Links": l.versions.map(v => `${v.label || "Link"}: ${v.url}`).join("\n"),
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws["!cols"] = [18, 40, 50, 16, 16, 14, 14, 8, 50, 50].map(wch => ({ wch }));
+      ws["!cols"] = [18, 40, 50, 16, 16, 8, 50, 50].map(wch => ({ wch }));
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Links");
-      XLSX.writeFile(wb, `makuta-links-${today()}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, "Resources");
+      XLSX.writeFile(wb, `makuta-resources-${today()}.xlsx`);
     } catch (err) {
       toast(err.message, true);
     }
   }
 
   /* ---------- Milestones: setup ---------- */
-  // Step dropdown: groups that follow the workflow (whose turn it is); exact steps are listed after these
-  // Finished tasks stay in the default view (dimmed, at the bottom) for this many days after they are done
+  // The Show dropdown: which tasks (show) or the stage they are at (stage, the same columns as Home's
+  // Projects table). Finished tasks stay in the default view (dimmed, at the bottom) for this many days.
   const RECENT_DONE_DAYS = 30;
   const STEP_GROUPS = {
-    current: { label: `Active + done in ${RECENT_DONE_DAYS} days`, test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
-    active: { label: "All active tasks", test: t => t.stage !== "done" },
-    mine: { label: "My Tasks", test: t => isMyStep(t) },
-    qc: { label: "Waiting QC Internal", test: t => ["qcBrief", "qcCut", "qcContent"].includes(t.stage) },
-    drafting: { label: "Drafting brief / client revision", test: t => ["brief", "revision"].includes(t.stage) },
-    production: { label: "In production (shooting / VO / CTC / design / ToV)", test: t => ["shoot", "vo", "video", "design", "motion"].includes(t.stage) },
+    current: { show: true, label: "Active + recently done", test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
+    active: { show: true, label: "Active only", test: t => t.stage !== "done" },
+    mine: { show: true, label: "My Tasks", test: t => isMyStep(t) },
+    late: { show: true, label: "Late", test: t => t.stage !== "done" && !!t.deadline && t.deadline < today() },
+    soon: { show: true, label: "Due in 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) <= 7 },
+    done: { show: true, label: "Done", test: t => t.stage === "done" },
+    all: { show: true, label: "All tasks", test: () => true },
+    drafting: { label: "Brief", test: t => ["brief", "revision"].includes(t.stage) },
+    qc: { label: "QC Internal", test: t => ["qcBrief", "qcCut", "qcContent"].includes(t.stage) },
+    production: { label: "Production", test: t => ["shoot", "vo", "video", "design", "motion"].includes(t.stage) },
     client: { label: "At client", test: t => ["toClient", "qcClient"].includes(t.stage) },
-    ready: { label: "Approved by client", test: t => ["post", "ads"].includes(t.stage) },
-    late: { label: "Late (past the deadline)", test: t => t.stage !== "done" && !!t.deadline && t.deadline < today() },
-    soon: { label: "Due in the next 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) <= 7 },
-    done: { label: "Done", test: t => t.stage === "done" },
-    all: { label: "All tasks", test: () => true },
+    ready: { label: "Ready to post", test: t => ["post", "ads"].includes(t.stage) },
   };
   const isVideoType = type => /^Video/.test(type);
   const isEventType = type => type === state.cfg.eventType;
@@ -3585,11 +3521,11 @@ function previewReset() {
   const stepActor = key => state.cfg.stepActors[key] || "writer";
   // The project's content writer, managerial and the owner create, edit and delete its tasks
   const managesProject = project => !me().readOnly && (isBoss() || (me().role === "writer" && (state.cfg.projects[project] || {}).writer === me().name));
+  // The assistant manager's steps (Send to Client, QC Client, Run Ads) are the same for every project
+  const actsOn = (u, actor, t) => u.role === actor && (actor === "assistant" || (state.cfg.projects[t.project] || {})[actor] === u.name);
   function canPress(t) {
     if (me().readOnly || t.stage === "done") return false;
-    if (isBoss()) return true;
-    const actor = stepActor(t.stage);
-    return me().role === actor && (state.cfg.projects[t.project] || {})[actor] === me().name;
+    return isBoss() || actsOn(me(), stepActor(t.stage), t);
   }
   function canUndo(t) {
     const last = t.history[t.history.length - 1] || {};
@@ -3602,13 +3538,23 @@ function previewReset() {
     if (t.stage === "done") return false;
     const actor = stepActor(t.stage), u = me();
     if (u.role === "manager") return actor === "manager" || stageOf(t.stage).person === u.name;
-    return u.role === actor && (state.cfg.projects[t.project] || {})[actor] === u.name;
+    return actsOn(u, actor, t);
   }
-  // "Alfid", "Kak Faza (via Obi)", "QC (Kak Hendra / Bu Riska)" (mirrors waitingFor_ in Code.gs)
+  // "Alfid", "Client (via Kak Faza)", "QC (Kak Hendra / Bu Riska)" (mirrors waitingFor_ in Code.gs)
   function waitingFor(t) {
-    const owner = stageOwner(stageOf(t.stage), t), actor = stepActor(t.stage), writer = projectWriter(t);
+    const owner = stageOwner(stageOf(t.stage), t), actor = stepActor(t.stage);
     if (actor === "manager") return `QC (${owner})`;
-    return actor === "writer" && owner !== writer && !owner.startsWith(writer + " ") ? `${owner} (via ${writer})` : owner;
+    // Who presses the button for someone without an account (the client, the freelancers)
+    const via = actor === "writer" ? projectWriter(t) : actor === "assistant" ? state.cfg.assistantName : "";
+    return via && owner !== via && !owner.startsWith(via + " ") ? `${owner} (via ${via})` : owner;
+  }
+  // The link a step works from: the brief until the work is made, then the result
+  const RESULT_STAGES = ["qcContent", "toClient", "qcClient", "revision", "post", "ads", "done"];
+  const LINK_NAMES = { briefLink: "📄 Brief", resultLink: "🎨 Result" };
+  const linkTag = (t, field) => t[field] ? `<a class="tag tag-link" href="${safeHref(t[field])}" target="_blank" rel="noopener">${LINK_NAMES[field]} ↗</a>` : "";
+  function workLink(t) {
+    const field = RESULT_STAGES.includes(t.stage) ? "resultLink" : "briefLink";
+    return t[field] ? `<a class="btn btn-sm btn-soft link-open" href="${safeHref(t[field])}" target="_blank" rel="noopener">${field === "briefLink" ? "📄 Open brief" : "🎨 Open result"} ↗</a>` : "";
   }
   const doneLabel = t => isCollateralType(t.type) ? "Approved by Client" : t.channel === "ADS" ? "Live on Ads" : "Scheduled / Posted";
   // Mirrors channelFromTitle_ in Code.gs: "BRIEF ORG NOV KRR" -> "ORG" ("" when neither or both)
@@ -3643,8 +3589,6 @@ function previewReset() {
 
   function setupTaskOptions() {
     const cfg = state.cfg;
-    const types = cfg.contentTypes.map(v => `<option>${escapeHtml(v)}</option>`).join("");
-    $("tType").innerHTML = `<option value="">All types</option>` + types;
     $("tfVideographer").innerHTML = `<option value="">-- Select --</option>` + cfg.videographers.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)} (VG-${escapeHtml(v)})</option>`).join("");
     // New tasks only for the projects this account looks after
     $("tfProject").innerHTML = $("bfProject").innerHTML = `<option value="">-- Select --</option>` +
@@ -3652,9 +3596,8 @@ function previewReset() {
     $("bfVideographer").innerHTML = $("tfVideographer").innerHTML;
     // The owner has no steps of their own, so no My Tasks
     const groups = Object.keys(STEP_GROUPS).filter(k => k !== "mine" || me().role !== "owner");
-    $("tStep").innerHTML =
-      `<optgroup label="Quick filters">${groups.map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("")}</optgroup>` +
-      `<optgroup label="Exact step">${cfg.stages.map(s => `<option value="${s.key}">${escapeHtml(s.name)} (${escapeHtml(s.person || s.role)})</option>`).join("")}</optgroup>`;
+    const options = show => groups.filter(k => !!STEP_GROUPS[k].show === show).map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("");
+    $("tStep").innerHTML = `<optgroup label="Tasks">${options(true)}</optgroup><optgroup label="At stage">${options(false)}</optgroup>`;
     $("tStep").value = defaultStep();
     // Only the content writers, managerial and the owner create tasks
     document.querySelectorAll(".task-create").forEach(b => b.hidden = !Object.keys(cfg.projects).some(managesProject));
@@ -3722,9 +3665,12 @@ function previewReset() {
       $("tfDeadline").value = t.deadline;
       ensureOption($("tfVideographer"), t.videographer);
       $("tfVideographer").value = t.videographer;
-      $("tfLink").value = t.link;
+      $("tfBriefLink").value = t.briefLink;
+      $("tfResultLink").value = t.resultLink;
       $("tfNotes").value = t.notes;
     }
+    // The result link is the graphic designer's; it only shows on a task that can have one
+    $("tfResultField").hidden = !t;
     updateTaskForm();
     openModal("taskModal");
     $("tfTitle").focus();
@@ -3806,7 +3752,8 @@ function previewReset() {
       type: $("tfType").value,
       deadline: $("tfDeadline").value,
       videographer: $("tfVideographerField").hidden ? "" : $("tfVideographer").value,
-      link: $("tfLink").value.trim() ? normalizeUrl($("tfLink").value) : "",
+      briefLink: $("tfBriefLink").value.trim() ? normalizeUrl($("tfBriefLink").value) : "",
+      resultLink: $("tfResultLink").value.trim() ? normalizeUrl($("tfResultLink").value) : "",
       notes: $("tfNotes").value.trim(),
       item: $("tfItemField").hidden ? "" : $("tfItem").value,
     };
@@ -3819,9 +3766,11 @@ function previewReset() {
       : !collateral && (state.cfg.projects[data.project] || {}).orgOnly && channelFromTitle(data.title) !== "ORG" ? ["tfTitle", `${data.project} is organic only. Use ORG in the title.`]
       : !collateral && (state.cfg.projects[data.project] || {}).adsOnly && channelFromTitle(data.title) !== "ADS" ? ["tfTitle", `${data.project} runs ADS only. Use ADS in the title.`]
       : !data.type ? ["tfType", "Please choose the content type."]
-      : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]      : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
+      : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]
+      : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
       : isEventType(data.type) && !data.deadline ? ["tfDeadline", "Please fill in the event date (D-Day)."]
-      : data.link && !isValidUrl(data.link) ? ["tfLink", "Please enter a valid link, or leave it empty."]
+      : data.briefLink && !isValidUrl(data.briefLink) ? ["tfBriefLink", "Please enter a valid brief link, or leave it empty."]
+      : data.resultLink && !isValidUrl(data.resultLink) ? ["tfResultLink", "Please enter a valid result link, or leave it empty."]
       : null;
     $("taskFormErr").hidden = !problem;
     if (problem) {
@@ -3893,7 +3842,7 @@ function previewReset() {
       <div class="batch-head">
         <span class="chan chan-${ch.toLowerCase()}">${ch}</span>
         <span class="batch-for">for ${contentMonth(month, ch).name} ${contentMonth(month, ch).year}</span>
-        <input data-blink="${ch}" placeholder="Brief ${state.cfg.channels[ch]} link (https:\/\/...)" aria-label="Brief link for ${ch}">
+        <input data-blink="${ch}" placeholder="Brief ${ch} link (optional now)" aria-label="Brief link for ${ch}">
       </div>
       ${types.map(type => {
         const title = batchTitle(project, type, ch, month), dup = existing.has(title);
@@ -3946,7 +3895,7 @@ function previewReset() {
       $(problem[0]).focus();
       return;
     }
-    const list = rows.map(r => ({ title: r.title, project, type: r.type, deadline: r.deadline, link: links[r.channel] || "",
+    const list = rows.map(r => ({ title: r.title, project, type: r.type, deadline: r.deadline, briefLink: links[r.channel] || "",
       videographer: isVideoType(r.type) ? $("bfVideographer").value : "" }));
     $("batchSaveBtn").disabled = true;
     try {
@@ -3969,12 +3918,12 @@ function previewReset() {
 
   /* ---------- Milestones: filtering ---------- */
   function resetTaskFilters(rerender = true) {
-    ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).value = "");
+    ["tSearch", "tProject", "tMonth"].forEach(id => $(id).value = "");
     $("tStep").value = defaultStep();
     if (rerender) renderTasks();
   }
 
-  // Also used from Home's pipeline, so it opens Milestones
+  // Also used from Home, so it opens Milestones
   function applyTaskStat(kind, project = "") {
     resetTaskFilters(false);
     $("tStep").value = kind;
@@ -3984,18 +3933,15 @@ function previewReset() {
 
   function getFilteredTasks() {
     const q = $("tSearch").value.trim().toLowerCase();
-    const proj = $("tProject").value, month = $("tMonth").value, type = $("tType").value, channel = $("tChannel").value, step = $("tStep").value || "current";
+    const proj = $("tProject").value, month = $("tMonth").value, step = STEP_GROUPS[$("tStep").value] || STEP_GROUPS.current;
     return state.tasks.filter(t => {
       if (proj && t.project !== proj) return false;
       if (month && taskMonth(t) !== month) return false;
-      if (type && t.type !== type) return false;
-      // ORG / ADS: regular content only; Event Attribute and Collateral have their own option
-      if (channel && (["event", "collateral"].includes(channel) ? typeKind(t.type) !== channel
-        : t.channel !== channel || ["event", "collateral"].includes(typeKind(t.type)))) return false;
-      if (STEP_GROUPS[step] ? !STEP_GROUPS[step].test(t) : t.stage !== step) return false;
+      if (!step.test(t)) return false;
+      // ORG, ADS, Collateral, Event Attribute, Video... are all found by typing them
       if (q) {
         const people = t.steps.map(k => stageOwner(stageOf(k), t));
-        const haystack = [t.title, t.project, t.type, t.item, t.channel, t.notes, t.link, ...people].join(" ").toLowerCase();
+        const haystack = [t.title, t.project, t.type, t.item, t.channel, t.notes, t.briefLink, t.resultLink, ...people].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -4055,9 +4001,11 @@ function previewReset() {
       const doneAt = st === "done" && lastEntry(t, e => e.from === k && ["done", "approved", "assign"].includes(e.action));
       const revs = t.history.filter(e => (k === "revision" ? e.to : e.from) === k && e.action === "revision").length;
       const when = doneAt ? shortDate(doneAt.at) : st === "current" ? `Now${entered ? ` · ${sinceText(entered.at)}` : ""}` : "";
+      // Drafting Brief opens the brief, Design / Motion the result
+      const url = t[state.cfg.linkSteps[k]];
       return `<li class="ms-step ms-${st}${s.qc ? " ms-qc" : ""}${red ? " ms-red" : ""}${red && i === redFrom ? " ms-red-start" : ""}">
         <span class="dot">${st === "done" ? "✓" : s.qc ? "QC" : i + 1}</span>
-        <span class="ms-name">${escapeHtml(s.name)}</span>
+        ${url ? `<a class="ms-name ms-link" href="${safeHref(url)}" target="_blank" rel="noopener" title="Open the ${k === "brief" ? "brief" : "result"}">${escapeHtml(s.name)}&nbsp;↗</a>` : `<span class="ms-name">${escapeHtml(s.name)}</span>`}
         <span class="ms-owner">${escapeHtml(stageOwner(s, t))}</span>
         <span class="ms-date">${when}${revs ? ` <b class="rev">↺ ${revs}</b>` : ""}</span>
       </li>`;
@@ -4080,10 +4028,12 @@ function previewReset() {
     };
     // Who made the move (moves saved before logins existed have no name)
     const by = e => e.by ? ` <span class="muted">· by ${escapeHtml(e.by)}</span>` : "";
+    // The link handed on with that step (earlier versions of a result stay here after a revision)
+    const link = e => e.link ? ` · <a href="${safeHref(e.link)}" target="_blank" rel="noopener">${e.from === "brief" ? "brief" : "result"} ↗</a>` : "";
     const open = state.openHistory.has(t.id) ? " open" : "";
     return `<details class="history" data-id="${escapeHtml(t.id)}"${open}>
       <summary>History (${t.history.length})</summary>
-      <ul>${[...t.history].reverse().map(e => `<li><span class="muted">${formatDate(e.at)}</span> ${text(e)}${by(e)}${e.note ? `<div class="note">"${escapeHtml(e.note)}"</div>` : ""}</li>`).join("")}</ul>
+      <ul>${[...t.history].reverse().map(e => `<li><span class="muted">${formatDate(e.at)}</span> ${text(e)}${link(e)}${by(e)}${e.note ? `<div class="note">"${escapeHtml(e.note)}"</div>` : ""}</li>`).join("")}</ul>
     </details>`;
   }
 
@@ -4110,7 +4060,8 @@ function previewReset() {
             ${done ? `<span class="tag tag-finished">✓ Completed ${shortDate(finishedAt(t))}</span>` : ""}
             ${taskDue(t)}
             ${totalRevs ? `<span class="tag tag-rev">↺ ${plural(totalRevs, "revision")}</span>` : ""}
-            ${t.link ? `<a class="tag tag-link" href="${safeHref(t.link)}" target="_blank" rel="noopener">🔗 Brief / file ↗</a>` : ""}
+            ${t.workMonth ? "" : linkTag(t, "briefLink")}
+            ${linkTag(t, "resultLink")}
           </div>
         </div>
       </div>
@@ -4138,13 +4089,13 @@ function previewReset() {
     const together = togetherLabel(t);
     const both = together ? ` <span class="together" title="Moves every task listed here together">· ${escapeHtml(together)}</span>` : "";
     return t.stage === "done" ? ""
-      : !canPress(t) ? `<span class="waiting">⏳ Waiting for <b>${escapeHtml(waitingFor(t))}</b></span>`
-      : t.stage === "revision"
+      : !canPress(t) ? `<span class="waiting">⏳ Waiting for <b>${escapeHtml(waitingFor(t))}</b></span>${workLink(t)}`
+      : workLink(t) + (t.stage === "revision"
       ? fixSteps(t).map(k => `<button class="btn-sm btn-accent" data-tact="assign" data-to="${k}" data-id="${id}">Send to ${FIX_LABELS[k]}: ${escapeHtml(stageOwner(stageOf(k), t))} →</button>`).join("")
       : s.qc
       ? `<button class="btn-sm btn-ok" data-tact="advance" data-id="${id}">✓ Approve${both}</button>
          <button class="btn-sm btn-danger" data-tact="revise" data-id="${id}">↺ Request Revision</button>`
-      : `<button class="btn-sm btn-accent" data-tact="advance" data-id="${id}">${escapeHtml(s.action || "Mark as Done")}${both} →</button>`;
+      : `<button class="btn-sm btn-accent" data-tact="advance" data-id="${id}">${escapeHtml(s.action || "Mark as Done")}${both} →</button>`);
   }
 
   // Event Attribute deliverables, ticked off one by one (saved right away)
@@ -4158,12 +4109,12 @@ function previewReset() {
     </div>`;
   }
 
-  // The stat cards that used to be here are Home's pipeline now; the sidebar and Home follow every change
+  // The sidebar and Home follow every change
   function renderTasks() {
     if (!state.loaded) return;
     renderSideProjects();
     if (state.page === "home") renderHome();
-    ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
+    ["tSearch", "tProject", "tMonth"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
     $("tStep").classList.toggle("is-active", $("tStep").value !== defaultStep());
     updateFilterToggle("viewTasks");
     const list = getFilteredTasks();
@@ -4209,7 +4160,7 @@ function previewReset() {
       shown.add(key);
       const list = items.filter(o => o.workMonth === t.workMonth && o.channel === t.channel)
         .sort((a, b) => (a.stage === "done") - (b.stage === "done") || isVideoType(a.type) - isVideoType(b.type) || a.type.localeCompare(b.type));
-      const link = (list.find(o => o.link) || {}).link;
+      const link = (list.find(o => o.briefLink) || {}).briefLink;
       const finished = list.filter(o => o.stage === "done").length;
       return `<div class="brief-section${finished === list.length ? " brief-done" : ""}">
         <div class="brief-head">
@@ -4271,21 +4222,19 @@ function previewReset() {
 
     const hour = new Date().getHours();
     $("helloTitle").textContent = `Good ${hour < 11 ? "morning" : hour < 15 ? "afternoon" : hour < 18 ? "evening" : "night"}, ${u.name}`;
-    $("helloText").textContent = owner || u.role === "manager"
-      ? "You see every project. Here is what needs attention and where each project stands."
-      : `${u.roleName} for ${listWords(u.projects)}. Here is what needs you and where each project stands.`;
+    // "Content Writer · VTB, KRR, Makuta and GTR" (the owner's role name is the name itself)
+    $("helloText").textContent = `${owner ? "Owner" : u.roleName} · ${u.all ? "every project" : listWords(u.projects)}`;
 
-    // Four numbers that answer "what should I look at?"; each opens the matching list
-    const soon = active.filter(t => t.deadline && daysUntil(t.deadline) <= 7).sort(byDeadline);
-    const openLinks = state.links.filter(l => l.status !== "Done").length;
+    // Four numbers that answer "what should I look at?"; each opens the matching list in Milestones
+    const soon = active.filter(STEP_GROUPS.soon.test).sort(byDeadline);
     const stats = [
       owner ? { n: active.length, label: "Active tasks", note: "In every project", stat: "active" }
         : { n: active.filter(isMyStep).length, label: "Waiting for you", note: "At a step you handle", stat: "mine", tone: "accent" },
       { n: active.filter(late).length, label: "Late", note: "Past their deadline", stat: "late", tone: "danger" },
       { n: soon.length, label: "Due this week", note: "Deadline in the next 7 days", stat: "soon" },
-      { n: openLinks, label: "Links not done", note: "Links still being worked on", link: "open" },
+      { n: active.filter(STEP_GROUPS.client.test).length, label: "At client", note: "Sent, waiting for the client", stat: "client" },
     ];
-    $("homeStats").innerHTML = stats.map(s => `<button type="button" class="home-stat${s.n && s.tone ? " tone-" + s.tone : ""}" ${s.link ? `data-links="${s.link}"` : `data-stat="${s.stat}"`}>
+    $("homeStats").innerHTML = stats.map(s => `<button type="button" class="home-stat${s.n && s.tone ? " tone-" + s.tone : ""}" data-stat="${s.stat}">
         <span class="stat-n">${s.n}</span><span class="stat-label">${s.label}</span><span class="stat-note">${s.note}</span></button>`).join("");
 
     // Waiting for you: the steps I am responsible for. The owner has none, so they see what is late.
@@ -4295,7 +4244,7 @@ function previewReset() {
     $("turnTitle").textContent = owner ? "Late tasks" : "Waiting for you";
     $("turnCount").textContent = turn.length ? plural(turn.length, "task") : "";
     $("turnNote").textContent = owner ? "Tasks past their deadline, with who they are waiting for."
-      : "These tasks are at a step you handle. Press the button once the step is finished and the task moves on to the next person.";
+      : "Tasks at a step you handle. Press the button when the step is finished; the task then moves on to the next person.";
     $("homeTurn").innerHTML = turn.length ? turn.map(t => `<div class="turn-row${late(t) ? " is-late" : ""}">
         <button type="button" class="turn-open" data-open="${escapeHtml(t.id)}" title="Open in Milestones">
           <span class="turn-title">${escapeHtml(t.title)}</span>
@@ -4360,8 +4309,6 @@ function previewReset() {
     if (stat) return applyTaskStat(stat.dataset.stat, stat.dataset.project || "");
     const proj = e.target.closest("[data-project-open]");
     if (proj) return showProject(proj.dataset.projectOpen);
-    const links = e.target.closest("[data-links]");
-    if (links) { showView("links"); return applyStat(links.dataset.links); }
     handleTaskAction(e);
   }
 
@@ -4431,6 +4378,34 @@ function previewReset() {
     openModal("reviseModal");
   }
 
+  // Drafting Brief, Design and Motion hand on a link: asked for when the step is pressed (the last one is
+  // filled in, so after a revision only a changed link has to be pasted)
+  function openStepLink(t) {
+    const field = state.cfg.linkSteps[t.stage], brief = field === "briefLink", s = stageOf(t.stage);
+    const together = togetherLabel(t);
+    $("stepLinkTitle").textContent = s.action;
+    $("stepLinkLabel").innerHTML = `${brief ? "Brief link" : "Result link"} <span class="req">*</span>`;
+    $("stepLinkText").textContent = brief
+      ? `"${t.title}"${together ? ` (one brief for ${together})` : ""}: paste the link to the brief. QC Internal opens it right from Milestones.`
+      : `"${t.title}": paste the link to the finished ${isVideoType(t.type) ? "video" : "design"}. QC Internal, ${state.cfg.assistantName} and whoever posts it open it right from Milestones.`;
+    $("stepLinkInput").value = t[field] || "";
+    $("stepLinkErr").hidden = true;
+    $("stepLinkOk").textContent = s.action;
+    $("stepLinkOk").disabled = false;
+    state.stepLinkTask = t.id;
+    openModal("stepLinkModal");
+    setTimeout(() => $("stepLinkInput").focus(), 50);
+  }
+  async function submitStepLink(e) {
+    e.preventDefault();
+    const t = state.tasks.find(x => x.id === state.stepLinkTask);
+    if (!t) return closeModal("stepLinkModal");
+    const link = normalizeUrl($("stepLinkInput").value);
+    $("stepLinkErr").hidden = isValidUrl(link);
+    if (!isValidUrl(link)) return $("stepLinkInput").focus();
+    if (await moveTask(t, "advance", { link }, $("stepLinkOk"))) closeModal("stepLinkModal");
+  }
+
   function toggleTaskItem(e) {
     const box = e.target;
     if (!box.matches("[data-titem]")) return;
@@ -4456,7 +4431,7 @@ function previewReset() {
     const t = state.tasks.find(x => x.id === btn.dataset.id);
     if (!t) return;
     const act = btn.dataset.tact;
-    if (act === "advance") moveTask(t, "advance", {}, btn);
+    if (act === "advance") state.cfg.linkSteps[t.stage] ? openStepLink(t) : moveTask(t, "advance", {}, btn);
     else if (act === "assign") moveTask(t, "assign", { to: btn.dataset.to }, btn);
     else if (act === "revise") openRevise(t);
     else if (act === "edit") openTaskForm(t);
@@ -4541,12 +4516,11 @@ function previewReset() {
   /* ---------- Init ---------- */
   $("linkForm").addEventListener("submit", submitForm);
   $("url").addEventListener("input", () => { checkDuplicate(); guessCategory(); });
-  $("status").addEventListener("change", updateStatusHint);
   $("category").addEventListener("change", updateCategoryFields);
   $("videoSource").addEventListener("change", () => showError("videoSource", false));
-  updateStatusHint();
-  ["search", "fCategory", "fProject", "fStatus", "dateFrom", "dateTo", "sort", "pinnedOnly"]
-    .forEach(id => $(id).addEventListener("input", render));
+  ["search", "fCategory", "fProject", "sort", "pinnedOnly"].forEach(id => $(id).addEventListener("input", render));
+  document.querySelectorAll("[data-ltab]").forEach(b => b.addEventListener("click", () => showLinkTab(b.dataset.ltab)));
+  $("stepLinkForm").addEventListener("submit", submitStepLink);
   $("results").addEventListener("click", handleAction);
   $("taskResults").addEventListener("click", handleTaskAction);
   $("viewHome").addEventListener("click", handleHomeClick);
@@ -4580,7 +4554,7 @@ function previewReset() {
   $("bfRows").addEventListener("change", updateBatchForm);
   // The shared deadline fills every task (each one can still be changed after)
   $("bfDeadline").addEventListener("input", () => document.querySelectorAll("#bfRows [data-bdeadline]").forEach(i => i.value = $("bfDeadline").value));
-  ["tSearch", "tProject", "tMonth", "tType", "tChannel", "tStep"].forEach(id => $(id).addEventListener("input", renderTasks));
+  ["tSearch", "tProject", "tMonth", "tStep"].forEach(id => $(id).addEventListener("input", renderTasks));
   $("sheetLink").addEventListener("click", e => {
     if (state.app.sheetUrl) return;
     e.preventDefault();

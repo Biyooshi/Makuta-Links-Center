@@ -1,7 +1,7 @@
 // Demo data for the local preview only (never part of the real app): links, and tasks in every project
 // at different steps. Each step is pressed by the account whose step it is, so History and the owner's
 // Activity log show real names. Change DEMO_VERSION to load it again in browsers that already have it.
-const DEMO_VERSION = "users-1";
+const DEMO_VERSION = "links-2";
 const DEMO_WRITERS = { VTB: "obi", KRR: "obi", Makuta: "obi", GTR: "obi", GM: "puput", HC: "puput", LUX: "puput" };
 const DEMO_DESIGNERS = { VTB: "ilham", KRR: "alfid", Makuta: "alfid", GTR: "wawan", GM: "wawan", HC: "ilham", LUX: "wawan" };
 const DEMO_MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
@@ -11,7 +11,16 @@ let demoQcTurn = 0;
 function demoActor(t) {
   if (["qcBrief", "qcCut", "qcContent"].includes(t.stage)) return ["hendra", "riska"][demoQcTurn++ % 2];
   if (["design", "motion"].includes(t.stage)) return DEMO_DESIGNERS[t.project];
+  if (["toClient", "qcClient", "ads"].includes(t.stage)) return "faza";
   return DEMO_WRITERS[t.project];
+}
+
+// The link a step hands on: one brief per project, month and channel; a new result after every revision
+function demoLink(t) {
+  if (t.stage === "brief") return `https://docs.google.com/document/d/demo-brief-${(t.project + "-" + (t.workMonth || t.id) + "-" + (t.channel || "x")).toLowerCase()}/edit`;
+  if (!["design", "motion"].includes(t.stage)) return "";
+  const version = t.history.filter(e => e.link && e.from === t.stage).length + 1;
+  return `https://drive.google.com/drive/folders/demo-result-${t.id.toLowerCase()}-v${version}`;
 }
 
 function demoTask(id) {
@@ -27,9 +36,10 @@ function demoMoves(id, moves) {
       while (demoTask(id).stage !== "done") demoMoves(id, ["a"]);
       return;
     }
-    GAS.actAs(demoActor(demoTask(id)));
+    const t = demoTask(id);
+    GAS.actAs(demoActor(t));
     const [to, note] = m.slice(2).split("|");
-    if (m === "a") GAS.moveTask(id, "advance");
+    if (m === "a") GAS.moveTask(id, "advance", demoLink(t) ? { link: demoLink(t) } : {});
     else if (m.startsWith("s:")) GAS.moveTask(id, "assign", { to });
     else GAS.moveTask(id, "revise", { to, note });
   });
@@ -90,15 +100,15 @@ function loadDemoData() {
   const ago = {};
   const backdate = (ids, days) => Object.values(ids).forEach(id => ago[id] = days);
 
-  // Links: anyone logged in can add them
+  // Resources: anyone logged in can add them
   [
-    ["obi", { title: "KRR Content Calendar", url: "https://docs.google.com/spreadsheets/d/demo-krr/edit", category: "Google Spreadsheets", project: "KRR", status: "In Progress", deadline: day(6), purpose: "Instagram feeds for this month" }],
-    ["obi", { title: "VTB Competitor Analysis Deck", url: "https://docs.google.com/presentation/d/demo-vtb/edit", category: "Google Slide", project: "VTB", status: "In Review", deadline: day(2), pinned: true, purpose: "Market & competitor mapping" }],
-    ["alfid", { title: "Makuta Reels CTC", url: "https://drive.google.com/file/d/demo-makuta-reels/view", category: "CTC-Video [VG-Arif]", project: "Makuta", status: "In Review", deadline: day(4), purpose: "CTC for this month's shooting" }],
-    ["puput", { title: "LUX Brand Guideline", url: "https://drive.google.com/drive/folders/demo-lux", category: "Drive Folder", project: "LUX", status: "Done", purpose: "Logo, colours and fonts" }],
-    ["puput", { title: "GM Ads Copy Bank", url: "https://docs.google.com/document/d/demo-gm/edit", category: "Google Docs", project: "GM", status: "Draft", deadline: day(9), purpose: "Headlines and CTAs for the ads" }],
-    ["wawan", { title: "GTR Key Visual", url: "https://www.figma.com/file/demo-gtr", category: "Other", project: "GTR", status: "Revision", deadline: day(-1), purpose: "Main visual for the campaign" }],
-    ["ilham", { title: "HC Moodboard", url: "https://pinterest.com/demo-hc", category: "Reference", project: "REFERENCE", status: "Draft", purpose: "Visual references for HC" }],
+    ["obi", { title: "KRR Content Calendar", url: "https://docs.google.com/spreadsheets/d/demo-krr/edit", category: "Google Spreadsheets", project: "KRR", purpose: "Instagram feeds, month by month" }],
+    ["obi", { title: "VTB Competitor Analysis Deck", url: "https://docs.google.com/presentation/d/demo-vtb/edit", category: "Google Slide", project: "VTB", pinned: true, purpose: "Market & competitor mapping" }],
+    ["alfid", { title: "Makuta Raw Footage", url: "https://drive.google.com/drive/folders/demo-makuta-footage", category: "Drive Folder", project: "Makuta", purpose: "Every shooting, sorted by month" }],
+    ["puput", { title: "LUX Brand Guideline", url: "https://drive.google.com/drive/folders/demo-lux", category: "Drive Folder", project: "LUX", purpose: "Logo, colours and fonts" }],
+    ["puput", { title: "GM Ads Copy Bank", url: "https://docs.google.com/document/d/demo-gm/edit", category: "Google Docs", project: "GM", purpose: "Headlines and CTAs for the ads" }],
+    ["wawan", { title: "GTR Key Visual", url: "https://www.figma.com/file/demo-gtr", category: "Other", project: "GTR", purpose: "Main visual for the campaign" }],
+    ["ilham", { title: "HC Moodboard", url: "https://pinterest.com/demo-hc", category: "Reference", project: "REFERENCE", purpose: "Visual references for HC" }],
   ].forEach(([who, link]) => { GAS.actAs(who); GAS.addLink(link); });
 
   // Last month: finished work

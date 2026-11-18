@@ -26,7 +26,7 @@
       <nav class="side-nav" aria-label="Pages">
         <button type="button" id="tabHome" class="active" onclick="showView('home')" title="Home"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span class="nav-label">Home</span></button>
         <button type="button" id="tabTasks" onclick="showView('tasks')" title="Milestones"><svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg><span class="nav-label">Milestones</span><span class="nav-count" id="navTurn" hidden></span></button>
-        <button type="button" id="tabLinks" onclick="showView('links')" title="Links"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span class="nav-label">Links</span></button>
+        <button type="button" id="tabLinks" onclick="showView('links')" title="Resources"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span class="nav-label">Resources</span></button>
         <button type="button" id="tabAdmin" onclick="showView('admin')" title="Admin" hidden><svg class="icon" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/></svg><span class="nav-label">Admin</span></button>
       </nav>
       <div class="side-section">
@@ -59,7 +59,7 @@
           <div class="new-menu" id="newMenu" hidden>
             <button type="button" class="task-create" onclick="newItem('brief')"><b>Monthly Brief</b><span>All of a month's tasks at once</span></button>
             <button type="button" class="task-create" onclick="newItem('task')"><b>Single task</b><span>Event Attribute, Collateral, one-off</span></button>
-            <button type="button" class="link-create" onclick="newItem('link')"><b>Link</b><span>Save a Docs, Drive or Figma link</span></button>
+            <button type="button" class="link-create" onclick="newItem('link')"><b>Resource</b><span>Brand guideline, moodboard, reference</span></button>
           </div>
         </div>
       </header>
@@ -105,7 +105,7 @@
       <!-- ============ ADD / EDIT LINK (side panel) ============ -->
       <div id="viewSubmit" class="drawer" hidden role="dialog" aria-labelledby="drawerTitle">
         <div class="drawer-head">
-          <h2 id="drawerTitle">Add link</h2>
+          <h2 id="drawerTitle">Add resource</h2>
           <button type="button" class="icon-btn" onclick="closeLinkPanel()" aria-label="Close"><svg class="icon" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <div class="edit-banner" id="editBanner" hidden>
@@ -115,16 +115,16 @@
 
         <form id="linkForm" novalidate>
           <div class="section">
-            <h3><span class="step">1</span>Link Info <small>What would you like to submit today?</small></h3>
+            <h3><span class="step">1</span>Link <small>A file or page the team keeps coming back to</small></h3>
             <div class="field">
               <label for="title">Title <span class="req">*</span></label>
-              <input id="title" placeholder="e.g. GTR Competitor Analysis Deck">
+              <input id="title" placeholder="e.g. GTR Brand Guideline">
               <div class="error" id="titleErr" hidden>Title is required.</div>
             </div>
             <div class="field">
               <label for="url">Main Link <span class="req">*</span></label>
               <input id="url" placeholder="https://...">
-              <div class="help">Paste a link from Google Drive, Figma, Canva, or anywhere else.</div>
+              <div class="help">Paste a link from Google Drive, Figma, Canva, or anywhere else. Briefs and finished work go in their task in Milestones.</div>
               <div class="error" id="urlErr" hidden>Please enter a valid link.</div>
               <div class="warn" id="dupWarning" hidden>
                 <strong>This link already exists</strong>
@@ -172,120 +172,73 @@
                 <input id="project" list="projectList" placeholder="e.g. GTR">
                 <datalist id="projectList"></datalist>
               </div>
-              <div class="field">
-                <label for="status">Status</label>
-                <select id="status">
-                  <option>Draft</option>
-                  <option>In Progress</option>
-                  <option>In Review</option>
-                  <option>Revision</option>
-                  <option>Done</option>
-                </select>
-                <div class="help" id="statusHint"></div>
-              </div>
-              <div class="field">
-                <label for="deadline">Deadline</label>
-                <input id="deadline" type="date">
-                <div class="help">Optional. A [MAKUTA] reminder is added to your Google Calendar 2 days and 1 day before.</div>
-              </div>
             </div>
             <div class="field">
-              <label for="purpose">Description / Purpose</label>
+              <label for="purpose">Description</label>
               <textarea id="purpose" placeholder="What is this link for? Any extra notes..."></textarea>
             </div>
-            <label class="check-row"><input type="checkbox" id="pinned"> 📌 Pin this link to the top of the list</label>
+            <label class="check-row"><input type="checkbox" id="pinned"> 📌 Pin to the top of the list</label>
           </div>
 
           <button type="submit" class="btn-accent btn-block" id="submitBtn">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg><span id="submitLabel">Submit Link</span>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg><span id="submitLabel">Save resource</span>
           </button>
           <p class="hint">Fields marked <span class="req">*</span> are required. <button type="button" class="reset-link" onclick="resetForm()">Clear form</button></p>
         </form>
       </div>
 
-      <!-- ============ ALL LINKS VIEW ============ -->
+      <!-- ============ RESOURCES VIEW: links kept for the team, and every task's brief and result ============ -->
       <div id="viewLinks" hidden>
-        <div class="stats">
-          <button type="button" class="stat stat-total" id="card-all" onclick="applyStat('all')" title="Show all links">
-            <span class="stat-icon">🔗</span><span><span class="num" id="stat-all">0</span><span class="label">Total Links</span></span>
-          </button>
-          <button type="button" class="stat stat-week" id="card-week" onclick="applyStat('week')" title="Show links added in the last 7 days">
-            <span class="stat-icon">🆕</span><span><span class="num" id="stat-week">0</span><span class="label">Added This Week</span></span>
-          </button>
-          <button type="button" class="stat stat-open" id="card-open" onclick="applyStat('open')" title="Show links that are not Done yet">
-            <span class="stat-icon">⏳</span><span><span class="num" id="stat-open">0</span><span class="label">Not Done Yet</span></span>
-          </button>
-          <button type="button" class="stat stat-overdue" id="card-overdue" onclick="applyStat('overdue')" title="Show links past their deadline">
-            <span class="stat-icon">⚠️</span><span><span class="num" id="stat-overdue">0</span><span class="label">Overdue</span></span>
-          </button>
+        <div class="page-tabs" role="tablist" aria-label="Resources">
+          <button type="button" role="tab" class="active" data-ltab="resources" aria-selected="true">Resources</button>
+          <button type="button" role="tab" data-ltab="tasks" aria-selected="false">Brief &amp; result links</button>
         </div>
+        <p class="block-note" id="linkTabNote"></p>
 
         <div class="filter-panel">
           <button type="button" class="btn-soft btn-sm filter-toggle" onclick="this.closest('.filter-panel').classList.toggle('open')">Filters</button>
           <div class="search-box">
             <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input id="search" type="search" placeholder="Search title, link, category, project, status, or description...">
+            <input id="search" type="search" placeholder="Search title, link or project...">
           </div>
-          <div class="filters">
-            <div class="field">
-              <label for="fCategory">Category</label>
-              <select id="fCategory"><option value="">All categories</option></select>
-            </div>
+          <div class="filters filters-3">
             <div class="field">
               <label for="fProject">Project</label>
               <select id="fProject"><option value="">All projects</option></select>
             </div>
-            <div class="field">
-              <label for="fStatus">Status</label>
-              <select id="fStatus">
-                <option value="">All statuses</option>
-                <option value="open">Not Done yet</option>
-                <option value="overdue">Overdue</option>
-                <option>Draft</option>
-                <option>In Progress</option>
-                <option>In Review</option>
-                <option>Revision</option>
-                <option>Done</option>
-              </select>
+            <div class="field res-only">
+              <label for="fCategory">Category</label>
+              <select id="fCategory"><option value="">All categories</option></select>
             </div>
-            <div class="field">
-              <label for="dateFrom">Added from</label>
-              <input id="dateFrom" type="date">
-            </div>
-            <div class="field">
-              <label for="dateTo">Added to</label>
-              <input id="dateTo" type="date">
-            </div>
-            <div class="field">
+            <div class="field res-only">
               <label for="sort">Sort by</label>
               <select id="sort">
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
-                <option value="deadline">Nearest deadline</option>
                 <option value="az">Title A-Z</option>
                 <option value="za">Title Z-A</option>
               </select>
             </div>
           </div>
-          <label class="check-row" style="margin-top:12px"><input type="checkbox" id="pinnedOnly"> Show pinned links only</label>
+          <label class="check-row res-only" style="margin-top:12px"><input type="checkbox" id="pinnedOnly"> Pinned only</label>
         </div>
 
         <div class="meta-bar">
           <div class="meta-left">
-            <div class="segmented">
+            <div class="segmented res-only">
               <button type="button" class="active" data-view="table">Table</button>
-              <button type="button" data-view="groups">By Project</button>
+              <button type="button" data-view="groups">By project</button>
             </div>
             <span id="count"></span>
           </div>
           <div class="actions">
-            <button class="btn-accent btn-sm link-create page-create" onclick="newItem('link')">+ Add link</button>
-            <button class="btn-soft btn-sm" onclick="resetFilters()">Reset Filters</button>
-            <button class="btn-soft btn-sm" onclick="exportExcel()">Export to Excel</button>
+            <button class="btn-accent btn-sm link-create page-create res-only" onclick="newItem('link')">+ Add resource</button>
+            <button class="btn-soft btn-sm" onclick="resetFilters()">Reset filters</button>
+            <button class="btn-soft btn-sm res-only" onclick="exportExcel()">Export to Excel</button>
           </div>
         </div>
 
-        <div id="results"><div class="loading"><div class="spinner"></div>Loading your links...</div></div>
+        <div id="results"><div class="loading"><div class="spinner"></div>Loading...</div></div>
       </div>
 
       <!-- ============ MILESTONES VIEW ============ -->
@@ -294,9 +247,13 @@
           <button type="button" class="btn-soft btn-sm filter-toggle" onclick="this.closest('.filter-panel').classList.toggle('open')">Filters</button>
           <div class="search-box">
             <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input id="tSearch" type="search" placeholder="Search title, project, person, or notes...">
+            <input id="tSearch" type="search" placeholder="Search title, ORG, ADS, name...">
           </div>
-          <div class="filters filters-5">
+          <div class="filters filters-3">
+            <div class="field">
+              <label for="tStep">Show</label>
+              <select id="tStep"></select>
+            </div>
             <div class="field">
               <label for="tProject">Project</label>
               <select id="tProject"><option value="">All projects</option></select>
@@ -305,35 +262,17 @@
               <label for="tMonth">Month</label>
               <select id="tMonth" title="The month the content is for (tasks without one: their deadline month)"><option value="">All months</option></select>
             </div>
-            <div class="field">
-              <label for="tType">Content Type</label>
-              <select id="tType"><option value="">All types</option></select>
-            </div>
-            <div class="field">
-              <label for="tChannel">ORG / ADS / Other</label>
-              <select id="tChannel">
-                <option value="">All</option>
-                <option value="ORG">ORG (Organic)</option>
-                <option value="ADS">ADS (Ads Manager)</option>
-                <option value="event">🎪 Event Attribute</option>
-                <option value="collateral">🖨️ Collateral</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="tStep">Step</label>
-              <select id="tStep"></select>
-            </div>
           </div>
         </div>
 
         <div class="meta-bar">
           <div class="meta-left">
             <button type="button" class="btn-accent btn-sm task-create page-create" onclick="openBatchForm()" title="Create all tasks for one month at once">+ Monthly Brief</button>
-            <button type="button" class="btn-soft btn-sm task-create page-create" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single Task</button>
+            <button type="button" class="btn-soft btn-sm task-create page-create" onclick="openTaskForm()" title="One task only, e.g. an Event Attribute">+ Single task</button>
             <span id="taskCount"></span>
           </div>
           <div class="actions">
-            <button class="btn-soft btn-sm" onclick="resetTaskFilters()">Reset Filters</button>
+            <button class="btn-soft btn-sm" onclick="resetTaskFilters()">Reset filters</button>
           </div>
         </div>
 
@@ -383,7 +322,7 @@
       <button type="button" data-nav="home" onclick="showView('home')"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span>Home</span></button>
       <button type="button" data-nav="tasks" onclick="showView('tasks')"><svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg><span>Milestones</span></button>
       <button type="button" class="bottom-new" onclick="toggleNewMenu()" aria-label="New"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button type="button" data-nav="links" onclick="showView('links')"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span>Links</span></button>
+      <button type="button" data-nav="links" onclick="showView('links')"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span>Resources</span></button>
       <button type="button" onclick="toggleSidebar()"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Menu</span></button>
     </nav>
   </div>
@@ -421,9 +360,17 @@
             <select id="tfVideographer"></select>
           </div>
         </div>
-        <div class="field">
-          <label for="tfLink">Brief / File Link</label>
-          <input id="tfLink" placeholder="https://...">
+        <div class="grid-2">
+          <div class="field">
+            <label for="tfBriefLink">Brief link</label>
+            <input id="tfBriefLink" placeholder="https://...">
+            <div class="help">Optional now: it is asked for when the brief is submitted for QC.</div>
+          </div>
+          <div class="field" id="tfResultField" hidden>
+            <label for="tfResultLink">Result link</label>
+            <input id="tfResultLink" placeholder="https://...">
+            <div class="help">Filled in by the graphic designer when the work is done.</div>
+          </div>
         </div>
         <div class="field">
           <label for="tfNotes">Notes</label>
@@ -475,6 +422,25 @@
     </div>
   </div>
 
+  <!-- Drafting Brief, Design and Motion: the link handed on with the step -->
+  <div class="modal-bg" id="stepLinkModal">
+    <div class="modal modal-left">
+      <h3 id="stepLinkTitle"></h3>
+      <p id="stepLinkText"></p>
+      <form id="stepLinkForm" novalidate>
+        <div class="field">
+          <label for="stepLinkInput" id="stepLinkLabel"></label>
+          <input id="stepLinkInput" placeholder="https://..." autocomplete="off">
+          <div class="error" id="stepLinkErr" hidden>Paste a valid link (starting with https://).</div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-soft" onclick="closeModal('stepLinkModal')">Cancel</button>
+          <button type="submit" class="btn-accent" id="stepLinkOk"></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Request revision popup -->
   <div class="modal-bg" id="reviseModal">
     <div class="modal modal-left">
@@ -509,8 +475,8 @@
       <h3 id="successTitle">Successfully Submitted!</h3>
       <p id="successText"></p>
       <div class="actions">
-        <button type="button" class="btn-accent" onclick="closeModal('successModal'); $('title').focus()">Add Another</button>
-        <button type="button" class="btn-soft" onclick="closeModal('successModal'); showView('links')">View All Links</button>
+        <button type="button" class="btn-accent" onclick="closeModal('successModal'); newItem('link')">Add another</button>
+        <button type="button" class="btn-soft" onclick="closeModal('successModal'); showView('links')">View resources</button>
       </div>
     </div>
   </div>
@@ -519,7 +485,7 @@
   <div class="modal-bg" id="confirmModal">
     <div class="modal">
       <div class="modal-emoji" id="confirmEmoji">🗑️</div>
-      <h3 id="confirmTitle">Delete this link?</h3>
+      <h3 id="confirmTitle">Delete this resource?</h3>
       <p id="confirmText"></p>
       <div class="actions">
         <button type="button" class="btn-soft" id="confirmCancel">Cancel</button>

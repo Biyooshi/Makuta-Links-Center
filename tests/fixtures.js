@@ -16,7 +16,8 @@ function backdateTask(id, ago) {
 
 function loadTestData() {
   const day = n => Utilities.formatDate(new Date(Date.now() + n * 864e5));
-  // Start from empty, so the preview's demo data never mixes with these; made as the owner (may do everything)
+  // Start from empty, so the preview's demo data never mixes with these; made as the owner (may do everything).
+  // Resources had a status and deadline before; the server ignores them now.
   ["Links", "Tasks", "Activity"].forEach(name => { mockSheet(name).data = []; mockSheet(name).save(); });
   GAS.actAs("owner");
   [
@@ -61,7 +62,8 @@ function loadTestData() {
     let t = GAS.addTask(Object.assign({ notes: "" }, data));
     moves.forEach(m => {
       const [to, note] = m.slice(2).split("|");
-      t = m === "a" ? GAS.moveTask(t.id, "advance")
+      // Drafting Brief and Design / Motion hand on their link (ignored at the other steps)
+      t = m === "a" ? GAS.moveTask(t.id, "advance", { link: `https:\/\/drive.google.com/test/${t.id}/${t.stage}` })
         : m.startsWith("s:") ? GAS.moveTask(t.id, "assign", { to })
         : GAS.moveTask(t.id, "revise", { to, note });
     });

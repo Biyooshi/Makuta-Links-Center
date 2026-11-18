@@ -12,7 +12,7 @@ const out = process.argv[3] || path.join(__dirname, "preview.html");
 const banner = `
 <div class="preview-banner">
   <span><strong>${version ? "DEMO " + version.toUpperCase() : "LOCAL PREVIEW"}</strong> &middot; demo data, saved in this browser only, not in Google Sheets.</span>
-  <span>Logins: obi, puput, hendra, riska, alfid, ilham, wawan (password <b>demo</b>) &middot; owner (password <b>owner</b>)</span>
+  <span>Logins: hendra, riska, faza, obi, puput, alfid, ilham, wawan &middot; password = username + <b>demo</b> (e.g. <b>obidemo</b>) &middot; owner / <b>owner</b></span>
   <button type="button" onclick="previewReset()">Reset demo data</button>
 </div>
 <style>
@@ -77,7 +77,7 @@ const SpreadsheetApp = { getActiveSpreadsheet: () => ({
 // Saved in the browser, so logins (sessions) survive a reload like on the real app.
 const PROPS_KEY = PREVIEW_KEY + ":props";
 const mockProps = Object.assign((() => { try { return JSON.parse(localStorage.getItem(PROPS_KEY)) || {}; } catch (e) { return {}; } })(),
-  { DEFAULT_PASSWORD: "demo", OWNER_USERNAME: "owner", OWNER_PASSWORD: "owner" });
+  { PASSWORD_SUFFIX: "demo", OWNER_USERNAME: "owner", OWNER_PASSWORD: "owner" });
 const saveProps = () => { try { localStorage.setItem(PROPS_KEY, JSON.stringify(mockProps)); } catch (e) {} };
 const PropertiesService = { getScriptProperties: () => ({
   getProperty: k => mockProps[k] ?? null,

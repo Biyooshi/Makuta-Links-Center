@@ -31,8 +31,8 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   page.on("dialog", d => d.accept());
   await page.setViewport({ width: 1300, height: 900 });
   await page.goto(pathToFileURL(file).href);
-  // Logs in through the login screen (preview accounts: team password "demo", owner "owner" / "owner")
-  const loginAs = async (username, password = "demo") => {
+  // Logs in through the login screen (preview accounts: password = username + "demo", owner "owner" / "owner")
+  const loginAs = async (username, password = username + "demo") => {
     await page.waitForSelector("#lockModal.show");
     await page.$eval("#lockUser", e => e.value = "");
     await page.type("#lockUser", username);
@@ -49,6 +49,9 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     const tryErr = fn => { try { fn(); return ""; } catch (e) { return e.message; } };
     ["Links", "Tasks", "Activity"].forEach(n => { mockSheet(n).data = []; mockSheet(n).save(); });
     GAS.actAs("owner");
+    // Drafting Brief, Design and Motion need a link; these flow tests always hand one on (the link rules are tested below)
+    const realMove = GAS.moveTask;
+    GAS.moveTask = (id, action, opts) => realMove(id, action, action === "advance" ? Object.assign({ link: "https://example.com/work" }, opts) : opts);
     const cfg = GAS.getInitialData().taskConfig;
     // Every project x content type x channel runs from brief to done
     out.flows = [];
@@ -151,8 +154,34 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     const later = GAS.addTask({ title: "BRIEF ORG DES GTR", project: "GTR", type: "Static" });
     GAS.getInitialData();
     out.upgradeOnce = GAS.getTasks().find(x => x.id === later.id).title;
-    // Links
-    const l = GAS.addLink({ title: "=SUM(1)", url: "https://a.com/x", category: "Google Docs", project: "KRR", deadline: "2026-12-20", versions: [{ label: "P2", url: "https://a.com/y" }] });
+    GAS.moveTask = realMove;
+    // Brief and result links: required at Drafting Brief / Design / Motion, one brief per Monthly Brief channel,
+    // the last link filled in again after a revision, every link kept in History
+    const lb = GAS.addTasks([
+      { title: "BRIEF ORG JANUARY GTR", project: "GTR", type: "Static" },
+      { title: "VIDEO CTC ORG JANUARY GTR", project: "GTR", type: "Video (Non-Shooting)" }], "2026-12");
+    out.noBrief = tryErr(() => GAS.moveTask(lb[0].id, "advance"));
+    out.badBrief = tryErr(() => GAS.moveTask(lb[0].id, "advance", { link: "docs" }));
+    let lm = GAS.moveTask(lb[0].id, "advance", { link: "https://docs.google.com/document/d/brief-gtr" });
+    out.briefShared = [lm].concat(lm.linked).map(x => x.briefLink + ">" + x.stage).join();
+    out.briefHistory = lm.history.slice(-1)[0].link;
+    GAS.moveTask(lb[0].id, "advance");
+    out.noResult = tryErr(() => GAS.moveTask(lb[0].id, "advance"));
+    lm = GAS.moveTask(lb[0].id, "advance", { link: "https://drive.google.com/r1" });
+    out.result = lm.resultLink + ">" + lm.stage;
+    GAS.moveTask(lb[0].id, "revise", { to: "design", note: "fix" });
+    lm = GAS.moveTask(lb[0].id, "advance");
+    out.resultReuse = lm.resultLink + ">" + lm.stage;
+    GAS.moveTask(lb[0].id, "revise", { to: "design", note: "again" });
+    lm = GAS.moveTask(lb[0].id, "advance", { link: "https://drive.google.com/r2" });
+    out.resultHistory = lm.history.filter(e => e.link && e.from === "design").map(e => e.link).join();
+    out.noLinkElsewhere = lm.history.filter(e => e.link && !["brief", "design", "motion"].includes(e.from)).length;
+    const lrow = mockSheet("Tasks").data.find(row => row[0] === lb[0].id);
+    out.linkCols = [mockSheet("Tasks").data[0][13], mockSheet("Tasks").data[0][20], lrow[13], lrow[20]].join();
+    out.badTaskLink = tryErr(() => GAS.addTask({ title: "BRIEF ORG DEC GTR", project: "GTR", type: "Static", resultLink: "drive" }));
+    // Resources: no status, deadline or calendar reminder any more
+    const l = GAS.addLink({ title: "=SUM(1)", url: "https://a.com/x", category: "Google Docs", project: "KRR", status: "Done", deadline: "2026-12-20", versions: [{ label: "P2", url: "https://a.com/y" }] });
+    out.noDeadline = l.deadline === "" && l.status === "" && mockSheet("Links").data[1][12] === "";
     out.formulaSafe = GAS.getLinks()[0].title;
     out.ctcNoSource = tryErr(() => GAS.addLink({ title: "v", url: "https://a.com", category: "CTC-Video" }));
     out.badUrl = tryErr(() => GAS.addLink({ title: "v", url: "a.com", category: "Other" }));
@@ -168,6 +197,15 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   const flow = (p, type, ch) => r.flows.find(f => f.p === p && f.type === type && f.ch === ch);
   ok(r.flows.length === 31, `31 project/type/channel combinations created (got ${r.flows.length})`);
   ok(r.flows.every(f => f.visited.endsWith(">done")), "every combination reaches Done by pressing the main button");
+  ok(/brief link first/.test(r.noBrief) && /brief link first/.test(r.badBrief), "Submit Brief for QC needs a valid brief link -> " + r.noBrief);
+  ok(r.briefShared === "https://docs.google.com/document/d/brief-gtr>qcBrief,https://docs.google.com/document/d/brief-gtr>qcBrief" && r.briefHistory === "https://docs.google.com/document/d/brief-gtr",
+    "one brief link for the channel's Static + Video, kept in History -> " + r.briefShared);
+  ok(/result link first/.test(r.noResult) && r.result === "https://drive.google.com/r1>qcContent", "Design Done needs the result link -> " + r.result);
+  ok(r.resultReuse === "https://drive.google.com/r1>qcContent", "after a revision the last result link is used again when none is pasted");
+  ok(r.resultHistory === "https://drive.google.com/r1,https://drive.google.com/r1,https://drive.google.com/r2" && r.noLinkElsewhere === 0, "every result handed on stays in History -> " + r.resultHistory);
+  ok(r.linkCols === "Brief Link,Result Link,https://docs.google.com/document/d/brief-gtr,https://drive.google.com/r2", "sheet: Brief Link and Result Link columns -> " + r.linkCols);
+  ok(/result link must start/.test(r.badTaskLink), "a task's result link must be a web address");
+  ok(r.noDeadline, "resources are saved without status, deadline or calendar reminder");
   ok(flow("VTB", "Static", "ORG").visited === "brief>qcBrief>design>qcContent>toClient>qcClient>post>done", "Static ORG timeline");
   ok(flow("KRR", "Video (Shooting)", "ADS").visited === "brief>qcBrief>shoot>video>qcCut>motion>qcContent>toClient>qcClient>ads>done", "Video Shooting ADS timeline (Shooting before CTC)");
   ok(flow("GTR", "Video (Non-Shooting)", "ORG").visited === "brief>qcBrief>vo>video>qcCut>motion>qcContent>toClient>qcClient>post>done", "Video Non-Shooting timeline (Voice Over)");
@@ -217,6 +255,8 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   const prot = n => r.protect[n].map(d => d.replace(/^Makuta: | \(changed by the website only\)$/g, "")).join(",");
   ok(prot("Links") === "column titles,ID,Reminder IDs", "Links sheet: edit warnings on titles, ID, Reminder IDs (added once) -> " + prot("Links"));
   ok(prot("Tasks") === "column titles,ID,Stage,Current Step,Revisions,History,Checklist", "Tasks sheet: edit warnings on titles, ID, Stage, Current Step, Revisions, History, Checklist (added once) -> " + prot("Tasks"));
+  // The flow tests above pass a link on every advance; the page must use the real function again
+  ok(await page.evaluate(() => !/example\.com/.test(String(GAS.moveTask))), "server tests leave moveTask as it was");
 
   /* ---------- 2. Page: sample data (fixtures.js) + buttons ---------- */
   console.log("Page");
@@ -286,13 +326,14 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(await page.evaluate(() => [...document.querySelectorAll(".task")].some(a => a.querySelector("strong").textContent === "ROLL-UP BANNER GTR" && /Collateral: Roll-up Banner/.test(a.textContent) && /Approved by Client/.test(a.textContent))),
     "Collateral card shows its item and ends at Approved by Client");
 
-  // ORG / ADS / Other filter: ORG and ADS show regular content only, Event Attribute and Collateral have their own option
-  const kindsFor = async v => { await page.select("#tChannel", v); return page.evaluate(() => [...new Set(getFilteredTasks().map(t => typeKind(t.type) + ":" + (t.channel || "-")))].sort().join()); };
+  // Four filters (Show, Project, Month, search); ORG / ADS, Collateral and Event Attribute are found by typing them
+  ok(await page.$$eval("#viewTasks .filters select", s => s.map(x => x.id).join()) === "tStep,tProject,tMonth", "Milestones has three filters plus search");
+  ok(await page.$$eval("#tStep optgroup", g => g.map(x => x.label + ":" + x.children.length).join()) === "Tasks:6,At stage:5", "Show: 6 task choices for the owner (no My Tasks) and the 5 stages of Home's table");
+  const kindsFor = async q => { await page.$eval("#tSearch", (e, q) => { e.value = q; e.dispatchEvent(new Event("input")); }, q); return page.evaluate(() => [...new Set(getFilteredTasks().map(t => typeKind(t.type) + ":" + (t.channel || "-")))].sort().join()); };
   await page.select("#tStep", "all");
-  const orgKinds = await kindsFor("ORG");
-  ok(orgKinds && !/event|collateral|ADS/.test(orgKinds), "filter ORG: no Event Attribute / Collateral -> " + orgKinds);
-  ok(await kindsFor("event") === "event:ORG", "filter Event Attribute: only Event Attribute tasks");
-  ok(await kindsFor("collateral") === "collateral:-", "filter Collateral: only Collateral tasks");
+  ok(await kindsFor("collateral") === "collateral:-", "search Collateral: only Collateral tasks");
+  ok(await kindsFor("event attribute") === "event:ORG", "search Event Attribute: only Event Attribute tasks");
+  ok(!/ORG/.test(await kindsFor("ads")), "search ADS: no ORG tasks");
   await page.evaluate(() => resetTaskFilters());
 
   // Walk the new event task through every step with the real buttons, with one client revision
@@ -317,11 +358,39 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
       revised = true;
     } else {
       await clickIn('[data-tact="advance"]');
+      // Drafting Brief and Design ask for their link first
+      if (s === "brief" || s === "design") {
+        await page.waitForSelector("#stepLinkModal.show");
+        const prefilled = await page.$eval("#stepLinkInput", e => e.value);
+        if (s === "brief") {
+          ok(prefilled === "" && await page.$eval("#stepLinkLabel", e => /Brief link/.test(e.textContent)), "Submit Brief for QC asks for the brief link");
+          await page.click("#stepLinkOk");
+          ok(await page.$eval("#stepLinkErr", e => !e.hidden) && await stage() === "brief", "an empty link is refused (the task stays)");
+          await page.type("#stepLinkInput", "docs.google.com/document/d/event-brief");
+        } else if (revised) {
+          ok(prefilled === "https://drive.google.com/drive/folders/event-result", "after the client revision the last result link is filled in");
+          await page.$eval("#stepLinkInput", e => e.value = "");
+          await page.type("#stepLinkInput", "https://drive.google.com/drive/folders/event-result-v2");
+        } else {
+          await page.type("#stepLinkInput", "https://drive.google.com/drive/folders/event-result");
+        }
+        await page.click("#stepLinkOk");
+        await page.waitForFunction(() => !document.querySelector("#stepLinkModal.show"));
+      }
       await page.waitForFunction((id, s) => state.tasks.find(t => t.id === id).stage !== s, {}, evId, s);
     }
     seen.push(await stage());
   }
   ok(seen.join(">") === "brief>qcBrief>design>qcContent>toClient>qcClient>design>qcContent>toClient>qcClient>post>done", "buttons walk the event task to Done: " + seen.join(">"));
+  const evLinks = await page.evaluate(id => {
+    const t = state.tasks.find(x => x.id === id), a = document.querySelector(`[data-id="${id}"]`).closest("article");
+    return { brief: t.briefLink, result: t.resultLink, timeline: [...a.querySelectorAll("a.ms-link")].map(x => x.textContent.replace(/\s+/g, " ").trim() + "=" + x.getAttribute("href")).join(" | "),
+      tags: [...a.querySelectorAll(".task-title .tag-link")].map(x => x.textContent.trim()).join(), history: [...a.querySelectorAll(".history a")].length };
+  }, evId);
+  ok(evLinks.brief === "https://docs.google.com/document/d/event-brief" && evLinks.result === "https://drive.google.com/drive/folders/event-result-v2", "the task keeps its brief and its latest result");
+  ok(evLinks.timeline === "Drafting Brief ↗=https://docs.google.com/document/d/event-brief | Design ↗=https://drive.google.com/drive/folders/event-result-v2",
+    "timeline: Drafting Brief opens the brief, Design the result -> " + evLinks.timeline);
+  ok(evLinks.tags === "📄 Brief ↗,🎨 Result ↗" && evLinks.history === 3, "a single task shows both links; History links each one handed on");
   ok(await page.evaluate(id => document.querySelector(`[data-id="${id}"]`).closest("article").querySelectorAll(".ms-red").length === 0, evId), "timeline green again after the client approved");
   // Finished: still shown in the default view, greyed out at the bottom of its project, no Edit, last step green
   await page.evaluate(() => resetTaskFilters());
@@ -375,7 +444,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.waitForFunction(() => !document.querySelector("#batchModal.show"));
   const made = await page.evaluate(n => state.tasks.slice(n), before);
   ok(made.length === 4 && made.every(t => t.project === "KRR" && t.stage === "brief" && t.deadline === "2026-11-28"), "Monthly Brief: 4 KRR tasks created at Drafting Brief");
-  ok(made.filter(t => t.channel === "ORG").every(t => t.link === "https://docs.google.com/spreadsheets/d/brief-org") && made.filter(t => t.channel === "ADS").every(t => !t.link), "Monthly Brief: brief link goes to its channel only");
+  ok(made.filter(t => t.channel === "ORG").every(t => t.briefLink === "https://docs.google.com/spreadsheets/d/brief-org") && made.filter(t => t.channel === "ADS").every(t => !t.briefLink), "Monthly Brief: brief link goes to its channel only");
   ok(made.filter(t => /^Video/.test(t.type)).every(t => t.videographer === "Anno"), "Monthly Brief: KRR videos get VG Anno");
 
   // Month filter: by the month the content is for (ORG January, ADS December)
@@ -398,9 +467,18 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   const stages = () => page.evaluate(ids => ids.map(id => state.tasks.find(t => t.id === id).stage).join(","), made.map(t => t.id));
   ok(await (await btnOf(madeId("ORG", false), "advance")).evaluate(b => b.textContent.includes("Static + Video")), "Submit Brief button says it moves Static + Video");
   await (await btnOf(madeId("ORG", false), "advance")).click();
+  await page.waitForSelector("#stepLinkModal.show");
+  ok(await page.$eval("#stepLinkInput", e => e.value) === "https://docs.google.com/spreadsheets/d/brief-org" && await page.$eval("#stepLinkText", e => e.textContent.includes("one brief for Static + Video")),
+    "the brief link from the Monthly Brief is filled in; one brief for Static + Video");
+  await page.click("#stepLinkOk");
   await page.waitForFunction(id => state.tasks.find(t => t.id === id).stage === "qcBrief", {}, madeId("ORG", true));
   await (await btnOf(madeId("ADS", true), "advance")).click();
+  await page.waitForSelector("#stepLinkModal.show");
+  await page.type("#stepLinkInput", "https://docs.google.com/document/d/brief-ads");
+  await page.click("#stepLinkOk");
   await page.waitForFunction(id => state.tasks.find(t => t.id === id).stage === "qcBrief", {}, madeId("ADS", false));
+  ok(await page.evaluate(ids => ids.map(id => state.tasks.find(t => t.id === id).briefLink).join(), [madeId("ADS", false), madeId("ADS", true)]) === "https://docs.google.com/document/d/brief-ads,https://docs.google.com/document/d/brief-ads",
+    "the ADS brief link pasted on the video goes to the ADS static too");
   ok(await (await btnOf(madeId("ORG", false), "advance")).evaluate(b => b.textContent.includes("ORG + ADS")), "QC Brief Approve says ORG + ADS");
   await (await btnOf(madeId("ORG", false), "revise")).click();
   await page.waitForSelector("#reviseModal.show");
@@ -427,9 +505,11 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.click("#batchModal .btn-soft");
   ok(await page.evaluate(() => { try { GAS.addTasks([{ title: "BRIEF ORG DEC VTB", project: "VTB", type: "Static" }, { title: "BRIEF DEC VTB", project: "VTB", type: "Static" }]); return false; } catch (e) { return GAS.getTasks().every(t => t.title !== "BRIEF ORG DEC VTB"); } }), "server: one bad task in a batch saves none of them");
 
-  // Filters
-  await page.select("#tType", "Event Attribute");
-  ok(await page.$$eval("#taskResults article.task", a => a.length) === 1, "filter by Event Attribute");
+  // QC opens the brief (QC Brief, QC CTC) or the result (QC Content) right next to its buttons
+  await page.select("#tStep", "qc");
+  const qcLinks = await page.evaluate(() => [...document.querySelectorAll("#taskResults article.task")].map(a =>
+    state.tasks.find(x => x.id === a.dataset.task).stage + ":" + ((a.querySelector(".link-open") || {}).textContent || "").trim()));
+  ok(qcLinks.length > 0 && qcLinks.every(s => /^(qcBrief|qcCut):📄 Open brief|^qcContent:🎨 Open result/.test(s)), "QC steps show the brief or the result next to the buttons -> " + qcLinks.join(", "));
   await page.evaluate(() => resetTaskFilters());
 
   // Links tab
@@ -444,7 +524,23 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.waitForSelector("#successModal.show");
   ok(await page.evaluate(() => state.links.some(l => l.category === "CTC-Video [VG-Anno]" && l.url === "https://docs.google.com/document/d/abc")), "link saved with https:// added");
   await page.evaluate(() => { closeModal("successModal"); showView("links"); });
-  ok(await page.$$eval("#results tbody tr", a => a.length) === 8, "All Links table shows 8 links");
+  ok(await page.$$eval("#results tbody tr", a => a.length) === 8, "Resources table shows 8 resources");
+  ok(await page.$$eval("#results thead th", a => a.map(th => th.textContent.trim()).join()) === "Pin,Title & link,Category,Project,Actions", "Resources columns: no status or deadline");
+  ok(await page.evaluate(() => !document.getElementById("status") && !document.getElementById("deadline") && !document.getElementById("fStatus")), "the resource form and filters have no status or deadline");
+  // Brief & result links tab: every task with a link, opening the task from its title
+  await page.click('[data-ltab="tasks"]');
+  const tl = await page.evaluate(() => ({ rows: document.querySelectorAll("#results tbody tr").length, want: state.tasks.filter(t => t.briefLink || t.resultLink).length,
+    hidden: getComputedStyle(document.querySelector("#viewLinks .segmented")).display === "none" && getComputedStyle(document.getElementById("fCategory").closest(".field")).display === "none",
+    heads: [...document.querySelectorAll("#results thead th")].map(th => th.textContent).join() }));
+  ok(tl.rows > 0 && tl.rows === tl.want && tl.heads === "Task,Project,Brief,Result", `Brief & result links tab lists every task with a link (${tl.rows})`);
+  ok(tl.hidden, "that tab hides the resource-only filters and view switch");
+  await page.$eval("#search", e => { e.value = "event-brief"; e.dispatchEvent(new Event("input")); });
+  ok(await page.$$eval("#results tbody tr", a => a.length) === 0, "search finds tasks by their link (the event task was deleted)");
+  await page.evaluate(() => resetFilters());
+  const tlFirst = await page.$eval("#results .link-task", b => b.dataset.open);
+  await page.click("#results .link-task");
+  ok(await page.evaluate(id => state.page === "tasks" && !!document.querySelector(`#taskResults [data-task="${id}"]`), tlFirst), "a task's title opens it in Milestones");
+  await page.evaluate(() => { showView("links"); showLinkTab("resources"); });
   ok(await page.$$eval("#results thead th", a => a.every(th => th.textContent.trim())), "every table column has a name (incl. Pin)");
   // Sample data follows the app rules: known projects only, Reference -> REFERENCE
   const known = await page.evaluate(() => Object.keys(state.cfg.projects).concat(REFERENCE_PROJECT));
@@ -487,11 +583,14 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     const err = fn => { try { fn(); return ""; } catch (e) { return e.message; } };
     const hex = t => sha256Bytes(t).map(b => ("0" + (b & 255).toString(16)).slice(-2)).join("");
     const out = {};
-    const obi = GAS.login(" Obi ", "demo", "test").ticket;
+    const obi = GAS.login(" Obi ", "obidemo", "test").ticket;
     out.wrong = err(() => GAS.login("obi", "salah"));
-    out.unknownUser = err(() => GAS.login("budi", "demo"));
-    out.ownerWithTeamPassword = err(() => GAS.login("owner", "demo"));
+    out.unknownUser = err(() => GAS.login("budi", "budidemo"));
+    out.ownerWithTeamPassword = err(() => GAS.login("owner", "ownerdemo"));
     out.teamWithOwnerPassword = err(() => GAS.login("obi", "owner"));
+    out.otherPassword = err(() => GAS.login("obi", "puputdemo"));
+    out.suffixOnly = err(() => GAS.login("obi", "demo"));
+    out.faza = GAS.api(GAS.login("faza", "fazademo", "test").ticket, "getInitialData", []).user;
     out.badTicket = err(() => GAS.api("nope", "getLinks", []));
     out.noTicket = err(() => GAS.api("", "deleteLink", ["x"]));
     out.unknownFn = err(() => GAS.api(obi, "getSheet_", []));
@@ -507,11 +606,11 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     out.viewAsRead = GAS.api(owner, "getInitialData", [], "alfid").user;
     // 10 wrong passwords lock that account only
     for (let i = 0; i < 10; i++) err(() => GAS.login("riska", "salah"));
-    out.lockedRiska = err(() => GAS.login("riska", "demo"));
-    out.hendraStillOk = !!GAS.login("hendra", "demo").ticket;
+    out.lockedRiska = err(() => GAS.login("riska", "riskademo"));
+    out.hendraStillOk = !!GAS.login("hendra", "hendrademo").ticket;
     delete mockCache.wrongLogin_riska;
     // A login ends after 30 days, on logout, or when the owner ends it
-    const old = GAS.login("puput", "demo").ticket;
+    const old = GAS.login("puput", "puputdemo").ticket;
     const k = "SESSION_" + hex(old), sess = JSON.parse(mockProps[k]);
     sess.start -= 31 * 864e5;
     mockProps[k] = JSON.stringify(sess);
@@ -519,7 +618,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     out.expiredRemoved = !mockProps[k];
     GAS.api(obi, "logout", []);
     out.afterLogout = err(() => GAS.api(obi, "getLinks", []));
-    const wawan = GAS.login("wawan", "demo").ticket;
+    const wawan = GAS.login("wawan", "wawandemo").ticket;
     const admin = GAS.api(owner, "getAdminData", []);
     out.sessionsListed = admin.sessions.some(x => x.name === "Wawan") && admin.sessions.some(x => x.self && x.name === "Owner");
     out.ended = GAS.api(owner, "endSessions", ["all"]);
@@ -532,6 +631,8 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   });
   ok(/^LOCKED: Wrong username or password/.test(auth.wrong) && /^LOCKED: Wrong/.test(auth.unknownUser), "server: wrong password / unknown username refused");
   ok(/^LOCKED: Wrong/.test(auth.ownerWithTeamPassword) && /^LOCKED: Wrong/.test(auth.teamWithOwnerPassword), "owner and team passwords are separate");
+  ok(/^LOCKED: Wrong/.test(auth.otherPassword) && /^LOCKED: Wrong/.test(auth.suffixOnly), "each account has its own password (username + the secret ending)");
+  ok(auth.faza.name === "Kak Faza" && auth.faza.roleName === "Assistant Manager" && auth.faza.all && auth.faza.projects.length === 7, "Kak Faza logs in as Assistant Manager and sees every project");
   ok(/^LOCKED/.test(auth.badTicket) && /^LOCKED/.test(auth.noTicket), "server: calls without a valid login are refused");
   ok(auth.unknownFn === "Unknown action." && auth.ok, "server: only listed actions; a valid login works (username trimmed, any case)");
   ok(/owner/i.test(auth.notOwnerAdmin) && /owner/i.test(auth.notOwnerViewAs), "Admin data and View as are owner only");
@@ -566,17 +667,30 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     // KRR task waiting at Design (Alfid's step)
     const design = find("BRIEF ORG DECEMBER KRR");
     out.designStage = design.stage;
-    out.obiPressDesign = err(() => as("obi", () => GAS.moveTask(design.id, "advance")));
-    out.wawanPressKrr = err(() => as("wawan", () => GAS.moveTask(design.id, "advance")));
-    const moved = as("alfid", () => GAS.moveTask(design.id, "advance"));
+    const result = { link: "https://drive.google.com/drive/folders/krr-design" };
+    out.obiPressDesign = err(() => as("obi", () => GAS.moveTask(design.id, "advance", result)));
+    out.wawanPressKrr = err(() => as("wawan", () => GAS.moveTask(design.id, "advance", result)));
+    const moved = as("alfid", () => GAS.moveTask(design.id, "advance", result));
     out.alfidPressed = moved.stage + ":" + moved.history[moved.history.length - 1].by;
     out.obiUndoAlfid = err(() => as("obi", () => GAS.moveTask(design.id, "undo")));
     out.alfidUndo = as("alfid", () => GAS.moveTask(design.id, "undo")).stage;
-    as("alfid", () => GAS.moveTask(design.id, "advance"));
+    as("alfid", () => GAS.moveTask(design.id, "advance", result));
     out.alfidPressQc = err(() => as("alfid", () => GAS.moveTask(design.id, "advance")));
     out.hendraQc = as("hendra", () => GAS.moveTask(design.id, "advance")).history.slice(-1)[0].by;
-    // Writer steps (Kak Faza's Send to Client) are pressed by the content writer
-    out.obiSends = as("obi", () => GAS.moveTask(design.id, "advance")).stage;
+    // Send to Client, QC Client and Run Ads are Kak Faza's (and managerial's), no longer the content writer's
+    out.obiSends = err(() => as("obi", () => GAS.moveTask(design.id, "advance")));
+    out.fazaSends = as("faza", () => GAS.moveTask(design.id, "advance")).stage;
+    out.fazaClient = as("faza", () => GAS.moveTask(design.id, "advance")).history.slice(-1)[0].by;
+    out.fazaPost = err(() => as("faza", () => GAS.moveTask(design.id, "advance")));
+    out.obiPost = as("obi", () => GAS.moveTask(design.id, "advance")).stage;
+    as("obi", () => GAS.moveTask(design.id, "undo"));
+    out.fazaCreate = err(() => as("faza", () => GAS.addTask({ title: "BRIEF ORG DEC KRR", project: "KRR", type: "Static" })));
+    out.fazaEdit = err(() => as("faza", () => GAS.updateTask(design.id, Object.assign({}, design, { notes: "x" }))));
+    out.fazaProjects = [...new Set(as("faza", () => GAS.getTasks()).map(t => t.project))].length;
+    const adsTask = find("BRIEF ADS NOVEMBER GTR");
+    as("faza", () => GAS.moveTask(adsTask.id, "advance"));
+    out.adsStage = as("faza", () => GAS.moveTask(adsTask.id, "advance")).stage;
+    out.obiAds = err(() => as("obi", () => GAS.moveTask(adsTask.id, "advance")));
     // Edit / delete: the project's writer and managerial only; a task can't be moved out of their projects
     out.alfidEdit = err(() => as("alfid", () => GAS.updateTask(design.id, Object.assign({}, design, { notes: "x" }))));
     out.obiMoveToLux = err(() => as("obi", () => GAS.updateTask(design.id, Object.assign({}, design, { project: "LUX", title: "BRIEF ORG DEC LUX" }))));
@@ -588,7 +702,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     out.ilhamTick = err(() => as("ilham", () => GAS.setTaskItem(ev.id, "Flyer Cetak", false)));
     // Managerial can press every step, also a designer's
     const fix = find("BRIEF ADS NOVEMBER KRR");
-    out.riskaAny = fix.stage === "design" && as("riska", () => GAS.moveTask(fix.id, "advance")).history.slice(-1)[0].by === "Bu Riska";
+    out.riskaAny = fix.stage === "design" && as("riska", () => GAS.moveTask(fix.id, "advance", result)).history.slice(-1)[0].by === "Bu Riska";
     out.activityMoves = mockSheet("Activity").data.filter(r => r[2] === "Moved").map(r => r[1]);
     return out;
   });
@@ -599,7 +713,10 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(perm.alfidPressed === "qcContent:Alfid", "the designer presses Design; History records who");
   ok(/last move/.test(perm.obiUndoAlfid) && perm.alfidUndo === "design", "Undo: whoever made the last move");
   ok(/waiting for QC/.test(perm.alfidPressQc) && perm.hendraQc === "Kak Hendra", "QC steps are managerial's");
-  ok(perm.obiSends === "qcClient", "the content writer presses Kak Faza's Send to Client");
+  ok(/waiting for Kak Faza/.test(perm.obiSends) && perm.fazaSends === "qcClient" && perm.fazaClient === "Kak Faza", "Send to Client and QC Client are Kak Faza's, not the content writer's");
+  ok(/waiting for Obi/.test(perm.fazaPost) && perm.obiPost === "done", "Scheduling Post stays with the content writer");
+  ok(perm.adsStage === "ads" && /Musthofa \(via Kak Faza\)/.test(perm.obiAds), "Run Ads (Musthofa) is pressed by Kak Faza -> " + perm.obiAds);
+  ok(/content writer/.test(perm.fazaCreate) && /content writer/.test(perm.fazaEdit) && perm.fazaProjects >= 4, "Kak Faza sees every project but does not create or edit tasks");
   ok(/content writer/.test(perm.alfidEdit) && /content writer/.test(perm.obiMoveToLux) && perm.obiEdit === "edited" && /not found/.test(perm.puputDelete), "edit / delete: the project's writer; can't move a task out of their projects");
   ok(perm.alfidTick && /not found/.test(perm.ilhamTick), "Event checklist: the project's designer can tick, others can't");
   ok(perm.riskaAny, "managerial can press any step (here a designer's)");
@@ -622,7 +739,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.waitForFunction(() => !document.getElementById("lockErr").hidden);
   ok(await page.$eval("#lockErr", e => e.textContent.includes("Wrong username or password")), "wrong password shows an error");
   ok(await page.$eval("#lockInput", e => e.type === "password" && e.value === "") && await page.$eval("#lockUser", e => e.value === "alfid"), "after a wrong try the password is cleared, the username kept");
-  await page.type("#lockInput", "demo");
+  await page.type("#lockInput", "alfiddemo");
   await page.click("#lockBtn");
   await page.waitForFunction(() => state.loaded);
   ok(await page.evaluate(() => !!localStorage.getItem("makutaTicket") && localStorage.getItem("makutaPasscode") === null), "login is remembered on this browser (ticket only)");
@@ -683,7 +800,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
       // Every task waiting for Obi is listed, except Monthly Brief tasks moved together with one already listed
       complete: state.tasks.filter(isMyStep).every(t => ids.includes(t.id) || ids.some(id => linkedTasks(state.tasks.find(o => o.id === id)).includes(t))),
       once: !tasks.some((t, i) => tasks.slice(0, i).some(o => linkedTasks(o).includes(t))),
-      stats: [...document.querySelectorAll("#homeStats .home-stat")].map(b => b.dataset.stat || "links:" + b.dataset.links).join(),
+      stats: [...document.querySelectorAll("#homeStats .home-stat")].map(b => b.dataset.stat).join(),
       mineStat: Number(document.querySelector("#homeStats [data-stat=mine] .stat-n").textContent) === state.tasks.filter(isMyStep).length,
       projects: [...document.querySelectorAll("#homeProjects [data-project-open]")].map(b => b.dataset.projectOpen).join(),
       // Each project row adds up to its active tasks (every active task sits in exactly one stage)
@@ -692,7 +809,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
         const n = [...r.querySelectorAll(".proj-cell:not([data-label=Late]) .stage-n")].reduce((a, e) => a + Number(e.textContent), 0);
         return n === state.tasks.filter(t => t.project === p && t.stage !== "done").length;
       }),
-      hello: document.getElementById("helloTitle").textContent.endsWith("Obi") && /VTB, KRR, Makuta and GTR/.test(document.getElementById("helloText").textContent),
+      hello: document.getElementById("helloTitle").textContent.endsWith("Obi") && document.getElementById("helloText").textContent === "Content Writer · VTB, KRR, Makuta and GTR",
       recent: document.querySelectorAll("#homeRecent li").length, due: !!document.querySelector("#homeDue"),
       sideProjects: [...document.querySelectorAll("#sideProjects [data-project]")].map(b => b.dataset.project).filter(Boolean).join(),
       navTurn: document.getElementById("navTurn").textContent,
@@ -700,7 +817,7 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   });
   ok(home.count > 0 && home.allMine && home.allButtons && home.complete && home.once, `Home "Your turn": every step waiting for me, with its buttons, linked tasks once (${home.count})`);
   ok(home.hello, "Home greets me and names my role and projects");
-  ok(home.stats === "mine,late,soon,links:open" && home.mineStat, "Home numbers: waiting for me, late, due this week, links not done");
+  ok(home.stats === "mine,late,soon,client" && home.mineStat, "Home numbers: waiting for me, late, due this week, at client");
   ok(home.projects === "VTB,KRR,Makuta,GTR" && home.sums, "Home Projects table: my projects, every active task counted once per project");
   ok(home.recent > 0 && home.due, "Home shows recent moves and what is due");
   ok(home.sideProjects === "VTB,KRR,Makuta,GTR" && Number(home.navTurn) === await page.evaluate(() => state.tasks.filter(isMyStep).length), "sidebar: my projects only, Milestones shows how many are my turn");
@@ -710,8 +827,8 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(await page.evaluate(c => state.page === "tasks" && document.getElementById("tStep").value === c.stat && document.getElementById("tProject").value === c.project &&
     document.querySelectorAll("#taskResults [data-task]").length === c.n, cellPick), `a number in the Projects table opens Milestones on that project and stage (${cellPick.project} / ${cellPick.stat})`);
   await page.evaluate(() => showView("home"));
-  await page.click('#homeStats [data-links="open"]');
-  ok(await page.evaluate(() => state.page === "links" && document.getElementById("fStatus").value === "open"), "Links not done opens Links on the links still open");
+  await page.click('#homeStats [data-stat="client"]');
+  ok(await page.evaluate(() => state.page === "tasks" && document.getElementById("tStep").value === "client"), "At client opens Milestones on the tasks at the client");
   await page.evaluate(() => showView("home"));
   await page.click('#homeStats [data-stat="late"]');
   ok(await page.evaluate(() => state.page === "tasks" && document.getElementById("tStep").value === "late"), "Late opens Milestones on the late tasks");
@@ -721,7 +838,9 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   // Pressing my step from Home, then Undo from the message
   await page.evaluate(() => showView("home"));
   const pressed = await page.evaluate(() => {
-    const row = [...document.querySelectorAll("#homeTurn .turn-row")].find(r => r.querySelector('[data-tact="advance"]') && !r.querySelector('[data-tact="revise"]'));
+    // A step without a link to paste (those open the link popup first, tested above)
+    const row = [...document.querySelectorAll("#homeTurn .turn-row")].find(r => r.querySelector('[data-tact="advance"]') && !r.querySelector('[data-tact="revise"]') &&
+      !state.cfg.linkSteps[state.tasks.find(t => t.id === r.querySelector("[data-open]").dataset.open).stage]);
     const id = row.querySelector("[data-open]").dataset.open;
     const before = state.tasks.find(t => t.id === id).stage;
     row.querySelector('[data-tact="advance"]').click();
@@ -737,8 +856,9 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(await page.evaluate(id => state.page === "tasks" && !!document.querySelector(`#taskResults [data-task="${id}"].task-flash`), pressed.id), "a task opened from Home is shown and highlighted in Milestones");
   // New menu and the link panel
   await page.click("#newBtn");
-  ok(await page.$eval("#newMenu", e => !e.hidden) && await page.$$eval("#newMenu button", b => b.filter(x => !x.hidden).length) === 3, "New menu: Monthly Brief, Single task, Link");
-  await page.mouse.click(400, 600);
+  ok(await page.$eval("#newMenu", e => !e.hidden) && await page.$$eval("#newMenu button", b => b.filter(x => !x.hidden).length) === 3, "New menu: Monthly Brief, Single task, Resource");
+  // (on the page title: a spot in the list could be a link that opens a new tab)
+  await page.click("#pageTitle");
   ok(await page.$eval("#newMenu", e => e.hidden), "New menu closes on a click outside it");
   await page.evaluate(() => newItem("link"));
   ok(await page.evaluate(() => !document.getElementById("viewSubmit").hidden && document.body.classList.contains("drawer-open") && state.page === "tasks"), "Add link opens as a side panel over the page");
@@ -750,7 +870,18 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   // Designers: no New button entries for tasks, no Links creation hidden
   await page.evaluate(() => lockApp());
   await loginAs("alfid");
-  ok(await page.evaluate(() => [...document.querySelectorAll("#newMenu .task-create")].every(b => b.hidden) && !document.querySelector("#newMenu .link-create").hidden), "designer: New menu has Link only");
+  ok(await page.evaluate(() => [...document.querySelectorAll("#newMenu .task-create")].every(b => b.hidden) && !document.querySelector("#newMenu .link-create").hidden), "designer: New menu has Resource only");
+  // Kak Faza: her steps on Home, each with the result to send or post
+  await page.evaluate(() => lockApp());
+  await loginAs("faza");
+  const faza = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll("#homeTurn .turn-row")];
+    return { n: rows.length, stages: [...new Set(rows.map(r => state.tasks.find(t => t.id === r.querySelector("[data-open]").dataset.open).stage))].sort().join(),
+      links: rows.every(r => /Open result/.test((r.querySelector(".link-open") || {}).textContent || "")), create: [...document.querySelectorAll("#newMenu .task-create")].every(b => b.hidden),
+      hello: document.getElementById("helloText").textContent };
+  });
+  ok(faza.n > 0 && /^(ads|qcClient|toClient)(,(ads|qcClient|toClient))*$/.test(faza.stages), "Kak Faza's Home: Send to Client, QC Client and Run Ads -> " + faza.stages);
+  ok(faza.links && faza.create && faza.hello === "Assistant Manager · every project", "each one has its Open result button; no task creation");
   await page.evaluate(() => lockApp());
   await loginAs("owner", "owner");
   ok(await page.evaluate(() => document.getElementById("turnTitle").textContent === "Late tasks" && document.querySelector("#homeStats [data-stat=active]")), "owner's Home lists late tasks and all active tasks (no steps of their own)");

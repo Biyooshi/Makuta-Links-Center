@@ -1,12 +1,4 @@
 <script>
-  const STATUSES = ["Draft", "In Progress", "In Review", "Revision", "Done"];
-  const STATUS_INFO = {
-    "Draft": "Still being drafted, not ready to share yet.",
-    "In Progress": "Actively being worked on.",
-    "In Review": "Waiting for feedback or approval.",
-    "Revision": "Needs changes after feedback.",
-    "Done": "Finished and approved.",
-  };
   const REFERENCE_PROJECT = "REFERENCE";
   const CATEGORY_ICONS = { "Google Docs": "📄", "Google Spreadsheets": "📈", "Google Slide": "📊", "Drive Folder": "📁", "CTC-Video": "🎬", "Reference": "🔖", "Other": "📌" };
   const $ = id => document.getElementById(id);
@@ -17,12 +9,11 @@
     return m ? { base: m[1], source: m[2] } : { base: c, source: "" };
   }
   const categoryLabel = c => `${CATEGORY_ICONS[splitCategory(c).base] || "📌"} ${c}`;
-  const state = { links: [], tasks: [], cfg: null, app: {}, user: null, viewAs: "", loaded: false, editingId: null, dupId: null, view: "table", editingTaskId: null, openHistory: new Set(), justMoved: null, justTicked: null, page: "home" };
+  const state = { links: [], tasks: [], cfg: null, app: {}, user: null, viewAs: "", loaded: false, editingId: null, dupId: null, view: "table", linkTab: "resources", editingTaskId: null, stepLinkTask: null, openHistory: new Set(), justMoved: null, justTicked: null, page: "home" };
 
   const SORTERS = {
     newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
     oldest: (a, b) => a.createdAt.localeCompare(b.createdAt),
-    deadline: (a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"),
     az: (a, b) => a.title.localeCompare(b.title),
     za: (a, b) => b.title.localeCompare(a.title),
   };
@@ -124,7 +115,6 @@
   const dayStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const today = () => dayStr(new Date());
   const parseDay = day => { const [y, m, d] = day.split("-").map(Number); return new Date(y, m - 1, d); };
-  const daysAgo = n => dayStr(new Date(Date.now() - n * 864e5));
   const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   function formatDate(iso) {
@@ -143,7 +133,6 @@
     const now = new Date();
     return Math.round((parseDay(day) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
   }
-  const isOverdue = l => !!l.deadline && l.status !== "Done" && l.deadline < today();
 
   // Add https:// when the protocol is missing
   function normalizeUrl(url) {
@@ -251,7 +240,7 @@
 
   /* ---------- Pages ---------- */
   const VIEWS = { home: "Home", tasks: "Tasks", links: "Links", admin: "Admin" };
-  const PAGE_TITLES = { home: "Home", tasks: "Milestones", links: "Links", admin: "Admin" };
+  const PAGE_TITLES = { home: "Home", tasks: "Milestones", links: "Resources", admin: "Admin" };
   function showView(name) {
     // The link form opens as a side panel over the page you are on
     if (name === "submit") return openLinkPanel();
@@ -306,7 +295,7 @@
   function openLinkPanel() {
     toggleSidebar(false);
     toggleNewMenu(false);
-    $("drawerTitle").textContent = state.editingId ? "Edit link" : "Add link";
+    $("drawerTitle").textContent = state.editingId ? "Edit resource" : "Add resource";
     $("viewSubmit").hidden = false;
     document.body.classList.add("drawer-open");
     setTimeout(() => $("viewSubmit").contains(document.activeElement) || $("title").focus(), 50);
@@ -338,7 +327,7 @@
 
   /* ---------- Data loading ---------- */
   function loadData() {
-    $("results").innerHTML = `<div class="loading"><div class="spinner"></div>Loading your links...</div>`;
+    $("results").innerHTML = `<div class="loading"><div class="spinner"></div>Loading...</div>`;
     return api("getInitialData").then(data => {
       state.links = data.links;
       state.tasks = data.tasks;
@@ -375,7 +364,9 @@
     const projects = uniqueValues("project");
     $("projectList").innerHTML = projects.map(p => `<option value="${escapeHtml(p)}">`).join("");
     fillSelect("fCategory", uniqueValues("category"), "All categories", categoryLabel);
-    fillSelect("fProject", projects, "All projects", p => `${projectIcon(p)} ${p}`);
+    // Resources may name any project; the brief & result links are from the projects of my tasks
+    const all = state.linkTab === "tasks" ? taskProjects() : projects;
+    fillSelect("fProject", all, "All projects", p => `${projectIcon(p)} ${p}`);
   }
 
   function upsertLocal(link) {
@@ -387,11 +378,6 @@
 
   /* ---------- Form ---------- */
   function showError(id, show) { $(id + "Err").hidden = !show; }
-
-  function updateStatusHint() {
-    const s = $("status").value;
-    $("statusHint").innerHTML = `${statusBadge(s)} ${escapeHtml(STATUS_INFO[s] || "")}`;
-  }
 
   function addVersionRow(v) {
     v = v || {};
@@ -460,11 +446,10 @@
     $("versionList").innerHTML = "";
     state.editingId = null;
     $("editBanner").hidden = true;
-    $("submitLabel").textContent = "Save link";
-    $("drawerTitle").textContent = "Add link";
+    $("submitLabel").textContent = "Save resource";
+    $("drawerTitle").textContent = "Add resource";
     ["title", "url", "category", "videoSource", "versions"].forEach(k => showError(k, false));
     $("dupWarning").hidden = true;
-    updateStatusHint();
     updateCategoryFields();
   }
 
@@ -485,14 +470,14 @@
 
   // True when the form has unsaved input (so we don't silently throw it away)
   function formIsDirty() {
-    return ["title", "url", "project", "purpose", "deadline"].some(id => $(id).value.trim()) ||
+    return ["title", "url", "project", "purpose"].some(id => $(id).value.trim()) ||
       document.querySelectorAll(".version-row").length > 0;
   }
 
   async function startEdit(link) {
     if (state.editingId !== link.id && formIsDirty() && !await confirmDialog({
       emoji: "📝", title: "Discard unsaved changes?",
-      message: "The form has text you haven't saved yet. Continue and replace it with this link?", ok: "Discard & Edit",
+      message: "The form has text you haven't saved yet. Continue and replace it with this resource?", ok: "Discard & edit",
     })) return;
     resetForm();
     state.editingId = link.id;
@@ -505,9 +490,6 @@
     $("project").value = link.project;
     updateCategoryFields();
     $("videoSource").value = cat.source;
-    $("status").value = STATUSES.includes(link.status) ? link.status : "Draft";
-    updateStatusHint();
-    $("deadline").value = link.deadline;
     $("purpose").value = link.purpose;
     $("pinned").checked = link.pinned;
     link.versions.forEach(v => addVersionRow(v));
@@ -520,7 +502,7 @@
 
   function setBusy(busy) {
     $("submitBtn").disabled = busy;
-    $("submitLabel").textContent = busy ? "Saving..." : (state.editingId ? "Save changes" : "Save link");
+    $("submitLabel").textContent = busy ? "Saving..." : (state.editingId ? "Save changes" : "Save resource");
   }
 
   async function submitForm(e) {
@@ -532,8 +514,6 @@
       url: normalizeUrl($("url").value),
       category: isVideo && source ? `CTC-Video [${source}]` : $("category").value,
       project: $("project").value.trim(),
-      status: $("status").value,
-      deadline: $("deadline").value,
       purpose: $("purpose").value.trim(),
       pinned: $("pinned").checked,
       versions: readVersions(),
@@ -561,7 +541,7 @@
       const saved = editing ? await api("updateLink", editing, data) : await api("addLink", data);
       upsertLocal(saved);
       resetForm();
-      $("successTitle").textContent = editing ? "Changes saved" : "Link saved";
+      $("successTitle").textContent = editing ? "Changes saved" : "Resource saved";
       $("successText").textContent = `"${saved.title}" has been ${editing ? "updated" : "saved"}.`;
       openModal("successModal");
       if (saved.warning) toast(saved.warning, true);
@@ -572,49 +552,38 @@
     }
   }
 
-  /* ---------- All Links: filtering ---------- */
+  /* ---------- Resources: filtering ---------- */
   function resetFilters(rerender = true) {
-    ["search", "fCategory", "fProject", "fStatus", "dateFrom", "dateTo"].forEach(id => $(id).value = "");
+    ["search", "fCategory", "fProject"].forEach(id => $(id).value = "");
     $("sort").value = "newest";
     $("pinnedOnly").checked = false;
     if (rerender) render();
   }
 
-  function applyStat(kind) {
-    resetFilters(false);
-    if (kind === "week") $("dateFrom").value = daysAgo(6);
-    if (kind === "open" || kind === "overdue") $("fStatus").value = kind;
-    render();
-  }
-
   function getFiltered() {
     const q = $("search").value.trim().toLowerCase();
-    const cat = $("fCategory").value, proj = $("fProject").value, status = $("fStatus").value;
-    const from = $("dateFrom").value, to = $("dateTo").value, pinnedOnly = $("pinnedOnly").checked;
-
+    const cat = $("fCategory").value, proj = $("fProject").value, pinnedOnly = $("pinnedOnly").checked;
     return state.links.filter(l => {
       if (cat && l.category !== cat) return false;
       if (proj && l.project !== proj) return false;
-      if (status === "open" && l.status === "Done") return false;
-      if (status === "overdue" && !isOverdue(l)) return false;
-      if (STATUSES.includes(status) && l.status !== status) return false;
       if (pinnedOnly && !l.pinned) return false;
-      const day = addedDay(l);
-      if (from && (!day || day < from)) return false;
-      if (to && (!day || day > to)) return false;
       if (q) {
-        const haystack = [l.title, l.url, l.category, l.project, l.status, l.purpose, ...l.versions.flatMap(v => [v.label, v.url])].join(" ").toLowerCase();
+        const haystack = [l.title, l.url, l.category, l.project, l.purpose, ...l.versions.flatMap(v => [v.label, v.url])].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     }).sort((a, b) => (b.pinned - a.pinned) || SORTERS[$("sort").value](a, b));
   }
 
-  /* ---------- All Links: rendering ---------- */
-  function statusBadge(s) {
-    return `<span class="status status-${slug(s)}" title="${escapeHtml(STATUS_INFO[s] || "")}"><i></i>${escapeHtml(s)}</span>`;
+  // Brief & result links: every task I can see that has one, last changed first
+  function getTaskLinks() {
+    const q = $("search").value.trim().toLowerCase(), proj = $("fProject").value;
+    return state.tasks.filter(t => (t.briefLink || t.resultLink) && (!proj || t.project === proj) &&
+      (!q || [t.title, t.project, t.type, t.briefLink, t.resultLink].join(" ").toLowerCase().includes(q)))
+      .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
   }
 
+  /* ---------- Resources: rendering ---------- */
   function categoryBadge(c) {
     const base = splitCategory(c).base;
     return `<span class="cat cat-${base in CATEGORY_ICONS ? slug(base) : "other"}">${escapeHtml(categoryLabel(c))}</span>`;
@@ -651,17 +620,7 @@
     return `<span class="proj" style="--h:${projectHue(name)}">${projectIcon(name)} ${escapeHtml(name)}</span>`;
   }
 
-  function deadlineText(l) {
-    if (!l.deadline) return `<span class="muted">-</span>`;
-    const date = formatDay(l.deadline);
-    if (l.status === "Done") return `<span class="due due-done">📅 ${date}</span>`;
-    const d = daysUntil(l.deadline);
-    if (d < 0) return `<span class="due due-overdue">⚠️ Overdue · ${plural(-d, "day")}</span><small class="due-date">${date}</small>`;
-    if (d <= 3) return `<span class="due due-soon">⏰ ${d === 0 ? "Due today" : d === 1 ? "Due tomorrow" : `In ${d} days`}</span><small class="due-date">${date}</small>`;
-    return `<span class="due">📅 ${date}</span>`;
-  }
-
-  const rowClass = l => [isOverdue(l) ? "row-overdue" : "", l.pinned ? "row-pinned" : ""].join(" ").trim();
+  const rowClass = l => l.pinned ? "row-pinned" : "";
 
   function titleBlock(l) {
     const versions = l.versions.length
@@ -690,17 +649,32 @@
   // When the page is too narrow for the table, each row becomes a card (see Styles)
   function renderTable(list) {
     return `<div class="table-wrap"><table class="links-table">
-      <colgroup><col class="c-pin"><col><col class="c-cat"><col class="c-proj"><col class="c-status"><col class="c-due"><col class="c-act"></colgroup>
-      <thead><tr><th><span class="sr-only">Pin</span></th><th>Title &amp; link</th><th>Category</th><th>Project</th><th>Status</th><th>Deadline</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <colgroup><col class="c-pin"><col><col class="c-cat"><col class="c-proj"><col class="c-act"></colgroup>
+      <thead><tr><th><span class="sr-only">Pin</span></th><th>Title &amp; link</th><th>Category</th><th>Project</th><th><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>${list.map(l => `
         <tr class="${rowClass(l)}">
           <td class="pin-cell">${pinButton(l)}</td>
           <td class="title-cell">${titleBlock(l)}<div class="link-meta" title="${formatDate(l.createdAt)}">Added ${addedDay(l) ? formatDay(addedDay(l)) : "-"}${l.purpose ? ` · <span class="link-desc">${escapeHtml(l.purpose)}</span>` : ""}</div></td>
           <td data-label="Category">${categoryBadge(l.category)}</td>
           <td data-label="Project">${projectChip(l.project)}</td>
-          <td data-label="Status">${statusBadge(l.status)}</td>
-          <td data-label="Deadline">${deadlineText(l)}</td>
           <td class="act-cell">${actionButtons(l)}</td>
+        </tr>`).join("")}
+      </tbody></table></div>`;
+  }
+
+  // Brief & result links of the tasks, with the step each task is at (opens the task in Milestones)
+  function renderTaskLinks(list) {
+    const open = (url, label) => url ? `<a class="tag tag-link" href="${safeHref(url)}" target="_blank" rel="noopener">${label} ↗</a>` : `<span class="muted">Not yet</span>`;
+    return `<div class="table-wrap"><table class="links-table task-links">
+      <colgroup><col><col class="c-proj"><col class="c-link"><col class="c-link"></colgroup>
+      <thead><tr><th>Task</th><th>Project</th><th>Brief</th><th>Result</th></tr></thead>
+      <tbody>${list.map(t => `
+        <tr>
+          <td class="title-cell"><button type="button" class="link-task" data-open="${escapeHtml(t.id)}" title="Open in Milestones">${escapeHtml(t.title)}</button>
+            <div class="link-meta">${t.stage === "done" ? `✓ ${escapeHtml(doneLabel(t))}` : `Now: ${escapeHtml(stageOf(t.stage).name)}`}</div></td>
+          <td data-label="Project">${projectChip(t.project)}</td>
+          <td data-label="Brief">${open(t.briefLink, "📄 Brief")}</td>
+          <td data-label="Result">${open(t.resultLink, "🎨 Result")}</td>
         </tr>`).join("")}
       </tbody></table></div>`;
   }
@@ -711,12 +685,10 @@
     // Projects A-Z, links without a project last
     return Object.keys(groups).sort((a, b) => (!a - !b) || a.localeCompare(b)).map(name => {
       const items = groups[name];
-      const notDone = items.filter(l => l.status !== "Done").length;
-      const overdue = items.filter(isOverdue).length;
       return `<section class="group">
         <div class="group-head">
-          <h3>${projectAvatar(name)}${escapeHtml(name) || "No Project"}</h3>
-          <span>${plural(items.length, "link")} &middot; ${notDone} not done${overdue ? ` &middot; <b class="text-danger">${overdue} overdue</b>` : ""}</span>
+          <h3>${projectAvatar(name)}${escapeHtml(name) || "No project"}</h3>
+          <span>${plural(items.length, "resource")}</span>
         </div>
         ${items.map(l => `
           <div class="group-item ${rowClass(l)}">
@@ -725,8 +697,6 @@
               ${titleBlock(l)}
               <div class="meta-line">
                 ${categoryBadge(l.category)}
-                ${statusBadge(l.status)}
-                ${l.deadline ? deadlineText(l) : ""}
                 <span>Added ${formatDate(l.createdAt)}</span>
               </div>
               ${l.purpose ? `<p class="desc">${escapeHtml(l.purpose)}</p>` : ""}
@@ -737,13 +707,6 @@
     }).join("");
   }
 
-  function renderStats() {
-    const weekStart = daysAgo(6);
-    $("stat-all").textContent = state.links.length;
-    $("stat-week").textContent = state.links.filter(l => addedDay(l) >= weekStart).length;
-    $("stat-open").textContent = state.links.filter(l => l.status !== "Done").length;
-    $("stat-overdue").textContent = state.links.filter(isOverdue).length;
-  }
 
   // Phones fold the filters behind a button; it says how many are in use (the search box stays open)
   function updateFilterToggle(view) {
@@ -754,40 +717,60 @@
 
   // Highlight filters that are in use, so it's obvious why the list is shorter
   function markActiveFilters() {
-    const ids = ["search", "fCategory", "fProject", "fStatus", "dateFrom", "dateTo"];
+    const tasks = state.linkTab === "tasks";
     let active = 0;
-    ids.forEach(id => {
-      const on = !!$(id).value;
+    ["search", "fProject", "fCategory"].forEach(id => {
+      const on = !!$(id).value && (!tasks || id !== "fCategory");
       $(id).classList.toggle("is-active", on);
       if (on) active++;
     });
-    if ($("pinnedOnly").checked) active++;
+    if (!tasks && $("pinnedOnly").checked) active++;
     updateFilterToggle("viewLinks");
-    const status = $("fStatus").value;
-    $("card-open").classList.toggle("active", status === "open");
-    $("card-overdue").classList.toggle("active", status === "overdue");
-    $("card-week").classList.toggle("active", $("dateFrom").value === daysAgo(6) && !status);
     return active;
+  }
+
+  const LINK_TAB_NOTES = {
+    resources: "Links the team keeps coming back to: brand guidelines, moodboards, content calendars and references.",
+    tasks: "The brief and result of every task, collected from Milestones. They are added when the step is pressed.",
+  };
+  function showLinkTab(tab) {
+    state.linkTab = tab;
+    document.querySelectorAll("[data-ltab]").forEach(b => {
+      b.classList.toggle("active", b.dataset.ltab === tab);
+      b.setAttribute("aria-selected", String(b.dataset.ltab === tab));
+    });
+    $("viewLinks").classList.toggle("tab-tasks", tab === "tasks");
+    $("search").placeholder = tab === "tasks" ? "Search task, project or link..." : "Search title, link or project...";
+    refreshOptions();
+    render();
   }
 
   function render() {
     if (!state.loaded) return;
-    renderStats();
+    $("linkTabNote").textContent = LINK_TAB_NOTES[state.linkTab];
     const active = markActiveFilters();
+    const filterNote = active ? ` <span class="filter-note">${plural(active, "filter")} active</span>` : "";
+    if (state.linkTab === "tasks") {
+      const list = getTaskLinks(), total = state.tasks.filter(t => t.briefLink || t.resultLink).length;
+      $("count").innerHTML = `Showing <b>${list.length}</b> of ${plural(total, "task")} with links` + filterNote;
+      $("results").innerHTML = list.length ? renderTaskLinks(list) : `<div class="empty">${total
+        ? `<div class="empty-emoji">🔍</div><strong>No task matches your search.</strong><br><a href="#" onclick="resetFilters(); return false;">Reset filters</a>`
+        : `<div class="empty-emoji">📭</div><strong>No brief or result links yet.</strong><br>They appear here once a brief is submitted for QC.`}</div>`;
+      return;
+    }
     const list = getFiltered();
     const total = state.links.length;
-    $("count").innerHTML = `Showing <b>${list.length}</b> of ${plural(total, "link")}` +
-      (active ? ` <span class="filter-note">${plural(active, "filter")} active</span>` : "");
+    $("count").innerHTML = `Showing <b>${list.length}</b> of ${plural(total, "resource")}` + filterNote;
     if (!list.length) {
       $("results").innerHTML = `<div class="empty">${total
-        ? `<div class="empty-emoji">🔍</div><strong>No links match your search or filters.</strong><br><a href="#" onclick="resetFilters(); return false;">Reset filters</a>`
-        : `<div class="empty-emoji">📭</div><strong>No links yet.</strong><br><a href="#" onclick="newItem('link'); return false;">Add your first link</a>`}</div>`;
+        ? `<div class="empty-emoji">🔍</div><strong>No resources match your search or filters.</strong><br><a href="#" onclick="resetFilters(); return false;">Reset filters</a>`
+        : `<div class="empty-emoji">📭</div><strong>No resources yet.</strong><br><a href="#" onclick="newItem('link'); return false;">Add the first one</a>`}</div>`;
       return;
     }
     $("results").innerHTML = state.view === "table" ? renderTable(list) : renderGroups(list);
   }
 
-  /* ---------- All Links: actions ---------- */
+  /* ---------- Resources: actions ---------- */
   function togglePin(link) {
     link.pinned = !link.pinned;
     render();
@@ -799,6 +782,8 @@
   }
 
   async function handleAction(e) {
+    const task = e.target.closest("[data-open]");
+    if (task) return openTask(task.dataset.open);
     const btn = e.target.closest("[data-act]");
     if (!btn) return;
     const link = state.links.find(l => l.id === btn.dataset.id);
@@ -808,14 +793,14 @@
     if (act === "copy") copyText(link.url);
     else if (act === "edit") startEdit(link);
     else if (act === "pin") togglePin(link);
-    else if (act === "delete" && await confirmDialog({ message: `"${link.title}" will be permanently removed, including from the Google Sheet.` })) {
+    else if (act === "delete" && await confirmDialog({ title: "Delete this resource?", message: `"${link.title}" will be permanently removed, including from the Google Sheet.` })) {
       try {
         await api("deleteLink", link.id);
         state.links = state.links.filter(l => l.id !== link.id);
         if (state.editingId === link.id) resetForm();
         refreshOptions();
         render();
-        toast("Link deleted");
+        toast("Resource deleted");
       } catch (err) {
         toast("Delete failed: " + err.message, true);
       }
@@ -844,39 +829,37 @@
         "Main Link": l.url,
         "Category": l.category,
         "Project": l.project,
-        "Status": l.status,
-        "Deadline": l.deadline ? formatDay(l.deadline) : "",
         "Pinned": l.pinned ? "Yes" : "No",
         "Description": l.purpose,
         "Related Links": l.versions.map(v => `${v.label || "Link"}: ${v.url}`).join("\n"),
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws["!cols"] = [18, 40, 50, 16, 16, 14, 14, 8, 50, 50].map(wch => ({ wch }));
+      ws["!cols"] = [18, 40, 50, 16, 16, 8, 50, 50].map(wch => ({ wch }));
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Links");
-      XLSX.writeFile(wb, `makuta-links-${today()}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, "Resources");
+      XLSX.writeFile(wb, `makuta-resources-${today()}.xlsx`);
     } catch (err) {
       toast(err.message, true);
     }
   }
 
   /* ---------- Milestones: setup ---------- */
-  // Step dropdown: groups that follow the workflow (whose turn it is); exact steps are listed after these
-  // Finished tasks stay in the default view (dimmed, at the bottom) for this many days after they are done
+  // The Show dropdown: which tasks (show) or the stage they are at (stage, the same columns as Home's
+  // Projects table). Finished tasks stay in the default view (dimmed, at the bottom) for this many days.
   const RECENT_DONE_DAYS = 30;
   const STEP_GROUPS = {
-    current: { label: `Active + done in ${RECENT_DONE_DAYS} days`, test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
-    active: { label: "All active tasks", test: t => t.stage !== "done" },
-    mine: { label: "My Tasks", test: t => isMyStep(t) },
-    qc: { label: "Waiting QC Internal", test: t => ["qcBrief", "qcCut", "qcContent"].includes(t.stage) },
-    drafting: { label: "Drafting brief / client revision", test: t => ["brief", "revision"].includes(t.stage) },
-    production: { label: "In production (shooting / VO / CTC / design / ToV)", test: t => ["shoot", "vo", "video", "design", "motion"].includes(t.stage) },
+    current: { show: true, label: "Active + recently done", test: t => t.stage !== "done" || daysSince(finishedAt(t)) <= RECENT_DONE_DAYS },
+    active: { show: true, label: "Active only", test: t => t.stage !== "done" },
+    mine: { show: true, label: "My Tasks", test: t => isMyStep(t) },
+    late: { show: true, label: "Late", test: t => t.stage !== "done" && !!t.deadline && t.deadline < today() },
+    soon: { show: true, label: "Due in 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) <= 7 },
+    done: { show: true, label: "Done", test: t => t.stage === "done" },
+    all: { show: true, label: "All tasks", test: () => true },
+    drafting: { label: "Brief", test: t => ["brief", "revision"].includes(t.stage) },
+    qc: { label: "QC Internal", test: t => ["qcBrief", "qcCut", "qcContent"].includes(t.stage) },
+    production: { label: "Production", test: t => ["shoot", "vo", "video", "design", "motion"].includes(t.stage) },
     client: { label: "At client", test: t => ["toClient", "qcClient"].includes(t.stage) },
-    ready: { label: "Approved by client", test: t => ["post", "ads"].includes(t.stage) },
-    late: { label: "Late (past the deadline)", test: t => t.stage !== "done" && !!t.deadline && t.deadline < today() },
-    soon: { label: "Due in the next 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) <= 7 },
-    done: { label: "Done", test: t => t.stage === "done" },
-    all: { label: "All tasks", test: () => true },
+    ready: { label: "Ready to post", test: t => ["post", "ads"].includes(t.stage) },
   };
   const isVideoType = type => /^Video/.test(type);
   const isEventType = type => type === state.cfg.eventType;
@@ -901,11 +884,11 @@
   const stepActor = key => state.cfg.stepActors[key] || "writer";
   // The project's content writer, managerial and the owner create, edit and delete its tasks
   const managesProject = project => !me().readOnly && (isBoss() || (me().role === "writer" && (state.cfg.projects[project] || {}).writer === me().name));
+  // The assistant manager's steps (Send to Client, QC Client, Run Ads) are the same for every project
+  const actsOn = (u, actor, t) => u.role === actor && (actor === "assistant" || (state.cfg.projects[t.project] || {})[actor] === u.name);
   function canPress(t) {
     if (me().readOnly || t.stage === "done") return false;
-    if (isBoss()) return true;
-    const actor = stepActor(t.stage);
-    return me().role === actor && (state.cfg.projects[t.project] || {})[actor] === me().name;
+    return isBoss() || actsOn(me(), stepActor(t.stage), t);
   }
   function canUndo(t) {
     const last = t.history[t.history.length - 1] || {};
@@ -918,13 +901,23 @@
     if (t.stage === "done") return false;
     const actor = stepActor(t.stage), u = me();
     if (u.role === "manager") return actor === "manager" || stageOf(t.stage).person === u.name;
-    return u.role === actor && (state.cfg.projects[t.project] || {})[actor] === u.name;
+    return actsOn(u, actor, t);
   }
-  // "Alfid", "Kak Faza (via Obi)", "QC (Kak Hendra / Bu Riska)" (mirrors waitingFor_ in Code.gs)
+  // "Alfid", "Client (via Kak Faza)", "QC (Kak Hendra / Bu Riska)" (mirrors waitingFor_ in Code.gs)
   function waitingFor(t) {
-    const owner = stageOwner(stageOf(t.stage), t), actor = stepActor(t.stage), writer = projectWriter(t);
+    const owner = stageOwner(stageOf(t.stage), t), actor = stepActor(t.stage);
     if (actor === "manager") return `QC (${owner})`;
-    return actor === "writer" && owner !== writer && !owner.startsWith(writer + " ") ? `${owner} (via ${writer})` : owner;
+    // Who presses the button for someone without an account (the client, the freelancers)
+    const via = actor === "writer" ? projectWriter(t) : actor === "assistant" ? state.cfg.assistantName : "";
+    return via && owner !== via && !owner.startsWith(via + " ") ? `${owner} (via ${via})` : owner;
+  }
+  // The link a step works from: the brief until the work is made, then the result
+  const RESULT_STAGES = ["qcContent", "toClient", "qcClient", "revision", "post", "ads", "done"];
+  const LINK_NAMES = { briefLink: "📄 Brief", resultLink: "🎨 Result" };
+  const linkTag = (t, field) => t[field] ? `<a class="tag tag-link" href="${safeHref(t[field])}" target="_blank" rel="noopener">${LINK_NAMES[field]} ↗</a>` : "";
+  function workLink(t) {
+    const field = RESULT_STAGES.includes(t.stage) ? "resultLink" : "briefLink";
+    return t[field] ? `<a class="btn btn-sm btn-soft link-open" href="${safeHref(t[field])}" target="_blank" rel="noopener">${field === "briefLink" ? "📄 Open brief" : "🎨 Open result"} ↗</a>` : "";
   }
   const doneLabel = t => isCollateralType(t.type) ? "Approved by Client" : t.channel === "ADS" ? "Live on Ads" : "Scheduled / Posted";
   // Mirrors channelFromTitle_ in Code.gs: "BRIEF ORG NOV KRR" -> "ORG" ("" when neither or both)
@@ -959,8 +952,6 @@
 
   function setupTaskOptions() {
     const cfg = state.cfg;
-    const types = cfg.contentTypes.map(v => `<option>${escapeHtml(v)}</option>`).join("");
-    $("tType").innerHTML = `<option value="">All types</option>` + types;
     $("tfVideographer").innerHTML = `<option value="">-- Select --</option>` + cfg.videographers.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)} (VG-${escapeHtml(v)})</option>`).join("");
     // New tasks only for the projects this account looks after
     $("tfProject").innerHTML = $("bfProject").innerHTML = `<option value="">-- Select --</option>` +
@@ -968,9 +959,8 @@
     $("bfVideographer").innerHTML = $("tfVideographer").innerHTML;
     // The owner has no steps of their own, so no My Tasks
     const groups = Object.keys(STEP_GROUPS).filter(k => k !== "mine" || me().role !== "owner");
-    $("tStep").innerHTML =
-      `<optgroup label="Quick filters">${groups.map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("")}</optgroup>` +
-      `<optgroup label="Exact step">${cfg.stages.map(s => `<option value="${s.key}">${escapeHtml(s.name)} (${escapeHtml(s.person || s.role)})</option>`).join("")}</optgroup>`;
+    const options = show => groups.filter(k => !!STEP_GROUPS[k].show === show).map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("");
+    $("tStep").innerHTML = `<optgroup label="Tasks">${options(true)}</optgroup><optgroup label="At stage">${options(false)}</optgroup>`;
     $("tStep").value = defaultStep();
     // Only the content writers, managerial and the owner create tasks
     document.querySelectorAll(".task-create").forEach(b => b.hidden = !Object.keys(cfg.projects).some(managesProject));
@@ -1038,9 +1028,12 @@
       $("tfDeadline").value = t.deadline;
       ensureOption($("tfVideographer"), t.videographer);
       $("tfVideographer").value = t.videographer;
-      $("tfLink").value = t.link;
+      $("tfBriefLink").value = t.briefLink;
+      $("tfResultLink").value = t.resultLink;
       $("tfNotes").value = t.notes;
     }
+    // The result link is the graphic designer's; it only shows on a task that can have one
+    $("tfResultField").hidden = !t;
     updateTaskForm();
     openModal("taskModal");
     $("tfTitle").focus();
@@ -1122,7 +1115,8 @@
       type: $("tfType").value,
       deadline: $("tfDeadline").value,
       videographer: $("tfVideographerField").hidden ? "" : $("tfVideographer").value,
-      link: $("tfLink").value.trim() ? normalizeUrl($("tfLink").value) : "",
+      briefLink: $("tfBriefLink").value.trim() ? normalizeUrl($("tfBriefLink").value) : "",
+      resultLink: $("tfResultLink").value.trim() ? normalizeUrl($("tfResultLink").value) : "",
       notes: $("tfNotes").value.trim(),
       item: $("tfItemField").hidden ? "" : $("tfItem").value,
     };
@@ -1135,9 +1129,11 @@
       : !collateral && (state.cfg.projects[data.project] || {}).orgOnly && channelFromTitle(data.title) !== "ORG" ? ["tfTitle", `${data.project} is organic only. Use ORG in the title.`]
       : !collateral && (state.cfg.projects[data.project] || {}).adsOnly && channelFromTitle(data.title) !== "ADS" ? ["tfTitle", `${data.project} runs ADS only. Use ADS in the title.`]
       : !data.type ? ["tfType", "Please choose the content type."]
-      : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]      : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
+      : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]
+      : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
       : isEventType(data.type) && !data.deadline ? ["tfDeadline", "Please fill in the event date (D-Day)."]
-      : data.link && !isValidUrl(data.link) ? ["tfLink", "Please enter a valid link, or leave it empty."]
+      : data.briefLink && !isValidUrl(data.briefLink) ? ["tfBriefLink", "Please enter a valid brief link, or leave it empty."]
+      : data.resultLink && !isValidUrl(data.resultLink) ? ["tfResultLink", "Please enter a valid result link, or leave it empty."]
       : null;
     $("taskFormErr").hidden = !problem;
     if (problem) {
@@ -1209,7 +1205,7 @@
       <div class="batch-head">
         <span class="chan chan-${ch.toLowerCase()}">${ch}</span>
         <span class="batch-for">for ${contentMonth(month, ch).name} ${contentMonth(month, ch).year}</span>
-        <input data-blink="${ch}" placeholder="Brief ${state.cfg.channels[ch]} link (https:\/\/...)" aria-label="Brief link for ${ch}">
+        <input data-blink="${ch}" placeholder="Brief ${ch} link (optional now)" aria-label="Brief link for ${ch}">
       </div>
       ${types.map(type => {
         const title = batchTitle(project, type, ch, month), dup = existing.has(title);
@@ -1262,7 +1258,7 @@
       $(problem[0]).focus();
       return;
     }
-    const list = rows.map(r => ({ title: r.title, project, type: r.type, deadline: r.deadline, link: links[r.channel] || "",
+    const list = rows.map(r => ({ title: r.title, project, type: r.type, deadline: r.deadline, briefLink: links[r.channel] || "",
       videographer: isVideoType(r.type) ? $("bfVideographer").value : "" }));
     $("batchSaveBtn").disabled = true;
     try {
@@ -1285,12 +1281,12 @@
 
   /* ---------- Milestones: filtering ---------- */
   function resetTaskFilters(rerender = true) {
-    ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).value = "");
+    ["tSearch", "tProject", "tMonth"].forEach(id => $(id).value = "");
     $("tStep").value = defaultStep();
     if (rerender) renderTasks();
   }
 
-  // Also used from Home's pipeline, so it opens Milestones
+  // Also used from Home, so it opens Milestones
   function applyTaskStat(kind, project = "") {
     resetTaskFilters(false);
     $("tStep").value = kind;
@@ -1300,18 +1296,15 @@
 
   function getFilteredTasks() {
     const q = $("tSearch").value.trim().toLowerCase();
-    const proj = $("tProject").value, month = $("tMonth").value, type = $("tType").value, channel = $("tChannel").value, step = $("tStep").value || "current";
+    const proj = $("tProject").value, month = $("tMonth").value, step = STEP_GROUPS[$("tStep").value] || STEP_GROUPS.current;
     return state.tasks.filter(t => {
       if (proj && t.project !== proj) return false;
       if (month && taskMonth(t) !== month) return false;
-      if (type && t.type !== type) return false;
-      // ORG / ADS: regular content only; Event Attribute and Collateral have their own option
-      if (channel && (["event", "collateral"].includes(channel) ? typeKind(t.type) !== channel
-        : t.channel !== channel || ["event", "collateral"].includes(typeKind(t.type)))) return false;
-      if (STEP_GROUPS[step] ? !STEP_GROUPS[step].test(t) : t.stage !== step) return false;
+      if (!step.test(t)) return false;
+      // ORG, ADS, Collateral, Event Attribute, Video... are all found by typing them
       if (q) {
         const people = t.steps.map(k => stageOwner(stageOf(k), t));
-        const haystack = [t.title, t.project, t.type, t.item, t.channel, t.notes, t.link, ...people].join(" ").toLowerCase();
+        const haystack = [t.title, t.project, t.type, t.item, t.channel, t.notes, t.briefLink, t.resultLink, ...people].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -1371,9 +1364,11 @@
       const doneAt = st === "done" && lastEntry(t, e => e.from === k && ["done", "approved", "assign"].includes(e.action));
       const revs = t.history.filter(e => (k === "revision" ? e.to : e.from) === k && e.action === "revision").length;
       const when = doneAt ? shortDate(doneAt.at) : st === "current" ? `Now${entered ? ` · ${sinceText(entered.at)}` : ""}` : "";
+      // Drafting Brief opens the brief, Design / Motion the result
+      const url = t[state.cfg.linkSteps[k]];
       return `<li class="ms-step ms-${st}${s.qc ? " ms-qc" : ""}${red ? " ms-red" : ""}${red && i === redFrom ? " ms-red-start" : ""}">
         <span class="dot">${st === "done" ? "✓" : s.qc ? "QC" : i + 1}</span>
-        <span class="ms-name">${escapeHtml(s.name)}</span>
+        ${url ? `<a class="ms-name ms-link" href="${safeHref(url)}" target="_blank" rel="noopener" title="Open the ${k === "brief" ? "brief" : "result"}">${escapeHtml(s.name)}&nbsp;↗</a>` : `<span class="ms-name">${escapeHtml(s.name)}</span>`}
         <span class="ms-owner">${escapeHtml(stageOwner(s, t))}</span>
         <span class="ms-date">${when}${revs ? ` <b class="rev">↺ ${revs}</b>` : ""}</span>
       </li>`;
@@ -1396,10 +1391,12 @@
     };
     // Who made the move (moves saved before logins existed have no name)
     const by = e => e.by ? ` <span class="muted">· by ${escapeHtml(e.by)}</span>` : "";
+    // The link handed on with that step (earlier versions of a result stay here after a revision)
+    const link = e => e.link ? ` · <a href="${safeHref(e.link)}" target="_blank" rel="noopener">${e.from === "brief" ? "brief" : "result"} ↗</a>` : "";
     const open = state.openHistory.has(t.id) ? " open" : "";
     return `<details class="history" data-id="${escapeHtml(t.id)}"${open}>
       <summary>History (${t.history.length})</summary>
-      <ul>${[...t.history].reverse().map(e => `<li><span class="muted">${formatDate(e.at)}</span> ${text(e)}${by(e)}${e.note ? `<div class="note">"${escapeHtml(e.note)}"</div>` : ""}</li>`).join("")}</ul>
+      <ul>${[...t.history].reverse().map(e => `<li><span class="muted">${formatDate(e.at)}</span> ${text(e)}${link(e)}${by(e)}${e.note ? `<div class="note">"${escapeHtml(e.note)}"</div>` : ""}</li>`).join("")}</ul>
     </details>`;
   }
 
@@ -1426,7 +1423,8 @@
             ${done ? `<span class="tag tag-finished">✓ Completed ${shortDate(finishedAt(t))}</span>` : ""}
             ${taskDue(t)}
             ${totalRevs ? `<span class="tag tag-rev">↺ ${plural(totalRevs, "revision")}</span>` : ""}
-            ${t.link ? `<a class="tag tag-link" href="${safeHref(t.link)}" target="_blank" rel="noopener">🔗 Brief / file ↗</a>` : ""}
+            ${t.workMonth ? "" : linkTag(t, "briefLink")}
+            ${linkTag(t, "resultLink")}
           </div>
         </div>
       </div>
@@ -1454,13 +1452,13 @@
     const together = togetherLabel(t);
     const both = together ? ` <span class="together" title="Moves every task listed here together">· ${escapeHtml(together)}</span>` : "";
     return t.stage === "done" ? ""
-      : !canPress(t) ? `<span class="waiting">⏳ Waiting for <b>${escapeHtml(waitingFor(t))}</b></span>`
-      : t.stage === "revision"
+      : !canPress(t) ? `<span class="waiting">⏳ Waiting for <b>${escapeHtml(waitingFor(t))}</b></span>${workLink(t)}`
+      : workLink(t) + (t.stage === "revision"
       ? fixSteps(t).map(k => `<button class="btn-sm btn-accent" data-tact="assign" data-to="${k}" data-id="${id}">Send to ${FIX_LABELS[k]}: ${escapeHtml(stageOwner(stageOf(k), t))} →</button>`).join("")
       : s.qc
       ? `<button class="btn-sm btn-ok" data-tact="advance" data-id="${id}">✓ Approve${both}</button>
          <button class="btn-sm btn-danger" data-tact="revise" data-id="${id}">↺ Request Revision</button>`
-      : `<button class="btn-sm btn-accent" data-tact="advance" data-id="${id}">${escapeHtml(s.action || "Mark as Done")}${both} →</button>`;
+      : `<button class="btn-sm btn-accent" data-tact="advance" data-id="${id}">${escapeHtml(s.action || "Mark as Done")}${both} →</button>`);
   }
 
   // Event Attribute deliverables, ticked off one by one (saved right away)
@@ -1474,12 +1472,12 @@
     </div>`;
   }
 
-  // The stat cards that used to be here are Home's pipeline now; the sidebar and Home follow every change
+  // The sidebar and Home follow every change
   function renderTasks() {
     if (!state.loaded) return;
     renderSideProjects();
     if (state.page === "home") renderHome();
-    ["tSearch", "tProject", "tMonth", "tType", "tChannel"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
+    ["tSearch", "tProject", "tMonth"].forEach(id => $(id).classList.toggle("is-active", !!$(id).value));
     $("tStep").classList.toggle("is-active", $("tStep").value !== defaultStep());
     updateFilterToggle("viewTasks");
     const list = getFilteredTasks();
@@ -1525,7 +1523,7 @@
       shown.add(key);
       const list = items.filter(o => o.workMonth === t.workMonth && o.channel === t.channel)
         .sort((a, b) => (a.stage === "done") - (b.stage === "done") || isVideoType(a.type) - isVideoType(b.type) || a.type.localeCompare(b.type));
-      const link = (list.find(o => o.link) || {}).link;
+      const link = (list.find(o => o.briefLink) || {}).briefLink;
       const finished = list.filter(o => o.stage === "done").length;
       return `<div class="brief-section${finished === list.length ? " brief-done" : ""}">
         <div class="brief-head">
@@ -1587,21 +1585,19 @@
 
     const hour = new Date().getHours();
     $("helloTitle").textContent = `Good ${hour < 11 ? "morning" : hour < 15 ? "afternoon" : hour < 18 ? "evening" : "night"}, ${u.name}`;
-    $("helloText").textContent = owner || u.role === "manager"
-      ? "You see every project. Here is what needs attention and where each project stands."
-      : `${u.roleName} for ${listWords(u.projects)}. Here is what needs you and where each project stands.`;
+    // "Content Writer · VTB, KRR, Makuta and GTR" (the owner's role name is the name itself)
+    $("helloText").textContent = `${owner ? "Owner" : u.roleName} · ${u.all ? "every project" : listWords(u.projects)}`;
 
-    // Four numbers that answer "what should I look at?"; each opens the matching list
-    const soon = active.filter(t => t.deadline && daysUntil(t.deadline) <= 7).sort(byDeadline);
-    const openLinks = state.links.filter(l => l.status !== "Done").length;
+    // Four numbers that answer "what should I look at?"; each opens the matching list in Milestones
+    const soon = active.filter(STEP_GROUPS.soon.test).sort(byDeadline);
     const stats = [
       owner ? { n: active.length, label: "Active tasks", note: "In every project", stat: "active" }
         : { n: active.filter(isMyStep).length, label: "Waiting for you", note: "At a step you handle", stat: "mine", tone: "accent" },
       { n: active.filter(late).length, label: "Late", note: "Past their deadline", stat: "late", tone: "danger" },
       { n: soon.length, label: "Due this week", note: "Deadline in the next 7 days", stat: "soon" },
-      { n: openLinks, label: "Links not done", note: "Links still being worked on", link: "open" },
+      { n: active.filter(STEP_GROUPS.client.test).length, label: "At client", note: "Sent, waiting for the client", stat: "client" },
     ];
-    $("homeStats").innerHTML = stats.map(s => `<button type="button" class="home-stat${s.n && s.tone ? " tone-" + s.tone : ""}" ${s.link ? `data-links="${s.link}"` : `data-stat="${s.stat}"`}>
+    $("homeStats").innerHTML = stats.map(s => `<button type="button" class="home-stat${s.n && s.tone ? " tone-" + s.tone : ""}" data-stat="${s.stat}">
         <span class="stat-n">${s.n}</span><span class="stat-label">${s.label}</span><span class="stat-note">${s.note}</span></button>`).join("");
 
     // Waiting for you: the steps I am responsible for. The owner has none, so they see what is late.
@@ -1611,7 +1607,7 @@
     $("turnTitle").textContent = owner ? "Late tasks" : "Waiting for you";
     $("turnCount").textContent = turn.length ? plural(turn.length, "task") : "";
     $("turnNote").textContent = owner ? "Tasks past their deadline, with who they are waiting for."
-      : "These tasks are at a step you handle. Press the button once the step is finished and the task moves on to the next person.";
+      : "Tasks at a step you handle. Press the button when the step is finished; the task then moves on to the next person.";
     $("homeTurn").innerHTML = turn.length ? turn.map(t => `<div class="turn-row${late(t) ? " is-late" : ""}">
         <button type="button" class="turn-open" data-open="${escapeHtml(t.id)}" title="Open in Milestones">
           <span class="turn-title">${escapeHtml(t.title)}</span>
@@ -1676,8 +1672,6 @@
     if (stat) return applyTaskStat(stat.dataset.stat, stat.dataset.project || "");
     const proj = e.target.closest("[data-project-open]");
     if (proj) return showProject(proj.dataset.projectOpen);
-    const links = e.target.closest("[data-links]");
-    if (links) { showView("links"); return applyStat(links.dataset.links); }
     handleTaskAction(e);
   }
 
@@ -1747,6 +1741,34 @@
     openModal("reviseModal");
   }
 
+  // Drafting Brief, Design and Motion hand on a link: asked for when the step is pressed (the last one is
+  // filled in, so after a revision only a changed link has to be pasted)
+  function openStepLink(t) {
+    const field = state.cfg.linkSteps[t.stage], brief = field === "briefLink", s = stageOf(t.stage);
+    const together = togetherLabel(t);
+    $("stepLinkTitle").textContent = s.action;
+    $("stepLinkLabel").innerHTML = `${brief ? "Brief link" : "Result link"} <span class="req">*</span>`;
+    $("stepLinkText").textContent = brief
+      ? `"${t.title}"${together ? ` (one brief for ${together})` : ""}: paste the link to the brief. QC Internal opens it right from Milestones.`
+      : `"${t.title}": paste the link to the finished ${isVideoType(t.type) ? "video" : "design"}. QC Internal, ${state.cfg.assistantName} and whoever posts it open it right from Milestones.`;
+    $("stepLinkInput").value = t[field] || "";
+    $("stepLinkErr").hidden = true;
+    $("stepLinkOk").textContent = s.action;
+    $("stepLinkOk").disabled = false;
+    state.stepLinkTask = t.id;
+    openModal("stepLinkModal");
+    setTimeout(() => $("stepLinkInput").focus(), 50);
+  }
+  async function submitStepLink(e) {
+    e.preventDefault();
+    const t = state.tasks.find(x => x.id === state.stepLinkTask);
+    if (!t) return closeModal("stepLinkModal");
+    const link = normalizeUrl($("stepLinkInput").value);
+    $("stepLinkErr").hidden = isValidUrl(link);
+    if (!isValidUrl(link)) return $("stepLinkInput").focus();
+    if (await moveTask(t, "advance", { link }, $("stepLinkOk"))) closeModal("stepLinkModal");
+  }
+
   function toggleTaskItem(e) {
     const box = e.target;
     if (!box.matches("[data-titem]")) return;
@@ -1772,7 +1794,7 @@
     const t = state.tasks.find(x => x.id === btn.dataset.id);
     if (!t) return;
     const act = btn.dataset.tact;
-    if (act === "advance") moveTask(t, "advance", {}, btn);
+    if (act === "advance") state.cfg.linkSteps[t.stage] ? openStepLink(t) : moveTask(t, "advance", {}, btn);
     else if (act === "assign") moveTask(t, "assign", { to: btn.dataset.to }, btn);
     else if (act === "revise") openRevise(t);
     else if (act === "edit") openTaskForm(t);
@@ -1857,12 +1879,11 @@
   /* ---------- Init ---------- */
   $("linkForm").addEventListener("submit", submitForm);
   $("url").addEventListener("input", () => { checkDuplicate(); guessCategory(); });
-  $("status").addEventListener("change", updateStatusHint);
   $("category").addEventListener("change", updateCategoryFields);
   $("videoSource").addEventListener("change", () => showError("videoSource", false));
-  updateStatusHint();
-  ["search", "fCategory", "fProject", "fStatus", "dateFrom", "dateTo", "sort", "pinnedOnly"]
-    .forEach(id => $(id).addEventListener("input", render));
+  ["search", "fCategory", "fProject", "sort", "pinnedOnly"].forEach(id => $(id).addEventListener("input", render));
+  document.querySelectorAll("[data-ltab]").forEach(b => b.addEventListener("click", () => showLinkTab(b.dataset.ltab)));
+  $("stepLinkForm").addEventListener("submit", submitStepLink);
   $("results").addEventListener("click", handleAction);
   $("taskResults").addEventListener("click", handleTaskAction);
   $("viewHome").addEventListener("click", handleHomeClick);
@@ -1896,7 +1917,7 @@
   $("bfRows").addEventListener("change", updateBatchForm);
   // The shared deadline fills every task (each one can still be changed after)
   $("bfDeadline").addEventListener("input", () => document.querySelectorAll("#bfRows [data-bdeadline]").forEach(i => i.value = $("bfDeadline").value));
-  ["tSearch", "tProject", "tMonth", "tType", "tChannel", "tStep"].forEach(id => $(id).addEventListener("input", renderTasks));
+  ["tSearch", "tProject", "tMonth", "tStep"].forEach(id => $(id).addEventListener("input", renderTasks));
   $("sheetLink").addEventListener("click", e => {
     if (state.app.sheetUrl) return;
     e.preventDefault();

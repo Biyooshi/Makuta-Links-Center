@@ -1,26 +1,23 @@
 /**
  * Makuta Links Center - Google Apps Script backend.
- * Data lives in the "Links" sheet of the spreadsheet this script is bound to.
+ * Data lives in the spreadsheet this script is bound to: "Links" (Resources), "Tasks" (Milestones)
+ * and "Activity" (every login and change).
  */
 const SHEET_NAME = 'Links';
 const HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Main Link', 'Category', 'Project', 'Status', 'Deadline', 'Pinned', 'Description', 'Related Links', 'Reminder IDs'];
 const PINNED_COL = HEADERS.indexOf('Pinned') + 1;
 const UPDATED_COL = HEADERS.indexOf('Updated') + 1;
 const REMINDERS_COL = HEADERS.indexOf('Reminder IDs') + 1;
-const STATUSES = ['Draft', 'In Progress', 'In Review', 'Revision', 'Done'];
 // A CTC-Video link also records whose edit it is, stored in the category as e.g. "CTC-Video [VG-Arif]"
 const VIDEO_SOURCES = ['VG-Arif', 'VG-Anno'];
 // Links in the Reference category always get this project
 const REFERENCE_PROJECT = 'REFERENCE';
-// Google Calendar reminders: this many days before the deadline, at this hour (script time zone)
-const REMINDER_DAYS = [2, 1];
-const REMINDER_HOUR = 9;
 
 /* ---------- Milestones setup: edit names here when the team changes ---------- */
 const TASK_SHEET = 'Tasks';
-const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Link', 'Notes', 'History', 'Checklist', 'Work Month', 'For Month', 'Item'];
+const TASK_HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Project', 'Content Type', 'Channel', 'Graphic Designer', 'Videographer', 'Deadline', 'Stage', 'Current Step', 'Revisions', 'Brief Link', 'Notes', 'History', 'Checklist', 'Work Month', 'For Month', 'Item', 'Result Link'];
 // Each project: its content writer and graphic designer (names of the accounts in USERS), its videographer
-// (filled in automatically; no videographer = chosen for every video task), its icon (also used in All Links),
+// (filled in automatically; no videographer = chosen for every video task), its icon (also used in Resources),
 // the content types it makes (all except Event Attribute when not set) and whether it only runs organic
 // (orgOnly) or only ads (adsOnly) content
 const PROJECTS = {
@@ -33,24 +30,33 @@ const PROJECTS = {
   'LUX': { writer: 'Puput', designer: 'Wawan', videographer: 'Arif', icon: '💎', types: ['Static', 'Video (Non-Shooting)', 'Video (Shooting)', 'Event Attribute'] }
 };
 // Team accounts (username: name and role). Content writers and graphic designers see the projects they
-// are set on above; managerial accounts and the owner see every project.
+// are set on above; managerial, the assistant manager and the owner see every project.
 // Passwords are not in this code (it is public on GitHub). Set them in Project Settings > Script Properties:
-//   DEFAULT_PASSWORD                  the password of every team account below
+//   PASSWORD_SUFFIX                   a team account's password is its username followed by this
 //   OWNER_USERNAME / OWNER_PASSWORD   the owner (superadmin) account, shown everywhere only as "Owner"
 const USERS = {
   hendra: { name: 'Kak Hendra', role: 'manager' },
   riska: { name: 'Bu Riska', role: 'manager' },
+  faza: { name: 'Kak Faza', role: 'assistant' },
   obi: { name: 'Obi', role: 'writer' },
   puput: { name: 'Puput', role: 'writer' },
   alfid: { name: 'Alfid', role: 'designer' },
   ilham: { name: 'Ilham', role: 'designer' },
   wawan: { name: 'Wawan', role: 'designer' }
 };
-const ROLE_NAMES = { owner: 'Owner', manager: 'Managerial', writer: 'Content Writer', designer: 'Graphic Designer' };
+const ROLE_NAMES = { owner: 'Owner', manager: 'Managerial', assistant: 'Assistant Manager', writer: 'Content Writer', designer: 'Graphic Designer' };
+// Roles that see every project
+const ALL_PROJECT_ROLES = ['owner', 'manager', 'assistant'];
 // Who presses each step's button: the QC steps are for managerial, Design and Motion for the project's
-// graphic designer, every other step (also those of Kak Faza, the client and the freelance videographers
-// and ads team) for the project's content writer. Managerial and the owner can press every step.
-const STEP_ACTORS = { qcBrief: 'manager', qcCut: 'manager', qcContent: 'manager', design: 'designer', motion: 'designer' };
+// graphic designer, Send to Client, QC Client and Run Ads (the freelance ads team) for the assistant
+// manager (Kak Faza), every other step (also those of the freelance videographers) for the project's
+// content writer. Managerial and the owner can press every step.
+const STEP_ACTORS = { qcBrief: 'manager', qcCut: 'manager', qcContent: 'manager', design: 'designer', motion: 'designer',
+  toClient: 'assistant', qcClient: 'assistant', ads: 'assistant' };
+// The link each of these steps hands on: the content writer submits the brief (one per channel of a
+// Monthly Brief), the graphic designer the finished work (the result). QC, Send to Client and the
+// posting steps open them from the task.
+const LINK_STEPS = { brief: 'briefLink', design: 'resultLink', motion: 'resultLink' };
 // Videographers that can be picked when editing a task (new tasks use the project's videographer)
 const VIDEOGRAPHERS = ['Anno', 'Arif'];
 // Static = carousel, single image and motion (all made by the graphic designer).
@@ -111,7 +117,7 @@ function include(name) {
 /* ---------- Login: the web app is open to "Anyone" (so it also works inside the Vercel page), ----------
    so every call from the page carries the login ticket of this browser, checked here before anything
    is read or changed. The ticket itself is never stored, only its SHA-256 (see hash_). */
-const ACCOUNT_PROPERTIES = ['DEFAULT_PASSWORD', 'OWNER_USERNAME', 'OWNER_PASSWORD'];
+const ACCOUNT_PROPERTIES = ['PASSWORD_SUFFIX', 'OWNER_USERNAME', 'OWNER_PASSWORD'];
 const OWNER_KEY = '@owner';            // how the owner is stored in sessions (never the real username)
 const SESSION_PREFIX = 'SESSION_';     // Script Properties key of a session: SESSION_<hash of the ticket>
 const SESSION_DAYS = 30;               // a login is remembered this long in one browser
@@ -149,12 +155,12 @@ function api(ticket, fn, args, viewAs) {
 // Errors starting with "LOCKED:" make the page show the login screen.
 function login(username, password, device) {
   const props = PropertiesService.getScriptProperties();
-  const shared = props.getProperty('DEFAULT_PASSWORD');
-  if (!shared) throw new Error('LOCKED: The accounts are not set up yet. Add ' + ACCOUNT_PROPERTIES.join(', ') + ' in Apps Script > Project Settings > Script Properties.');
+  const suffix = props.getProperty('PASSWORD_SUFFIX');
+  if (!suffix) throw new Error('LOCKED: The accounts are not set up yet. Add ' + ACCOUNT_PROPERTIES.join(', ') + ' in Apps Script > Project Settings > Script Properties.');
   const name = String(username == null ? '' : username).trim().toLowerCase();
   const owner = String(props.getProperty('OWNER_USERNAME') || '').trim().toLowerCase();
   const key = owner && name === owner ? OWNER_KEY : USERS.hasOwnProperty(name) ? name : '';
-  const real = key === OWNER_KEY ? props.getProperty('OWNER_PASSWORD') : shared;
+  const real = key === OWNER_KEY ? props.getProperty('OWNER_PASSWORD') : key ? key + suffix : '';
   const cache = CacheService.getScriptCache();
   // Wrong tries are counted per account (all unknown usernames share one count)
   const wrongKey = 'wrongLogin_' + (key || '?');
@@ -182,7 +188,7 @@ function login(username, password, device) {
 function account_(key) {
   const u = key === OWNER_KEY ? { name: 'Owner', role: 'owner' } : USERS[key];
   if (!u) return null;
-  const all = u.role === 'owner' || u.role === 'manager';
+  const all = ALL_PROJECT_ROLES.indexOf(u.role) >= 0;
   return { key: key, name: u.name, role: u.role, all: all,
     projects: Object.keys(PROJECTS).filter(p => all || PROJECTS[p][u.role] === u.name) };
 }
@@ -294,7 +300,8 @@ const stepActor_ = key => STEP_ACTORS[key] || 'writer';
 function canPress_(u, t) {
   if (isBoss_(u)) return true;
   const actor = stepActor_(t.stage);
-  return u.role === actor && (PROJECTS[t.project] || {})[actor] === u.name;
+  // The assistant manager's steps are the same for every project
+  return u.role === actor && (actor === 'assistant' || (PROJECTS[t.project] || {})[actor] === u.name);
 }
 // Take back the last move: whoever made it, managerial and the owner (moves saved before logins
 // existed have no name: the project's content writer too)
@@ -324,7 +331,7 @@ function getInitialData_() {
   return {
     links: getLinks_(),
     tasks: getTasks_(),
-    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS },
+    taskConfig: { stages: STAGES, projects: PROJECTS, videographers: VIDEOGRAPHERS, contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS, linkSteps: LINK_STEPS, assistantName: assistantName_() },
     // Who is logged in (the owner's username is never sent)
     user: { name: user_.name, role: user_.role, roleName: ROLE_NAMES[user_.role], projects: user_.projects, all: user_.all, readOnly: !!user_.readOnly },
     sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl()
@@ -504,6 +511,10 @@ function moveTask_(id, action, opts) {
     }
     const now = new Date().toISOString();
     const note = String(opts.note || '').trim().slice(0, 1000);
+    // Drafting Brief, Design and Motion hand on their link: the one given now, or the one the task already has
+    const linkField = action === 'advance' ? LINK_STEPS[task.stage] : '';
+    const link = linkField ? String(opts.link || '').trim().slice(0, 2000) || task[linkField] : '';
+    if (linkField && !isUrl_(link)) throw new Error('Paste the ' + (linkField === 'briefLink' ? 'brief' : 'result') + ' link first (starting with http:// or https://).');
     let moved;
     if (action === 'undo') {
       if (task.history.length < 2) throw new Error('Nothing to undo.');
@@ -524,7 +535,9 @@ function moveTask_(id, action, opts) {
     } else {
       moved = [task].concat(action === 'advance' ? linkedTasks_(task, all) : []);
       const sync = moved.length > 1 ? newId_('S') : '';
-      moved.forEach(o => stepTask_(o, action, { to: opts.to, note: note }, now, sync));
+      // One brief covers every task of that channel in the Monthly Brief
+      if (linkField) moved.forEach(o => o[linkField] = link);
+      moved.forEach(o => stepTask_(o, action, { to: opts.to, note: note, link: link }, now, sync));
     }
     moved.forEach(o => {
       o.updatedAt = now;
@@ -544,13 +557,19 @@ function activityText_(e) {
   return text + (e.note ? ': ' + e.note : '');
 }
 
-// Who the task's current step is waiting for, e.g. "Alfid", "Kak Faza (via Obi)", "QC (Kak Hendra / Bu Riska)"
+// Who the task's current step is waiting for, e.g. "Alfid", "Client (via Kak Faza)", "QC (Kak Hendra / Bu Riska)"
 function waitingFor_(t) {
   const s = stageInfo_(t.stage);
   const owner = stageOwner_(s, t);
-  if (stepActor_(t.stage) === 'manager') return 'QC (' + owner + ')';
-  const writer = (PROJECTS[t.project] || {}).writer;
-  return stepActor_(t.stage) === 'writer' && writer && owner !== writer && owner.indexOf(writer + ' ') !== 0 ? owner + ' (via ' + writer + ')' : owner;
+  const actor = stepActor_(t.stage);
+  if (actor === 'manager') return 'QC (' + owner + ')';
+  // The person who presses the button for someone without an account (the client, the freelancers)
+  const via = actor === 'writer' ? (PROJECTS[t.project] || {}).writer : actor === 'assistant' ? assistantName_() : '';
+  return via && owner !== via && owner.indexOf(via + ' ') !== 0 ? owner + ' (via ' + via + ')' : owner;
+}
+function assistantName_() {
+  const key = Object.keys(USERS).filter(k => USERS[k].role === 'assistant')[0];
+  return key ? USERS[key].name : 'Assistant Manager';
 }
 
 // Moves one task a step (advance / revise / assign, see moveTask_). sync marks moves made together.
@@ -560,6 +579,7 @@ function stepTask_(task, action, opts, now, sync) {
   const entry = (act, to) => {
     const e = { at: now, action: act, from: task.stage, to: to, note: opts.note, by: user_.name };
     if (sync) e.sync = sync;
+    if (opts.link) e.link = opts.link;
     task.history.push(e);
     task.stage = to;
   };
@@ -724,7 +744,8 @@ function cleanTask_(d) {
     designer: '',
     videographer: line(d.videographer),
     deadline: /^\d{4}-\d{2}-\d{2}$/.test(d.deadline) ? d.deadline : '',
-    link: str(d.link, 2000),
+    briefLink: str(d.briefLink, 2000),
+    resultLink: str(d.resultLink, 2000),
     notes: str(d.notes, 5000),
     item: ''
   };
@@ -751,7 +772,8 @@ function cleanTask_(d) {
     if (!p.videographer) throw new Error('Please choose the videographer for ' + t.project + ' (' + VIDEOGRAPHERS.join(' or ') + ').');
     t.videographer = p.videographer;
   }
-  if (t.link && !isUrl_(t.link)) throw new Error('The link must start with http:// or https://');
+  if (t.briefLink && !isUrl_(t.briefLink)) throw new Error('The brief link must start with http:// or https://');
+  if (t.resultLink && !isUrl_(t.resultLink)) throw new Error('The result link must start with http:// or https://');
   return t;
 }
 
@@ -766,9 +788,9 @@ function writeTask_(sheet, row, t) {
   const revisions = t.history.filter(h => h.action === 'revision').length;
   sheet.getRange(row, 1, 1, TASK_HEADERS.length).setNumberFormat('@').setValues([[
     t.id, t.createdAt, t.updatedAt, t.title, t.project, t.type, t.channel, t.designer, t.videographer, t.deadline,
-    t.stage, currentStep_(t), String(revisions), t.link, t.notes, JSON.stringify(t.history),
+    t.stage, currentStep_(t), String(revisions), t.briefLink || '', t.notes, JSON.stringify(t.history),
     t.type === EVENT_TYPE ? EVENT_ITEMS.map(i => i.name).filter(n => t.checklist.indexOf(n) >= 0).join('\n') : '',
-    t.workMonth || '', t.forMonth || '', t.type === COLLATERAL_TYPE ? t.item || '' : ''
+    t.workMonth || '', t.forMonth || '', t.type === COLLATERAL_TYPE ? t.item || '' : '', t.resultLink || ''
   ].map(safe_)]);
   t.steps = pipeline_(t.type, t.channel);
   return t;
@@ -789,7 +811,8 @@ function rowToTask_(r) {
     videographer: text_(r[8]),
     deadline: toDay_(r[9]),
     stage: text_(r[10]).trim(),
-    link: text_(r[13]),
+    briefLink: text_(r[13]).trim(),
+    resultLink: text_(r[20]).trim(),
     notes: text_(r[14]),
     history: Array.isArray(history) ? history : [],
     checklist: parseLines_(r[16]),
@@ -888,33 +911,17 @@ function isUrl_(url) {
   return /^https?:\/\/\S+$/i.test(url);
 }
 
-/* ---------- Google Calendar reminders ---------- */
+/* ---------- Google Calendar reminders (links had deadlines before they became resources) ---------- */
 
-// Replaces the link's reminders: removes the old events, then adds one for each of
-// REMINDER_DAYS that is still in the future. Links that are Done or have no deadline get none.
-// Returns a warning if the calendar could not be updated (the link itself is still saved).
+// Removes the reminders a link still has from when links had deadlines. Returns a warning if the
+// calendar could not be updated (the link itself is still saved).
 function syncReminders_(link, oldIds) {
   link.reminders = [];
   try {
     deleteReminders_(oldIds);
-    if (!link.deadline || link.status === 'Done') return '';
-    const cal = CalendarApp.getDefaultCalendar();
-    const p = link.deadline.split('-').map(Number);
-    REMINDER_DAYS.forEach(days => {
-      const start = new Date(p[0], p[1] - 1, p[2] - days, REMINDER_HOUR);
-      if (start <= new Date()) return;
-      const title = '[MAKUTA] ' + (days === 1 ? 'Due tomorrow' : 'Due in ' + days + ' days') + ': ' + link.title +
-        (link.project ? ' (' + link.project + ')' : '');
-      const event = cal.createEvent(title, start, new Date(start.getTime() + 30 * 60000), {
-        description: 'Deadline: ' + link.deadline + '\nStatus: ' + link.status + '\nCategory: ' + link.category + '\n\n' + link.url
-      });
-      event.removeAllReminders();
-      event.addPopupReminder(0);
-      link.reminders.push(event.getId());
-    });
     return '';
   } catch (e) {
-    return 'Saved, but the Google Calendar reminder could not be updated: ' + e.message;
+    return 'Saved, but the old Google Calendar reminder could not be removed: ' + e.message;
   }
 }
 
@@ -955,8 +962,9 @@ function clean_(d) {
     url: str(d.url, 2000),
     category: cleanCategory_(d.category),
     project: str(d.project, 100).replace(/[\r\n]+/g, ' '),
-    status: STATUSES.indexOf(d.status) >= 0 ? d.status : 'Draft',
-    deadline: /^\d{4}-\d{2}-\d{2}$/.test(d.deadline) ? d.deadline : '',
+    // Kept in the sheet for links saved before, empty for resources
+    status: '',
+    deadline: '',
     pinned: d.pinned === true,
     purpose: str(d.purpose, 5000),
     versions: (Array.isArray(d.versions) ? d.versions : [])
@@ -1013,12 +1021,6 @@ function toDay_(v) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
 }
 
-// Accepts "done", "IN REVIEW", etc. when the sheet was edited by hand
-function toStatus_(v) {
-  const s = text_(v).trim();
-  const match = STATUSES.filter(x => x.toLowerCase() === s.toLowerCase())[0];
-  return match || s || 'Draft';
-}
 
 function parseLines_(value) {
   return text_(value).split('\n').map(s => s.trim()).filter(Boolean);
@@ -1040,7 +1042,7 @@ function rowToLink_(r) {
     url: text_(r[4]),
     category: text_(r[5]),
     project: text_(r[6]),
-    status: toStatus_(r[7]),
+    status: text_(r[7]).trim(),
     deadline: toDay_(r[8]),
     pinned: r[9] === true || String(r[9]).toUpperCase() === 'TRUE',
     purpose: text_(r[10]),
