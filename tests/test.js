@@ -739,7 +739,6 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.waitForFunction(() => !document.getElementById("lockErr").hidden);
   ok(await page.$eval("#lockErr", e => e.textContent.includes("Wrong username or password")), "wrong password shows an error");
   ok(await page.$eval("#lockInput", e => e.type === "password" && e.value === "") && await page.$eval("#lockUser", e => e.value === "alfid"), "after a wrong try the password is cleared, the username kept");
-  ok(await page.$eval(".demo-login", e => /hendrademo/.test(e.textContent)), "demo: the login screen says how the demo passwords work");
   // A space a phone keyboard adds after the password does not count
   await page.type("#lockInput", "alfiddemo ");
   await page.click("#lockBtn");

@@ -171,12 +171,7 @@ function previewReset() {
 }
 </script>`;
 
-// The login screen covers the banner, so it says the demo logins too
-const loginHint = `<p>Log in with your username and password.</p>
-      <p class="demo-login"><b>Demo:</b> password = username + <b>demo</b>, e.g. <b>hendra</b> / <b>hendrademo</b>. Owner: <b>owner</b> / <b>owner</b>.<br>The passwords of the real app do not work here.</p>
-      <style>.demo-login { margin-top: -6px; padding: 8px 10px; border-radius: 10px; background: rgba(124, 58, 237, .12); color: inherit; font-size: 13px; }</style>`;
 let html = read("Index.html")
-  .replace("<p>Log in with your username and password.</p>", loginHint)
   .replace("<?!= include('Styles'); ?>", read("Styles.html"))
   // Inside the main area, so the sidebar keeps the full height of the screen
   .replace('<main class="main">', '<main class="main">' + banner)
