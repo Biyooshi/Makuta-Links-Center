@@ -25,7 +25,7 @@
       </div>
       <nav class="side-nav" aria-label="Pages">
         <button type="button" id="tabHome" class="active" onclick="showView('home')" title="Home"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span class="nav-label">Home</span></button>
-        <button type="button" id="tabTasks" onclick="showView('tasks')" title="Milestones"><svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg><span class="nav-label">Milestones</span><span class="nav-count" id="navTurn" hidden></span></button>
+        <button type="button" id="tabTasks" onclick="openMilestones()" title="Milestones"><svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg><span class="nav-label">Milestones</span><span class="nav-count" id="navTurn" hidden></span></button>
         <button type="button" id="tabLinks" onclick="showView('links')" title="Resources"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span class="nav-label">Resources</span></button>
         <button type="button" id="tabAdmin" onclick="showView('admin')" title="Admin" hidden><svg class="icon" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/></svg><span class="nav-label">Admin</span></button>
       </nav>
@@ -320,7 +320,7 @@
     <!-- Phones: the main pages and New at the thumb -->
     <nav class="bottom-nav" aria-label="Pages">
       <button type="button" data-nav="home" onclick="showView('home')"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span>Home</span></button>
-      <button type="button" data-nav="tasks" onclick="showView('tasks')"><svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg><span>Milestones</span></button>
+      <button type="button" data-nav="tasks" onclick="openMilestones()"><svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg><span>Milestones</span></button>
       <button type="button" class="bottom-new" onclick="toggleNewMenu()" aria-label="New"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
       <button type="button" data-nav="links" onclick="showView('links')"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span>Resources</span></button>
       <button type="button" onclick="toggleSidebar()"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Menu</span></button>

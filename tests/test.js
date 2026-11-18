@@ -835,6 +835,12 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.click('#sideProjects [data-project="KRR"]');
   ok(await page.evaluate(() => document.getElementById("tProject").value === "KRR" && document.querySelector('#sideProjects [data-project="KRR"]').classList.contains("active") &&
     [...document.querySelectorAll("#taskResults .group-head h3")].every(h => /KRR/.test(h.textContent))), "sidebar project opens Milestones on that project (highlighted)");
+  // One place marked at a time: the project, not Milestones too; Milestones itself is every project (no "All projects" item)
+  const marked = () => page.evaluate(() => [...document.querySelectorAll("#sidebar .active")].map(b => b.id || b.dataset.project).join());
+  ok(await marked() === "KRR", "with a project open only that project is marked in the sidebar -> " + await marked());
+  ok(await page.evaluate(() => !document.querySelector('#sideProjects [data-project=""]')), "no All projects item (that is Milestones)");
+  await page.click("#tabTasks");
+  ok(await marked() === "tabTasks" && await page.$eval("#tProject", s => s.value === ""), "Milestones shows every project again and is the only one marked");
   // Pressing my step from Home, then Undo from the message
   await page.evaluate(() => showView("home"));
   const pressed = await page.evaluate(() => {

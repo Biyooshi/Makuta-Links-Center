@@ -1540,8 +1540,10 @@
 
   /* ---------- Sidebar: my projects ---------- */
   // Each project with its active tasks, and a dot when something in it is my turn. Opens Milestones on it.
+  // Milestones itself is every project, so only one of them is marked at a time.
   function renderSideProjects() {
     const current = state.page === "tasks" ? $("tProject").value : null;
+    $("tabTasks").classList.toggle("active", current === "");
     const active = list => list.filter(t => t.stage !== "done").length;
     const item = (p, label, icon, list) => {
       const mine = list.filter(isMyStep).length;
@@ -1549,8 +1551,7 @@
         <span class="side-icon">${icon}</span><span class="nav-label">${escapeHtml(label)}</span>
         ${mine ? `<span class="turn-dot" title="${plural(mine, "task")} waiting for you"></span>` : ""}<span class="nav-count">${active(list)}</span></button>`;
     };
-    $("sideProjects").innerHTML = item("", "All projects", "▦", state.tasks) +
-      taskProjects().map(p => item(p, p, projectIcon(p), state.tasks.filter(t => t.project === p))).join("");
+    $("sideProjects").innerHTML = taskProjects().map(p => item(p, p, projectIcon(p), state.tasks.filter(t => t.project === p))).join("");
     const turn = state.tasks.filter(isMyStep).length;
     $("navTurn").hidden = !turn;
     $("navTurn").textContent = turn;
@@ -1558,6 +1559,11 @@
   function showProject(p) {
     resetTaskFilters(false);
     $("tProject").value = p;
+    showView("tasks");
+  }
+  // The Milestones button: every project again (the other filters stay)
+  function openMilestones() {
+    $("tProject").value = "";
     showView("tasks");
   }
 
