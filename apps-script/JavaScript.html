@@ -730,8 +730,8 @@
   }
 
   const LINK_TAB_NOTES = {
-    resources: "Links the team keeps coming back to: brand guidelines, moodboards, content calendars and references.",
-    tasks: "The brief and result of every task, collected from Milestones. They are added when the step is pressed.",
+    resources: "Brand guidelines, moodboards, content calendars and references the team keeps using.",
+    tasks: "Every task's brief and result, added when its step is pressed in Milestones.",
   };
   function showLinkTab(tab) {
     state.linkTab = tab;
@@ -1613,7 +1613,7 @@
     $("turnTitle").textContent = owner ? "Late tasks" : "Waiting for you";
     $("turnCount").textContent = turn.length ? plural(turn.length, "task") : "";
     $("turnNote").textContent = owner ? "Tasks past their deadline, with who they are waiting for."
-      : "Tasks at a step you handle. Press the button when the step is finished; the task then moves on to the next person.";
+      : "Press the button when your step is done. The task then moves on to the next person.";
     $("homeTurn").innerHTML = turn.length ? turn.map(t => `<div class="turn-row${late(t) ? " is-late" : ""}">
         <button type="button" class="turn-open" data-open="${escapeHtml(t.id)}" title="Open in Milestones">
           <span class="turn-title">${escapeHtml(t.title)}</span>

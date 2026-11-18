@@ -175,7 +175,7 @@
   /* Home: a greeting, four numbers, what is waiting for me, then each project by stage */
   .home-hello { margin-bottom: 18px; }
   .home-hello h2 { font-size: 22px; color: var(--heading); }
-  .home-hello p { margin-top: 4px; font-size: 14px; color: var(--muted); max-width: 70ch; }
+  .home-hello p { margin-top: 4px; font-size: 14px; color: var(--muted); }
   .home-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 28px; }
   .home-stat {
     display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px 16px; text-align: left;
@@ -193,7 +193,7 @@
   .block-head { display: flex; align-items: baseline; gap: 10px; }
   .block-head h3 { font-size: 17px; color: var(--heading); }
   .turn-count { font-size: 13px; color: var(--muted); }
-  .block-note { margin: 2px 0 12px; font-size: 13px; color: var(--muted); max-width: 75ch; }
+  .block-note { margin: 2px 0 12px; font-size: 13px; color: var(--muted); }
   .block-head + div, .block-head + ul { margin-top: 10px; }
   .turn-row {
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 16px; margin-bottom: 8px;
@@ -812,7 +812,7 @@
         </section>
         <section class="home-block">
           <div class="block-head"><h3>Projects</h3></div>
-          <p class="block-note">How many active tasks each project has at every stage. Click a number to see those tasks.</p>
+          <p class="block-note">Active tasks per project at each stage. Click a number to see them.</p>
           <div id="homeProjects"></div>
         </section>
         <div class="home-grid">
@@ -3367,8 +3367,8 @@ function previewReset() {
   }
 
   const LINK_TAB_NOTES = {
-    resources: "Links the team keeps coming back to: brand guidelines, moodboards, content calendars and references.",
-    tasks: "The brief and result of every task, collected from Milestones. They are added when the step is pressed.",
+    resources: "Brand guidelines, moodboards, content calendars and references the team keeps using.",
+    tasks: "Every task's brief and result, added when its step is pressed in Milestones.",
   };
   function showLinkTab(tab) {
     state.linkTab = tab;
@@ -4250,7 +4250,7 @@ function previewReset() {
     $("turnTitle").textContent = owner ? "Late tasks" : "Waiting for you";
     $("turnCount").textContent = turn.length ? plural(turn.length, "task") : "";
     $("turnNote").textContent = owner ? "Tasks past their deadline, with who they are waiting for."
-      : "Tasks at a step you handle. Press the button when the step is finished; the task then moves on to the next person.";
+      : "Press the button when your step is done. The task then moves on to the next person.";
     $("homeTurn").innerHTML = turn.length ? turn.map(t => `<div class="turn-row${late(t) ? " is-late" : ""}">
         <button type="button" class="turn-open" data-open="${escapeHtml(t.id)}" title="Open in Milestones">
           <span class="turn-title">${escapeHtml(t.title)}</span>

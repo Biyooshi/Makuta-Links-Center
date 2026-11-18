@@ -892,6 +892,19 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await loginAs("owner", "owner");
   ok(await page.evaluate(() => document.getElementById("turnTitle").textContent === "Late tasks" && document.querySelector("#homeStats [data-stat=active]")), "owner's Home lists late tasks and all active tasks (no steps of their own)");
 
+  // On a laptop the greeting and every short note sit on one line (no sentence broken off halfway)
+  for (const who of ["obi", "faza", "owner"]) {
+    await page.evaluate(() => lockApp());
+    await loginAs(who, who === "owner" ? "owner" : undefined);
+    for (const v of ["home", "links", "links-tasks"]) {
+      await page.evaluate(v => { if (v === "links-tasks") { showView("links"); showLinkTab("tasks"); } else { showView(v); if (v === "links") showLinkTab("resources"); } }, v);
+      const lines = await page.evaluate(() => [...document.querySelectorAll(".home-hello p, .block-note")].filter(e => e.offsetParent)
+        .map(e => { const r = document.createRange(); r.selectNodeContents(e); return new Set([...r.getClientRects()].map(x => Math.round(x.top))).size + ":" + e.textContent.slice(0, 30); }));
+      ok(lines.length > 0 && lines.every(l => l.startsWith("1:")), `${who} ${v} at 1300px: notes on one line -> ${lines.join(" | ")}`);
+    }
+  }
+  await page.evaluate(() => showLinkTab("resources"));
+
   // Layout: no sideways scroll on a phone or tablet, and screenshots for a visual check
   for (const [w, name] of [[1300, "desktop"], [820, "tablet"], [390, "phone"]]) {
     await page.setViewport({ width: w, height: 900 });
