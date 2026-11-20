@@ -8,12 +8,13 @@
   <meta charset="UTF-8">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
-    // Apply saved theme (or system preference) before the page paints
+    // Apply the saved theme (or system preference) and a narrow sidebar before the page paints
     (function () {
-      let saved = null;
-      try { saved = localStorage.getItem("makutaTheme"); } catch (e) {}
+      let saved = null, narrow = null;
+      try { saved = localStorage.getItem("makutaTheme"); narrow = localStorage.getItem("makutaSideCollapsed"); } catch (e) {}
       const dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
       document.documentElement.dataset.theme = dark ? "dark" : "light";
+      document.documentElement.classList.toggle("side-collapsed", narrow === "1");
     })();
   </script>
   <style>
@@ -137,6 +138,10 @@
   .side-actions { display: flex; gap: 4px; }
   .side-btn { width: auto; flex: 1; justify-content: center; padding: 8px; font-size: 13px; }
   .side-btn.theme-toggle { flex: 0 0 auto; }
+  /* Laptops: the button next to the name makes the sidebar a rail of icons (tablets always have the rail) */
+  .app { transition: grid-template-columns .2s ease; }
+  .side-collapse { margin-left: auto; width: 32px; height: 32px; padding: 0; flex-shrink: 0; background: none; color: var(--ink-muted); border-radius: 8px; font-size: 18px; }
+  .side-collapse:hover { background: rgba(255, 255, 255, .07); color: #fff; }
   /* The Sheet link is an <a class="btn">; keep it looking like the other sidebar buttons */
   a.side-btn { background: none; color: var(--ink-text); box-shadow: none; text-decoration: none; }
   a.side-btn:hover { background: rgba(255, 255, 255, .07); color: #fff; transform: none; }
@@ -654,7 +659,24 @@
     .links-table .row-actions button { width: auto; height: auto; padding: 5px 10px; }
     .links-table .act-text { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
   }
-  /* Tablets: the sidebar becomes a rail of icons (names show on hover) */
+  /* The rail of icons (names show on hover): laptops with the sidebar collapsed, and every tablet below */
+  @media (min-width: 1101px) {
+    html.side-collapsed .app { grid-template-columns: 76px minmax(0, 1fr); }
+    html.side-collapsed .sidebar { padding: 18px 10px; align-items: center; }
+    html.side-collapsed .brand { flex-direction: column; padding: 4px 0 6px; }
+    html.side-collapsed .side-collapse { margin: 0; transform: rotate(180deg); }
+    html.side-collapsed .brand-name, html.side-collapsed .nav-label, html.side-collapsed .side-title,
+    html.side-collapsed .side-project .nav-count, html.side-collapsed .user-text { display: none; }
+    html.side-collapsed .side-nav button, html.side-collapsed .side-project, html.side-collapsed .side-btn { justify-content: center; width: 52px; padding: 10px; flex: 0 0 auto; }
+    html.side-collapsed .side-nav button.active::before, html.side-collapsed .side-project.active::before { left: -10px; }
+    html.side-collapsed .side-nav .nav-count, html.side-collapsed .turn-dot { position: absolute; top: 4px; right: 2px; min-width: 0; }
+    html.side-collapsed .side-nav .nav-count { padding: 0 5px; font-size: 10px; }
+    html.side-collapsed .side-actions { flex-direction: column; align-items: center; }
+    html.side-collapsed .user-chip { justify-content: center; padding: 0; }
+  }
+  @media (max-width: 1100px) {
+    .side-collapse { display: none; }
+  }
   @media (max-width: 1100px) and (min-width: 721px) {
     .app { grid-template-columns: 76px minmax(0, 1fr); }
     .sidebar { padding: 18px 10px; align-items: center; }
@@ -740,6 +762,7 @@
       <div class="brand">
         <span class="crown">👑</span>
         <span class="brand-name">Makuta<small>Links Center</small></span>
+        <button type="button" class="side-collapse" id="sideCollapse" onclick="toggleSideCollapse()" aria-controls="sidebar"><svg class="icon" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/></svg></button>
       </div>
       <nav class="side-nav" aria-label="Pages">
         <button type="button" id="tabHome" class="active" onclick="showView('home')" title="Home"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span class="nav-label">Home</span></button>
@@ -769,16 +792,6 @@
     <div class="scrim" id="scrim" onclick="closeOverlays()"></div>
 
     <main class="main">
-<div class="preview-banner">
-  <span><strong>DEMO V2</strong> &middot; demo data, saved in this browser only, not in Google Sheets.</span>
-  <span>Logins: hendra, riska, faza, obi, puput, alfid, ilham, wawan &middot; password = username + <b>demo</b> (e.g. <b>obidemo</b>) &middot; owner / <b>owner</b></span>
-  <button type="button" onclick="previewReset()">Reset demo data</button>
-</div>
-<style>
-  .preview-banner { position: relative; z-index: 1; background: #7c3aed; color: #fff; font-size: 12px; padding: 6px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
-  .preview-banner button { padding: 3px 10px; font-size: 12px; background: rgba(255,255,255,.2); }
-  .preview-banner button:hover { background: rgba(255,255,255,.35); }
-</style>
       <header class="topbar">
         <button type="button" class="icon-btn menu-btn" onclick="toggleSidebar()" aria-label="Open the menu"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <h1 id="pageTitle">Home</h1>
@@ -1373,7 +1386,6 @@ const SHEET_NAME = 'Links';
 const HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Main Link', 'Category', 'Project', 'Status', 'Deadline', 'Pinned', 'Description', 'Related Links', 'Reminder IDs'];
 const PINNED_COL = HEADERS.indexOf('Pinned') + 1;
 const UPDATED_COL = HEADERS.indexOf('Updated') + 1;
-const REMINDERS_COL = HEADERS.indexOf('Reminder IDs') + 1;
 // A CTC-Video link also records whose edit it is, stored in the category as e.g. "CTC-Video [VG-Arif]"
 const VIDEO_SOURCES = ['VG-Arif', 'VG-Anno'];
 // Links in the Reference category always get this project
@@ -2632,12 +2644,6 @@ function loadDemoData() {
 // The demo data is added the first time (and again when it changes); logins stay
 if ((() => { try { return localStorage.getItem(PREVIEW_KEY + ":version"); } catch (e) { return ""; } })() !== DEMO_VERSION) loadDemoData();
 
-function previewReset() {
-  if (!confirm("Replace everything in this local preview with fresh demo data?")) return;
-  loadDemoData();
-  if (state.user) loadData();
-  toast("Demo data loaded");
-}
 </script><script>
   const REFERENCE_PROJECT = "REFERENCE";
   const CATEGORY_ICONS = { "Google Docs": "📄", "Google Spreadsheets": "📈", "Google Slide": "📊", "Drive Folder": "📁", "CTC-Video": "🎬", "Reference": "🔖", "Other": "📌" };
@@ -2903,6 +2909,18 @@ function previewReset() {
     view.classList.remove("view-in");
     void view.offsetWidth;
     view.classList.add("view-in");
+  }
+
+  // Laptops: the sidebar shrinks to its icons and back; remembered in this browser (see the start of Index)
+  function toggleSideCollapse(collapse) {
+    const root = document.documentElement;
+    collapse = typeof collapse === "boolean" ? collapse : !root.classList.contains("side-collapsed");
+    root.classList.toggle("side-collapsed", collapse);
+    const label = collapse ? "Expand the sidebar" : "Collapse the sidebar";
+    $("sideCollapse").title = label;
+    $("sideCollapse").setAttribute("aria-label", label);
+    $("sideCollapse").setAttribute("aria-expanded", String(!collapse));
+    try { localStorage.setItem("makutaSideCollapsed", collapse ? "1" : ""); } catch (e) {}
   }
 
   // Phones and tablets: the sidebar slides in over the page
@@ -3493,7 +3511,8 @@ function previewReset() {
     active: { show: true, label: "Active only", test: t => t.stage !== "done" },
     mine: { show: true, label: "My Tasks", test: t => isMyStep(t) },
     late: { show: true, label: "Late", test: t => t.stage !== "done" && !!t.deadline && t.deadline < today() },
-    soon: { show: true, label: "Due in 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) <= 7 },
+    // Today up to a week ahead; what is already late is counted under Late, not twice
+    soon: { show: true, label: "Due in 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) >= 0 && daysUntil(t.deadline) <= 7 },
     done: { show: true, label: "Done", test: t => t.stage === "done" },
     all: { show: true, label: "All tasks", test: () => true },
     drafting: { label: "Brief", test: t => ["brief", "revision"].includes(t.stage) },
@@ -4044,7 +4063,6 @@ function previewReset() {
   function taskCard(t) {
     const id = escapeHtml(t.id);
     const done = t.stage === "done";
-    const s = stageOf(t.stage);
     // While a revision is open, keep showing what was asked
     const rev = openRevision(t);
     const revisionNote = rev
@@ -4219,6 +4237,8 @@ function previewReset() {
     return m < 60 ? `${Math.max(1, m)}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : m < 2880 ? "yesterday" : `${Math.round(m / 1440)}d ago`;
   }
   const RECENT_WORDS = { revision: "asked for a revision", approved: "approved", assign: "passed on" };
+  // "Good night" is said when leaving, so the evening greeting lasts until the morning
+  const dayPart = hour => hour >= 4 && hour < 11 ? "morning" : hour >= 11 && hour < 15 ? "afternoon" : "evening";
   // "VTB, KRR and GTR"
   const listWords = words => words.length < 2 ? words.join("") : words.slice(0, -1).join(", ") + " and " + words[words.length - 1];
 
@@ -4230,8 +4250,7 @@ function previewReset() {
     const active = state.tasks.filter(t => t.stage !== "done");
     const projects = taskProjects();
 
-    const hour = new Date().getHours();
-    $("helloTitle").textContent = `Good ${hour < 11 ? "morning" : hour < 15 ? "afternoon" : hour < 18 ? "evening" : "night"}, ${u.name}`;
+    $("helloTitle").textContent = `Good ${dayPart(new Date().getHours())}, ${u.name}`;
     // "Content Writer · VTB, KRR, Makuta and GTR" (the owner's role name is the name itself)
     $("helloText").textContent = `${owner ? "Owner" : u.roleName} · ${u.all ? "every project" : listWords(u.projects)}`;
 
@@ -4282,7 +4301,7 @@ function previewReset() {
         }).join("")}
       </div>` : `<p class="home-empty">No projects yet.</p>`;
 
-    // Due soon (late ones first), with who has to act
+    // Due soon (soonest first), with who has to act
     $("homeDue").innerHTML = soon.length ? `<ul class="home-list">${soon.slice(0, 8).map(t => `<li><button type="button" data-open="${escapeHtml(t.id)}">
         <span class="home-item">${escapeHtml(t.title)}</span>
         <span class="home-sub">${taskDue(t)} ${escapeHtml(stageOf(t.stage).name)} · ${escapeHtml(waitingFor(t))}</span></button></li>`).join("")}</ul>`
@@ -4524,6 +4543,7 @@ function previewReset() {
   }
 
   /* ---------- Init ---------- */
+  toggleSideCollapse(document.documentElement.classList.contains("side-collapsed"));
   $("linkForm").addEventListener("submit", submitForm);
   $("url").addEventListener("input", () => { checkDuplicate(); guessCategory(); });
   $("category").addEventListener("change", updateCategoryFields);
