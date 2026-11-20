@@ -893,6 +893,30 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await loginAs("owner", "owner");
   ok(await page.evaluate(() => document.getElementById("turnTitle").textContent === "Late tasks" && document.querySelector("#homeStats [data-stat=active]")), "owner's Home lists late tasks and all active tasks (no steps of their own)");
 
+  // Laptop: the button next to the name shrinks the sidebar to its icons; remembered after a reload
+  await page.setViewport({ width: 1300, height: 900 });
+  const sideWidth = () => page.$eval("#sidebar", e => Math.round(e.getBoundingClientRect().width));
+  ok(await sideWidth() === 248 && await page.$eval("#sideCollapse", b => b.getAttribute("aria-label") === "Collapse the sidebar"), "laptop: sidebar open, with a Collapse button");
+  await page.click("#sideCollapse");
+  await new Promise(r => setTimeout(r, 300));
+  ok(await sideWidth() === 76 && await page.$eval("#tabHome .nav-label", e => getComputedStyle(e).display === "none") &&
+    await page.$eval("#sideCollapse", b => b.getAttribute("aria-label") === "Expand the sidebar"), "Collapse: icons only, the button now expands it");
+  await page.reload();
+  await page.waitForFunction(() => state.loaded);
+  ok(await sideWidth() === 76, "the narrow sidebar is remembered after a reload");
+  await page.click("#sideCollapse");
+  await new Promise(r => setTimeout(r, 300));
+  ok(await sideWidth() === 248, "Expand brings the names back");
+  await page.setViewport({ width: 820, height: 900 });
+  ok(await page.$eval("#sideCollapse", b => getComputedStyle(b).display === "none"), "tablet: no collapse button (the rail is always narrow)");
+  await page.setViewport({ width: 1300, height: 900 });
+  ok(await page.evaluate(() => !document.querySelector(".preview-banner, .demo-login")), "no demo banner or login note on the page");
+  // Due this week counts today to 7 days ahead (late tasks are counted under Late only); no "Good night" greeting
+  ok(await page.evaluate(() => { const d = n => dayStr(new Date(Date.now() + n * 864e5)); const t = day => ({ stage: "design", deadline: day });
+    return !STEP_GROUPS.soon.test(t(d(-1))) && STEP_GROUPS.soon.test(t(d(0))) && STEP_GROUPS.soon.test(t(d(7))) && !STEP_GROUPS.soon.test(t(d(8))) && STEP_GROUPS.late.test(t(d(-1))); }),
+    "Due this week: today to 7 days ahead, late tasks only under Late");
+  ok(await page.evaluate(() => [6, 12, 16, 19, 23, 2].map(dayPart).join() === "morning,afternoon,evening,evening,evening,evening"), "greeting: morning, afternoon, evening (never good night)");
+
   // On a laptop the greeting and every short note sit on one line (no sentence broken off halfway)
   for (const who of ["obi", "faza", "owner"]) {
     await page.evaluate(() => lockApp());

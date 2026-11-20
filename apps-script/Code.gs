@@ -7,7 +7,6 @@ const SHEET_NAME = 'Links';
 const HEADERS = ['ID', 'Created', 'Updated', 'Title', 'Main Link', 'Category', 'Project', 'Status', 'Deadline', 'Pinned', 'Description', 'Related Links', 'Reminder IDs'];
 const PINNED_COL = HEADERS.indexOf('Pinned') + 1;
 const UPDATED_COL = HEADERS.indexOf('Updated') + 1;
-const REMINDERS_COL = HEADERS.indexOf('Reminder IDs') + 1;
 // A CTC-Video link also records whose edit it is, stored in the category as e.g. "CTC-Video [VG-Arif]"
 const VIDEO_SOURCES = ['VG-Arif', 'VG-Anno'];
 // Links in the Reference category always get this project

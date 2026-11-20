@@ -265,6 +265,18 @@
     view.classList.add("view-in");
   }
 
+  // Laptops: the sidebar shrinks to its icons and back; remembered in this browser (see the start of Index)
+  function toggleSideCollapse(collapse) {
+    const root = document.documentElement;
+    collapse = typeof collapse === "boolean" ? collapse : !root.classList.contains("side-collapsed");
+    root.classList.toggle("side-collapsed", collapse);
+    const label = collapse ? "Expand the sidebar" : "Collapse the sidebar";
+    $("sideCollapse").title = label;
+    $("sideCollapse").setAttribute("aria-label", label);
+    $("sideCollapse").setAttribute("aria-expanded", String(!collapse));
+    try { localStorage.setItem("makutaSideCollapsed", collapse ? "1" : ""); } catch (e) {}
+  }
+
   // Phones and tablets: the sidebar slides in over the page
   function toggleSidebar(open) {
     open = typeof open === "boolean" ? open : !document.body.classList.contains("sidebar-open");
@@ -853,7 +865,8 @@
     active: { show: true, label: "Active only", test: t => t.stage !== "done" },
     mine: { show: true, label: "My Tasks", test: t => isMyStep(t) },
     late: { show: true, label: "Late", test: t => t.stage !== "done" && !!t.deadline && t.deadline < today() },
-    soon: { show: true, label: "Due in 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) <= 7 },
+    // Today up to a week ahead; what is already late is counted under Late, not twice
+    soon: { show: true, label: "Due in 7 days", test: t => t.stage !== "done" && !!t.deadline && daysUntil(t.deadline) >= 0 && daysUntil(t.deadline) <= 7 },
     done: { show: true, label: "Done", test: t => t.stage === "done" },
     all: { show: true, label: "All tasks", test: () => true },
     drafting: { label: "Brief", test: t => ["brief", "revision"].includes(t.stage) },
@@ -1404,7 +1417,6 @@
   function taskCard(t) {
     const id = escapeHtml(t.id);
     const done = t.stage === "done";
-    const s = stageOf(t.stage);
     // While a revision is open, keep showing what was asked
     const rev = openRevision(t);
     const revisionNote = rev
@@ -1579,6 +1591,8 @@
     return m < 60 ? `${Math.max(1, m)}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : m < 2880 ? "yesterday" : `${Math.round(m / 1440)}d ago`;
   }
   const RECENT_WORDS = { revision: "asked for a revision", approved: "approved", assign: "passed on" };
+  // "Good night" is said when leaving, so the evening greeting lasts until the morning
+  const dayPart = hour => hour >= 4 && hour < 11 ? "morning" : hour >= 11 && hour < 15 ? "afternoon" : "evening";
   // "VTB, KRR and GTR"
   const listWords = words => words.length < 2 ? words.join("") : words.slice(0, -1).join(", ") + " and " + words[words.length - 1];
 
@@ -1590,8 +1604,7 @@
     const active = state.tasks.filter(t => t.stage !== "done");
     const projects = taskProjects();
 
-    const hour = new Date().getHours();
-    $("helloTitle").textContent = `Good ${hour < 11 ? "morning" : hour < 15 ? "afternoon" : hour < 18 ? "evening" : "night"}, ${u.name}`;
+    $("helloTitle").textContent = `Good ${dayPart(new Date().getHours())}, ${u.name}`;
     // "Content Writer · VTB, KRR, Makuta and GTR" (the owner's role name is the name itself)
     $("helloText").textContent = `${owner ? "Owner" : u.roleName} · ${u.all ? "every project" : listWords(u.projects)}`;
 
@@ -1642,7 +1655,7 @@
         }).join("")}
       </div>` : `<p class="home-empty">No projects yet.</p>`;
 
-    // Due soon (late ones first), with who has to act
+    // Due soon (soonest first), with who has to act
     $("homeDue").innerHTML = soon.length ? `<ul class="home-list">${soon.slice(0, 8).map(t => `<li><button type="button" data-open="${escapeHtml(t.id)}">
         <span class="home-item">${escapeHtml(t.title)}</span>
         <span class="home-sub">${taskDue(t)} ${escapeHtml(stageOf(t.stage).name)} · ${escapeHtml(waitingFor(t))}</span></button></li>`).join("")}</ul>`
@@ -1884,6 +1897,7 @@
   }
 
   /* ---------- Init ---------- */
+  toggleSideCollapse(document.documentElement.classList.contains("side-collapsed"));
   $("linkForm").addEventListener("submit", submitForm);
   $("url").addEventListener("input", () => { checkDuplicate(); guessCategory(); });
   $("category").addEventListener("change", updateCategoryFields);

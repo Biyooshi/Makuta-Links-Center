@@ -5,12 +5,13 @@
   <meta charset="UTF-8">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
-    // Apply saved theme (or system preference) before the page paints
+    // Apply the saved theme (or system preference) and a narrow sidebar before the page paints
     (function () {
-      let saved = null;
-      try { saved = localStorage.getItem("makutaTheme"); } catch (e) {}
+      let saved = null, narrow = null;
+      try { saved = localStorage.getItem("makutaTheme"); narrow = localStorage.getItem("makutaSideCollapsed"); } catch (e) {}
       const dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
       document.documentElement.dataset.theme = dark ? "dark" : "light";
+      document.documentElement.classList.toggle("side-collapsed", narrow === "1");
     })();
   </script>
   <?!= include('Styles'); ?>
@@ -22,6 +23,7 @@
       <div class="brand">
         <span class="crown">👑</span>
         <span class="brand-name">Makuta<small>Links Center</small></span>
+        <button type="button" class="side-collapse" id="sideCollapse" onclick="toggleSideCollapse()" aria-controls="sidebar"><svg class="icon" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/></svg></button>
       </div>
       <nav class="side-nav" aria-label="Pages">
         <button type="button" id="tabHome" class="active" onclick="showView('home')" title="Home"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span class="nav-label">Home</span></button>

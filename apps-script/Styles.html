@@ -119,6 +119,10 @@
   .side-actions { display: flex; gap: 4px; }
   .side-btn { width: auto; flex: 1; justify-content: center; padding: 8px; font-size: 13px; }
   .side-btn.theme-toggle { flex: 0 0 auto; }
+  /* Laptops: the button next to the name makes the sidebar a rail of icons (tablets always have the rail) */
+  .app { transition: grid-template-columns .2s ease; }
+  .side-collapse { margin-left: auto; width: 32px; height: 32px; padding: 0; flex-shrink: 0; background: none; color: var(--ink-muted); border-radius: 8px; font-size: 18px; }
+  .side-collapse:hover { background: rgba(255, 255, 255, .07); color: #fff; }
   /* The Sheet link is an <a class="btn">; keep it looking like the other sidebar buttons */
   a.side-btn { background: none; color: var(--ink-text); box-shadow: none; text-decoration: none; }
   a.side-btn:hover { background: rgba(255, 255, 255, .07); color: #fff; transform: none; }
@@ -636,7 +640,24 @@
     .links-table .row-actions button { width: auto; height: auto; padding: 5px 10px; }
     .links-table .act-text { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
   }
-  /* Tablets: the sidebar becomes a rail of icons (names show on hover) */
+  /* The rail of icons (names show on hover): laptops with the sidebar collapsed, and every tablet below */
+  @media (min-width: 1101px) {
+    html.side-collapsed .app { grid-template-columns: 76px minmax(0, 1fr); }
+    html.side-collapsed .sidebar { padding: 18px 10px; align-items: center; }
+    html.side-collapsed .brand { flex-direction: column; padding: 4px 0 6px; }
+    html.side-collapsed .side-collapse { margin: 0; transform: rotate(180deg); }
+    html.side-collapsed .brand-name, html.side-collapsed .nav-label, html.side-collapsed .side-title,
+    html.side-collapsed .side-project .nav-count, html.side-collapsed .user-text { display: none; }
+    html.side-collapsed .side-nav button, html.side-collapsed .side-project, html.side-collapsed .side-btn { justify-content: center; width: 52px; padding: 10px; flex: 0 0 auto; }
+    html.side-collapsed .side-nav button.active::before, html.side-collapsed .side-project.active::before { left: -10px; }
+    html.side-collapsed .side-nav .nav-count, html.side-collapsed .turn-dot { position: absolute; top: 4px; right: 2px; min-width: 0; }
+    html.side-collapsed .side-nav .nav-count { padding: 0 5px; font-size: 10px; }
+    html.side-collapsed .side-actions { flex-direction: column; align-items: center; }
+    html.side-collapsed .user-chip { justify-content: center; padding: 0; }
+  }
+  @media (max-width: 1100px) {
+    .side-collapse { display: none; }
+  }
   @media (max-width: 1100px) and (min-width: 721px) {
     .app { grid-template-columns: 76px minmax(0, 1fr); }
     .sidebar { padding: 18px 10px; align-items: center; }

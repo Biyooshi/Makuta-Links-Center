@@ -1,25 +1,13 @@
 // Builds preview.html: the real Apps Script files + a local stand-in for Google Sheets.
 // Run again after changing anything in ../apps-script:  node build-preview.js
-// A published demo version (GitHub Pages, one folder per version):  node build-preview.js v1 <output file>
-// Each version keeps its demo data and login under its own browser keys, so versions on the same site never mix.
+// The published demo (GitHub Pages, the site root):  node build-preview.js v2 <output file>
+// The demo keeps its data and login under its own browser keys, apart from the local preview.
 const fs = require("fs");
 const path = require("path");
 const src = path.join(__dirname, "..", "apps-script");
 const read = f => fs.readFileSync(path.join(src, f), "utf8");
 const version = process.argv[2] || "";
 const out = process.argv[3] || path.join(__dirname, "preview.html");
-
-const banner = `
-<div class="preview-banner">
-  <span><strong>${version ? "DEMO " + version.toUpperCase() : "LOCAL PREVIEW"}</strong> &middot; demo data, saved in this browser only, not in Google Sheets.</span>
-  <span>Logins: hendra, riska, faza, obi, puput, alfid, ilham, wawan &middot; password = username + <b>demo</b> (e.g. <b>obidemo</b>) &middot; owner / <b>owner</b></span>
-  <button type="button" onclick="previewReset()">Reset demo data</button>
-</div>
-<style>
-  .preview-banner { position: relative; z-index: 1; background: #7c3aed; color: #fff; font-size: 12px; padding: 6px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
-  .preview-banner button { padding: 3px 10px; font-size: 12px; background: rgba(255,255,255,.2); }
-  .preview-banner button:hover { background: rgba(255,255,255,.35); }
-</style>`;
 
 const mock = `
 <script>
@@ -163,18 +151,10 @@ ${fs.readFileSync(path.join(__dirname, "demo-data.js"), "utf8")}
 // The demo data is added the first time (and again when it changes); logins stay
 if ((() => { try { return localStorage.getItem(PREVIEW_KEY + ":version"); } catch (e) { return ""; } })() !== DEMO_VERSION) loadDemoData();
 
-function previewReset() {
-  if (!confirm("Replace everything in this local preview with fresh demo data?")) return;
-  loadDemoData();
-  if (state.user) loadData();
-  toast("Demo data loaded");
-}
 </script>`;
 
 let html = read("Index.html")
   .replace("<?!= include('Styles'); ?>", read("Styles.html"))
-  // Inside the main area, so the sidebar keeps the full height of the screen
-  .replace('<main class="main">', '<main class="main">' + banner)
   .replace("<?!= include('JavaScript'); ?>", mock + read("JavaScript.html"));
 if (version) {
   // Own login per version, a tab title that says which demo it is, and kept out of search engines
