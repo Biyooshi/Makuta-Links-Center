@@ -317,11 +317,45 @@
   .modal.modal-left { text-align: left; max-width: 520px; }
   .modal .check { font-size: 60px; color: var(--success); line-height: 1; margin-bottom: 14px; }
   .modal-emoji { font-size: 40px; margin-bottom: 8px; }
-  .modal-lock { background: rgba(5, 10, 25, .85); }
-  .modal-lock .error { text-align: left; }
-  .lock-btn { margin-top: 14px; }
+  /* Login page: the whole screen, the app stays hidden behind it (nothing of the last account shows) */
+  .modal-lock { padding: 0; background: var(--app-bg); backdrop-filter: none; align-items: stretch; overflow-y: auto; }
+  body:has(#lockModal.show) .app { display: none; }
+  .login-page { flex: 1; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); min-height: 100%; }
+  .login-brand { display: flex; flex-direction: column; justify-content: space-between; gap: 40px; padding: 40px 48px; background: var(--ink); color: var(--ink-text); }
+  .login-logo { display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 700; color: #fff; line-height: 1.15; }
+  .login-logo span:last-child { display: flex; flex-direction: column; }
+  .login-logo small { font-size: 12px; font-weight: 500; color: var(--ink-muted); }
+  .login-logo .crown { font-size: 30px; }
+  .login-pitch h1 { max-width: 16em; font-size: 30px; line-height: 1.25; color: #fff; }
+  /* The Milestones step line in miniature: two steps done, one in progress */
+  .login-steps { display: flex; margin-top: 32px; list-style: none; }
+  .login-steps li { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-muted); }
+  .login-steps li::before { content: ""; position: absolute; top: 7px; right: 50%; width: 100%; height: 2px; background: rgba(255, 255, 255, .15); }
+  .login-steps li:first-child::before { display: none; }
+  .login-steps i { position: relative; z-index: 1; width: 16px; height: 16px; border-radius: 50%; background: var(--ink); border: 2px solid rgba(255, 255, 255, .25); }
+  .login-steps li.on::before, .login-steps li.now::before { background: var(--accent); }
+  .login-steps li.on i { background: var(--accent); border-color: var(--accent); }
+  .login-steps li.now i { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(217, 154, 43, .25); }
+  .login-steps li.on, .login-steps li.now { color: #fff; }
+  .login-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 40px 24px; }
+  .login-box { width: 100%; max-width: 380px; text-align: left; }
+  .login-box h2 { font-size: 26px; color: var(--heading); }
+  .login-sub { margin: 4px 0 24px; font-size: 14px; color: var(--muted); }
+  .login-box label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .login-box .error { margin-top: 10px; }
+  .lock-btn { margin-top: 20px; }
+  .login-credit { font-size: 12px; }
+  .login-credit a { color: var(--muted); text-decoration: none; }
+  .login-credit strong { font-weight: 600; color: var(--text); }
+  @media (max-width: 720px) {
+    .login-page { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+    .login-brand { gap: 20px; padding: 24px 20px 28px; }
+    .login-pitch h1 { font-size: 20px; }
+    .login-steps { margin-top: 20px; }
+    .login-panel { justify-content: flex-start; padding: 28px 20px; }
+  }
   /* Passcode field with a show / hide (eye) button inside it */
-  .lock-user { margin-bottom: 10px; }
+  .lock-user { margin-bottom: 14px; }
   .pass-wrap { position: relative; }
   .pass-wrap input { padding-right: 46px; }
   .pass-eye { position: absolute; top: 6px; bottom: 6px; right: 6px; padding: 0 8px; background: none; color: var(--muted); font-size: 18px; border-radius: 6px; }
@@ -1235,24 +1269,40 @@
     </div>
   </div>
 
-  <!-- Login screen (cannot be closed until someone logs in) -->
+  <!-- Login page: the whole screen until someone logs in (the app behind it is hidden, see Styles) -->
   <div class="modal-bg modal-lock" id="lockModal">
-    <div class="modal">
-      <div class="modal-emoji">🔒</div>
-      <h3>Makuta Links Center</h3>
-      <p>Log in with your username and password.</p>
-      <form id="lockForm" novalidate>
-        <input id="lockUser" class="lock-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Username" aria-label="Username">
-        <div class="pass-wrap">
-          <input id="lockInput" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
-          <button type="button" class="pass-eye" id="lockEye" onclick="togglePasscode()" title="Show password" aria-label="Show password" aria-pressed="false">
-            <svg class="icon eye-open" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-            <svg class="icon eye-closed" viewBox="0 0 24 24"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-6.4 0-10-7-10-7a18.5 18.5 0 0 1 4.1-4.9M9.9 5.2A9.6 9.6 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2M2 2l20 20"/></svg>
-          </button>
+    <div class="login-page">
+      <section class="login-brand">
+        <div class="login-logo"><span class="crown">👑</span><span>Makuta<small>Links Center</small></span></div>
+        <div class="login-pitch">
+          <h1>Every brief, step and result of the Makuta team, in one place.</h1>
+          <!-- The Milestones timeline in miniature -->
+          <ol class="login-steps" aria-hidden="true">
+            <li class="on"><i></i>Brief</li><li class="on"><i></i>QC</li><li class="now"><i></i>Design</li><li><i></i>Client</li><li><i></i>Posted</li>
+          </ol>
         </div>
-        <div class="error" id="lockErr" hidden></div>
-        <button type="submit" class="btn-accent btn-block lock-btn" id="lockBtn">Log In</button>
-      </form>
+      </section>
+      <section class="login-panel">
+        <div class="login-box">
+          <h2>Log in</h2>
+          <p class="login-sub">Use your own username and password.</p>
+          <form id="lockForm" novalidate>
+            <label for="lockUser">Username</label>
+            <input id="lockUser" class="lock-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="e.g. obi">
+            <label for="lockInput">Password</label>
+            <div class="pass-wrap">
+              <input id="lockInput" type="password" autocomplete="current-password">
+              <button type="button" class="pass-eye" id="lockEye" onclick="togglePasscode()" title="Show password" aria-label="Show password" aria-pressed="false">
+                <svg class="icon eye-open" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="icon eye-closed" viewBox="0 0 24 24"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-6.4 0-10-7-10-7a18.5 18.5 0 0 1 4.1-4.9M9.9 5.2A9.6 9.6 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2M2 2l20 20"/></svg>
+              </button>
+            </div>
+            <div class="error" id="lockErr" hidden></div>
+            <button type="submit" class="btn-accent btn-block lock-btn" id="lockBtn">Log in</button>
+          </form>
+        </div>
+        <p class="login-credit"><a href="https://www.instagram.com/biyoosh.i/" target="_blank" rel="noopener">Made by <strong>Muhammad Nurul Qolbi</strong></a></p>
+      </section>
     </div>
   </div>
 
