@@ -1,6 +1,27 @@
 # Makuta Links Center
 
-Website untuk menyimpan semua link pekerjaan di satu tempat. Datanya tersimpan permanen di **Google Sheet**, dan website-nya di-host oleh **Google Apps Script**, jadi bisa dibuka dari laptop maupun HP.
+Website tim konten Makuta: **Milestones** (timeline setiap task konten, dengan link brief dan result-nya) dan **Resources** (link umum project seperti brand guideline dan moodboard). Setiap orang login dengan akunnya sendiri dan hanya bisa menekan langkah yang menjadi tugasnya. Datanya tersimpan permanen di **Google Sheet**, dan website-nya di-host oleh **Google Apps Script**, jadi bisa dibuka dari laptop maupun HP.
+
+## Akun & hak akses
+Password tidak ditulis di kode (repo ini publik). Password akun tim = **username + `PASSWORD_SUFFIX`** (Script Properties), owner memakai `OWNER_USERNAME` / `OWNER_PASSWORD`. Tidak ada fitur lupa / ganti password: untuk mengganti, ubah Script Properties.
+
+| Username | Nama | Peran | Project |
+|---|---|---|---|
+| hendra | Kak Hendra | Managerial | semua |
+| riska | Bu Riska | Managerial | semua |
+| faza | Kak Faza | Assistant Manager | semua |
+| obi | Obi | Content Writer | VTB, KRR, Makuta, GTR |
+| puput | Puput | Content Writer | GM, HC, LUX |
+| alfid | Alfid | Graphic Designer | KRR, Makuta |
+| ilham | Ilham | Graphic Designer | VTB, HC |
+| wawan | Wawan | Graphic Designer | GTR, GM, LUX |
+| (OWNER_USERNAME) | Owner | Owner | semua, plus tab Admin |
+
+- **Content writer:** Drafting Brief (wajib menempelkan link brief), Client Revision, Shooting, CTC, Voice Over, Scheduling Post. Membuat, mengedit, dan menghapus task project-nya.
+- **Graphic designer:** Design dan Motion / ToV (wajib menempelkan link result).
+- **Kak Faza:** Send to Client, QC Client, Run Ads (Musthofa).
+- **Managerial:** semua QC Internal, dan boleh menekan semua langkah. **Owner:** semuanya, plus tab Admin (siapa yang login, activity log, View as).
+- Login diingat 30 hari di browser itu. Salah password 10 kali → akun itu terkunci 15 menit. Daftar akun dan perannya ada di `USERS` dan `PROJECTS` (`Code.gs`).
 
 ## Isi folder
 
@@ -21,7 +42,7 @@ Website untuk menyimpan semua link pekerjaan di satu tempat. Datanya tersimpan p
 > **`apps-script/` adalah sumber utama.** `preview.html` dibuat dari file-file itu, jadi jangan edit `preview.html` langsung — edit `apps-script/`, lalu jalankan `node build-preview.js`.
 
 ## Mencoba di lokal
-Buka `local-preview/preview.html` langsung di browser. Datanya tersimpan di browser itu saja (bukan di Google Sheet) dan mulai kosong. Tombol **Clear all data** di banner ungu mengosongkan semuanya.
+Buka `local-preview/preview.html` langsung di browser. Isinya data demo yang tersimpan di browser itu saja (bukan di Google Sheet). Login demo: password = username + `demo` (contoh `obi` / `obidemo`), owner `owner` / `owner`. Demo yang dipublikasikan ada di https://biyooshi.github.io/Makuta-Links-Center/ (dibuat dengan `node local-preview/build-preview.js v2 <file>`, branch `gh-pages`).
 
 ### Tes otomatis
 Jalankan setiap kali selesai mengubah kode, untuk memastikan tidak ada yang rusak:
@@ -67,16 +88,17 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 > Nama file harus persis: `Code`, `Index`, `Styles`, `JavaScript` (huruf besar/kecil berpengaruh).
 > Pastikan seluruh isi file ter-copy: buka file aslinya (misalnya di Notepad / VS Code) → Ctrl + A → Ctrl + C. Cek bahwa baris terakhir di Apps Script sama dengan baris terakhir file aslinya.
 
-### 4. Beri izin (authorize), buat sheet, dan pasang passcode
+### 4. Beri izin (authorize), buat sheet, dan pasang password
 1. Di editor, buka **Code.gs**. Di toolbar atas, pada dropdown fungsi pilih **setup** → klik **Run**.
 2. Muncul "Authorization required" → **Review permissions** → pilih akun pribadimu.
-3. Muncul "Google hasn't verified this app" → klik **Advanced → Go to Makuta Links Center (unsafe)** → **Allow**. (Ini normal, karena aplikasinya buatan kamu sendiri. Izin yang diminta: Google Sheets dan Google Calendar untuk reminder deadline.)
+3. Muncul "Google hasn't verified this app" → klik **Advanced → Go to Makuta Links Center (unsafe)** → **Allow**. (Ini normal, karena aplikasinya buatan kamu sendiri. Izin yang diminta: Google Sheets, dan Google Calendar untuk menghapus reminder deadline lama dari versi sebelumnya.)
 4. Tunggu sampai **Execution log** menulis "Execution completed".
-5. Kembali ke tab spreadsheet: sekarang ada sheet **Links** dan **Tasks** dengan judul kolom (masih kosong). Sheet bawaan "Sheet1" boleh dihapus (klik kanan tab → Delete).
-6. Pasang passcode: di Apps Script klik **Project Settings** (ikon roda gigi) → scroll ke **Script Properties** → **Add script property** → Property: `APP_PASSCODE`, Value: passcode pilihanmu (minimal 8 karakter, campur huruf & angka; jangan dibagikan) → **Save script properties**.
-   - Passcode ini diminta sekali di setiap perangkat/browser, lalu diingat. Tombol **Lock** di aplikasi membuat perangkat itu lupa passcode-nya.
-   - Mengganti passcode: ubah value di Script Properties (tidak perlu deploy ulang). Semua perangkat akan diminta passcode baru.
-   - Salah passcode 10 kali → aplikasi terkunci 15 menit.
+5. Kembali ke tab spreadsheet: sekarang ada sheet **Links**, **Tasks**, dan **Activity** dengan judul kolom (masih kosong). Sheet bawaan "Sheet1" boleh dihapus (klik kanan tab → Delete).
+6. Pasang password: di Apps Script klik **Project Settings** (ikon roda gigi) → scroll ke **Script Properties** → **Add script property**, tambahkan tiga ini → **Save script properties**:
+   - `PASSWORD_SUFFIX`: akhiran password akun tim (password = username + akhiran ini).
+   - `OWNER_USERNAME`: username owner (tidak pernah tampil di aplikasi; di mana-mana tertulis "Owner").
+   - `OWNER_PASSWORD`: password owner.
+   - Mengganti password: ubah value-nya di Script Properties (tidak perlu deploy ulang). Yang sudah login tetap masuk sampai logout atau 30 hari; owner bisa mengeluarkan semua orang di tab **Admin → Log out everyone else**.
 
 ### 5. Deploy sebagai Web App
 1. Di Apps Script, klik **Deploy → New deployment**.
@@ -84,19 +106,17 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 3. Isi:
    - Description: `v1`
    - Execute as: **Me (email pribadimu)**
-   - Who has access: **Anyone** (wajib, supaya bisa tampil di halaman Vercel; datanya tetap dikunci passcode dari langkah 4)
+   - Who has access: **Anyone** (wajib, supaya bisa tampil di halaman Vercel; datanya tetap dikunci login dari langkah 4)
 4. Klik **Deploy**. (Kalau diminta authorize lagi, ulangi langkah 4.2–4.3.)
-5. Buka URL-nya → masukkan passcode → aplikasi terbuka.
+5. Buka URL-nya → login → aplikasi terbuka.
 6. Salin **Web app URL** (berakhiran `/exec`). Inilah alamat website kamu: **bookmark** URL ini, dan buka juga di HP (login akun pribadi yang sama) kalau mau.
 
 ### 6. Cek cepat setelah setup
-- [ ] Submit 1 link percobaan dengan deadline 3 hari lagi → muncul popup ceklis hijau.
-- [ ] Buka Google Sheet → sheet **Links** berisi link tadi.
-- [ ] Buka Google Calendar → ada event `[MAKUTA] Due in 2 days: ...` dan `[MAKUTA] Due tomorrow: ...` jam 09:00.
-- [ ] Tab **All Links** → link muncul; coba Edit, Pin, lalu Delete (event di Calendar ikut terhapus).
+- [ ] Login sebagai owner → tab **Resources** → **+ New → Resource** → simpan 1 link percobaan → sheet **Links** berisi link tadi; coba Edit, Pin, lalu Delete.
 - [ ] Klik **Export to Excel** → file `.xlsx` terunduh.
-- [ ] Tab **Milestones** → buat 1 task → sheet **Tasks** berisi task tadi; coba klik tombol step-nya, lalu Delete.
-- [ ] Klik **Open Google Sheet** → spreadsheet terbuka.
+- [ ] Tab **Milestones** → buat 1 task → sheet **Tasks** berisi task tadi; klik **Submit Brief for QC**, tempel link brief → task pindah ke QC; lalu Delete.
+- [ ] Tab **Admin** → sesi login dan Activity tercatat.
+- [ ] Klik **Sheet** di sidebar → spreadsheet terbuka.
 
 ---
 
@@ -104,7 +124,7 @@ Tes ini otomatis membuat ulang `preview.html`, lalu membukanya di Chrome tanpa t
 - Kode disimpan di GitHub: https://github.com/Biyooshi/Makuta-Links-Center
 - Alamat aplikasi: **https://makuta-links-center.vercel.app**. Vercel tidak menjalankan aplikasinya; `web/index.html` hanya menampilkan Web app Apps Script (`/exec`) di dalam halaman Vercel (iframe), jadi alamat di browser tetap `vercel.app`. Data tetap di Google Sheet.
 - Supaya bisa ditampilkan di Vercel, `doGet` di `Code.gs` memakai `setXFrameOptionsMode(ALLOWALL)`, dan Web app diatur **Who has access: Anyone**. Akses "Only myself" tidak bisa dipakai di Vercel (Google menolak dengan error 401 karena cookie login diblokir di dalam halaman lain).
-- Karena itu aplikasi dikunci **passcode** (Setup langkah 4.6): server menolak semua baca/tulis data tanpa passcode yang benar. Tidak perlu login Google untuk membukanya.
+- Karena itu aplikasi dikunci **login per akun** (Setup langkah 4.6): server menolak semua baca/tulis data tanpa login yang sah, dan hanya menyimpan hash tiket login di Script Properties. Tidak perlu login Google untuk membukanya.
 - Kalau Web app URL berubah (membuat *New deployment* baru, bukan *New version*), ganti `APP_URL` di `web/index.html`, lalu push ke GitHub. Vercel otomatis memperbarui.
 
 ## Update otomatis (GitHub → Apps Script → Vercel)
@@ -115,7 +135,8 @@ Setiap push ke branch `main` yang mengubah `apps-script/`, `tests/`, atau pengat
 
 Hasilnya bisa dilihat di tab **Actions** di GitHub (centang hijau = sudah live).
 
-- **Jangan edit kode langsung di editor Apps Script**: push berikutnya akan menimpanya. Semua perubahan lewat repo ini. Data di Google Sheet dan passcode di Script Properties tidak tersentuh.
+- **Jangan edit kode langsung di editor Apps Script**: push berikutnya akan menimpanya. Semua perubahan lewat repo ini. Data di Google Sheet dan password di Script Properties tidak tersentuh.
+- Perubahan dicoba dulu di branch `v2` (demo di GitHub Pages, tidak men-deploy apa pun); `main` hanya diperbarui saat siap live.
 - Izin login clasp disimpan di **GitHub → Settings → Secrets and variables → Actions** dengan nama `CLASPRC_JSON` (isi file `C:\Users\<nama>\.clasprc.json` setelah `npx @google/clasp@2.4.2 login`).
 - Kalau deploy gagal dengan error login / `invalid_grant` (misalnya izin dicabut atau password Google diganti): jalankan lagi `npx @google/clasp@2.4.2 login` di laptop, lalu ganti isi secret `CLASPRC_JSON` dengan isi file `.clasprc.json` yang baru.
 - Mencabut akses: https://myaccount.google.com/permissions → hapus akses "clasp".
@@ -128,17 +149,15 @@ Hasilnya bisa dilihat di tab **Actions** di GitHub (centang hijau = sudah live).
 
 > Tanpa langkah 2, website tetap menjalankan kode versi lama.
 
-> Kalau update-nya butuh izin baru (misalnya akses **Google Calendar** untuk reminder deadline), Google akan minta **Authorize access** lagi. Cara paling gampang: di editor Apps Script pilih fungsi `setup` → klik **Run** → ikuti langkah authorize seperti di Setup langkah 4.
+> Kalau update-nya butuh izin baru, Google akan minta **Authorize access** lagi. Cara paling gampang: di editor Apps Script pilih fungsi `setup` → klik **Run** → ikuti langkah authorize seperti di Setup langkah 4.
 
 ## Reminder deadline (Google Calendar)
-- Setiap link yang punya **Deadline** otomatis dibuatkan 2 event di Google Calendar utama kamu: **H-2** dan **H-1**, jam **09:00**, dengan notifikasi popup.
-- Judul event diawali `[MAKUTA]`, contoh: `[MAKUTA] Due in 2 days: GTR Competitor Analysis Deck (GTR)` dan `[MAKUTA] Due tomorrow: ...`.
-- Kalau deadline/judul/status diubah, reminder lama dihapus dan dibuat ulang. Kalau status jadi **Done** atau link dihapus, reminder-nya ikut dihapus.
-- Reminder yang waktunya sudah lewat tidak dibuat (contoh: deadline diisi besok sore → hanya H-1 kalau belum lewat jam 09:00 hari ini).
-- Jam mengikuti time zone project Apps Script (**Project Settings → Time zone**), pastikan diset ke `(GMT+07:00) Jakarta` (Setup langkah 2).
+Resources tidak lagi punya status dan deadline (alur kerja ada di Milestones), jadi tidak ada reminder baru. Reminder `[MAKUTA]` dari versi lama dihapus saat link-nya diedit atau dihapus; yang lain hilang sendiri setelah tanggalnya lewat.
 
 ## Milestones (timeline pekerjaan konten)
-Tab **Milestones** berisi setiap task konten, dikelompokkan per project, lengkap dengan timeline step-nya. Datanya tersimpan di sheet **Tasks** (dibuat otomatis). Untuk sementara Milestones terpisah dari Links Center.
+Tab **Milestones** berisi setiap task konten, dikelompokkan per project, lengkap dengan timeline step-nya. Datanya tersimpan di sheet **Tasks** (dibuat otomatis). Halaman **Home** merangkum task yang menunggu kamu, jumlah task per project per tahap, deadline 7 hari ke depan, dan update terbaru.
+
+- **Link brief dan result:** saat **Submit Brief for QC**, content writer wajib menempelkan link brief (satu link untuk Static + Video satu channel di Monthly Brief). Saat **Design Done** / **Motion / ToV Done**, designer wajib menempelkan link result (setelah revisi, link terakhir sudah terisi). Nama langkah Drafting Brief / Design / Motion di timeline bisa diklik untuk membukanya, dan tombol **Open brief** / **Open result** muncul di samping tombol langkah. Kolom sheet: **Brief Link** dan **Result Link**; setiap link juga tercatat di History. Semua link ini terkumpul di **Resources → Brief & result links**.
 
 - **+ Monthly Brief** (cara utama) → pilih project dan **Working Month** (bulan brief dikerjakan), semua task bulan itu dibuat sekaligus dengan judul otomatis.
   - Brief yang dikerjakan di suatu bulan: **ORG untuk bulan berikutnya, ADS untuk bulan itu sendiri**. Contoh dikerjakan November → `BRIEF ORG DECEMBER KRR`, `VIDEO CTC ORG DECEMBER KRR`, `BRIEF ADS NOVEMBER KRR`, `VIDEO CTC ADS NOVEMBER KRR`. Diatur di `BRIEF_MONTHS_AHEAD` (`Code.gs`).
@@ -157,13 +176,16 @@ Tab **Milestones** berisi setiap task konten, dikelompokkan per project, lengkap
     | 🌴 KRR | Static, Video (Shooting), Event Attribute | Event Attribute hanya untuk KRR (pameran / event) |
     | 👑 Makuta | Static, Video (Shooting), Video (Non-Shooting) | Organic only (wajib ORG) |
     | 🏡 GTR | Static, Video (Non-Shooting) | Video Shooting masih pending |
+    | 🏢 GM | Static, Video (Shooting), Event Attribute | ADS only (wajib ADS) |
+    | 🏥 HC | Static, Video (Shooting), Event Attribute | ADS only (wajib ADS) |
+    | 💎 LUX | Static, Video (Non-Shooting), Video (Shooting), Event Attribute | ORG + ADS |
 
-  - **Graphic Designer otomatis** dari project (VTB = Ilham, KRR = Alfid, Makuta = Alfid, GTR = Wawan).
-  - **Videographer:** VTB, KRR, dan GTR otomatis **Anno**; Arif hanya bisa dipilih lewat **Edit**. **Makuta tidak punya videographer tetap**, jadi setiap task video Makuta **wajib memilih** Anno atau Arif saat dibuat.
+  - **Content writer dan graphic designer otomatis** dari project (lihat tabel **Akun & hak akses**).
+  - **Videographer:** VTB, KRR, dan GTR otomatis **Anno**; GM, HC, dan LUX otomatis **Arif**; videographer lain hanya bisa dipilih lewat **Edit**. **Makuta tidak punya videographer tetap**, jadi setiap task video Makuta **wajib memilih** Anno atau Arif saat dibuat.
   - **Event Attribute (KRR):** satu task berisi semua kebutuhan pameran/event: **Countdown H-5, Countdown H-2, Countdown D-Day, Flyer Cetak, Video Reels Pameran**. Alurnya sama dengan Static. Kolom deadline berubah jadi **Event Date (D-Day)** dan wajib diisi; tanggal countdown dihitung mundur dari tanggal itu (contoh event 20 Des → H-5 = 15 Des, H-2 = 18 Des). Di kartu task ada checklist untuk mencentang setiap item yang sudah selesai.
   - **Collateral (semua project):** kebutuhan cetak, merchandise, dan website sesuai permintaan client. Satu task untuk satu item: T-Banner, T-Banner Mini, Banner General, Neon Box, Billboard, Flyer, Brosur, Landing Page, Website, Signboard, X Banner, Roll-up Banner, Product Knowledge, Umbul-umbul, Kipas, Topi. Buat lewat **+ Single Task**, pilih **Item**, dan judul terisi otomatis (contoh **FLYER KRR**). Tidak perlu ORG / ADS. Alurnya sama dengan Static dan selesai di **QC Client** (**Approved by Client**), tanpa Scheduling Post / Run Ads. Item tersimpan di kolom **Item** sheet Tasks. Daftar item bisa diubah di `COLLATERAL_ITEMS` (Code.gs).
 - Step yang dilalui otomatis menyesuaikan:
-  - Static: Drafting Brief (Obi) → QC Internal: Brief (Kak Hendra / Bu Riska) → Design → QC Internal: Content → Send to Client (Kak Faza) → QC Client → Scheduling Post (ORG, Obi via Meta Business Suite) / Run Ads (ADS, Musthofa)
+  - Static: Drafting Brief (content writer) → QC Internal: Brief (Kak Hendra / Bu Riska) → Design → QC Internal: Content → Send to Client (Kak Faza) → QC Client (ditekan Kak Faza) → Scheduling Post (ORG, content writer via Meta Business Suite) / Run Ads (ADS, Musthofa, ditekan Kak Faza)
   - Video (Shooting): … → QC Internal: Brief → **Shooting (Obi & videographer)** → CTC → **QC Internal: CTC** → Motion / ToV (designer) → QC Internal: Content → …
   - Video (Non-Shooting): … → QC Internal: Brief → **Voice Over (Bu Riska)** → CTC → QC Internal: CTC → Motion / ToV → …
   - Graphic designer baru mengerjakan ToV setelah CTC di-approve QC Internal.
@@ -173,23 +195,25 @@ Tab **Milestones** berisi setiap task konten, dikelompokkan per project, lengkap
   - **QC Client → Request Revision** selalu kembali ke **Obi** dulu (step "Client Revision"). Obi lalu klik **Send to Videographer (CTC)** atau **Send to Graphic Designer** (Motion / ToV / design). Setelah dikerjakan → QC Internal → Kak Faza → QC Client lagi.
   - Selama revisi berjalan, step dari titik revisi sampai QC yang meminta revisi berwarna **merah**. Setelah QC itu approve lagi, timeline kembali hijau. Step "Client Revision" tetap tampil di timeline sebagai catatan.
   - **Undo** membatalkan langkah terakhir kalau salah klik. **History** menampilkan semua langkah + tanggal + catatan revisi.
-- Task yang sudah selesai tetap tampil (abu-abu, di bawah, tidak bisa di-Edit; step terakhir **Live on Ads / Scheduled / Posted** tetap hijau) selama 30 hari setelah selesai (`RECENT_DONE_DAYS` di `JavaScript.html`). Setelah itu hanya tampil lewat filter Step **Done** / **All tasks**.
+- Task yang sudah selesai tetap tampil (abu-abu, di bawah, tidak bisa di-Edit; step terakhir **Live on Ads / Scheduled / Posted** tetap hijau) selama 30 hari setelah selesai (`RECENT_DONE_DAYS` di `JavaScript.html`). Setelah itu hanya tampil lewat filter **Show → Done / All tasks**.
+- Filter Milestones: **Show** (Active, My Tasks, Late, Due in 7 days, Done, All, atau per tahap), **Project**, **Month**, dan pencarian (ketik ORG, ADS, Collateral, Event Attribute, nama orang, dll.).
 - Nama orang, emoji, content type, dan organic only per project diatur di bagian atas `Code.gs` (`PROJECTS`, `VIDEOGRAPHERS`, `STAGES`). Edit di sana kalau tim berubah, lalu deploy **New version**.
 - Di sheet **Tasks**, kolom **Current Step** dan **Revisions** hanya untuk dibaca; perubahan step dilakukan lewat tombol di website (kolom **History** dan **Checklist** jangan diedit manual). Kolom **Work Month** dan **For Month** diisi oleh Monthly Brief dan menghubungkan task-task satu bulan; jangan diubah manual. Task lama yang dibuat satu per satu (misalnya `BRIEF ORG DES KRR`) otomatis diubah sekali ke format Monthly Brief saat aplikasi pertama dibuka setelah update: judul dirapikan (`BRIEF ORG DECEMBER KRR`) dan Work Month diisi. Event Attribute dan judul di luar format tidak diubah. Hasilnya tercatat di Script Properties `UPGRADED_MONTHLY_BRIEF`.
 
 ## Tentang data di Google Sheet
-- Data ada di sheet **Links**. Kamu boleh melihat/mengedit langsung di sana, tapi:
+- Resources ada di sheet **Links**. Kamu boleh melihat/mengedit langsung di sana, tapi:
   - Jangan ubah **baris 1 (judul kolom)** dan kolom **ID**.
-  - Kolom **Status** sebaiknya salah satu dari: Draft, In Progress, In Review, Revision, Done (huruf besar/kecil tidak masalah).
+  - Kolom **Status** dan **Deadline** hanya berisi data lama; aplikasi tidak memakainya lagi.
   - Kolom **Category** untuk CTC-Video berisi sumber editornya, contoh `CTC-Video [VG-Arif]` atau `CTC-Video [VG-Anno]`.
   - Link dengan kategori **Reference** selalu masuk project **REFERENCE** (diisi otomatis dan dikunci di form). Nama project REFERENCE tidak bisa dipakai untuk kategori lain.
-  - Kolom **Reminder IDs** dipakai untuk menghapus/memperbarui event di Google Calendar — jangan diubah manual.
-  - Kolom **Deadline** formatnya `yyyy-mm-dd` (contoh `2026-11-20`).
+  - Kolom **Reminder IDs** dipakai untuk menghapus reminder lama di Google Calendar — jangan diubah manual.
   - Kolom **Related Links**: satu link per baris, format `Label | https://link`.
 - Teks disimpan sebagai teks biasa, jadi nilai seperti `001`, `50%`, atau `12/11` tidak akan diubah otomatis oleh Google Sheets.
 - Kalau sheet **Links** terhapus atau dikosongkan, website akan membuatnya lagi (dengan judul kolom) secara otomatis.
+- Sheet **Activity** mencatat setiap login dan perubahan (siapa, kapan, apa). Owner melihatnya di tab **Admin**.
 
 ## Troubleshooting
 - **"Sorry, unable to open the file at present"** → biasanya karena login lebih dari 1 akun Google di browser. Buka URL-nya di jendela Incognito / profil Chrome yang hanya login ke akun pemilik.
 - **Export to Excel tidak mengunduh apa-apa** → butuh koneksi internet (library Excel dimuat saat tombol diklik). Alternatif: buka Google Sheet → File → Download → Microsoft Excel.
 - **Perubahan kode tidak muncul** → pastikan sudah membuat **New version** di Manage deployments (lihat bagian update).
+- **Login menulis "The accounts are not set up yet"** → `PASSWORD_SUFFIX`, `OWNER_USERNAME`, atau `OWNER_PASSWORD` belum diisi di Script Properties (Setup langkah 4.6).
