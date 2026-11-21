@@ -70,6 +70,6 @@ function loadTestData() {
     ticked.forEach(item => GAS.setTaskItem(t.id, item, true));
     backdateTask(t.id, ago);
   });
-  loadData();
-  toast("Test data loaded");
+  // Returned, so the tests wait until the page shows this data (not the data it had before)
+  return loadData().then(() => toast("Test data loaded"));
 }
