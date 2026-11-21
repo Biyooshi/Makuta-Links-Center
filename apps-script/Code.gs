@@ -135,10 +135,19 @@ const OWNER_API = ['getAdminData', 'endSessions'];
 
 // The account making the current call (set by api and login)
 let user_ = null;
+// Each call from the page is one run of this script. Within a run the sheets are looked up and checked
+// once (see getSheet_), and the activity rows are written together at the end (see logActivity_).
+let sheets_ = {};
+let activityRows_ = [];
+function startRun_() {
+  sheets_ = {};
+  activityRows_ = [];
+}
 
 // The only entry point for the page: api(ticket, "addLink", [data]). viewAs: the owner sees the app
 // as that team account, read-only.
 function api(ticket, fn, args, viewAs) {
+  startRun_();
   user_ = checkSession_(ticket);
   if (!API.hasOwnProperty(fn)) throw new Error('Unknown action.');
   if (OWNER_API.indexOf(fn) >= 0 && user_.role !== 'owner') throw new Error('Only the owner can do this.');
@@ -150,9 +159,11 @@ function api(ticket, fn, args, viewAs) {
   return API[fn].apply(null, Array.isArray(args) ? args : []);
 }
 
-// Called by the login screen: checks the username and password and returns a new ticket for this browser.
+// Called by the login screen: checks the username and password and returns a new ticket for this browser,
+// with everything the page shows (so opening the app takes one call, not two).
 // Errors starting with "LOCKED:" make the page show the login screen.
 function login(username, password, device) {
+  startRun_();
   const props = PropertiesService.getScriptProperties();
   const suffix = props.getProperty('PASSWORD_SUFFIX');
   if (!suffix) throw new Error('LOCKED: The accounts are not set up yet. Add ' + ACCOUNT_PROPERTIES.join(', ') + ' in Apps Script > Project Settings > Script Properties.');
@@ -165,7 +176,7 @@ function login(username, password, device) {
   const wrongKey = 'wrongLogin_' + (key || '?');
   const wrong = Number(cache.get(wrongKey) || 0);
   if (wrong >= MAX_WRONG_PASSWORDS) throw new Error('LOCKED: Too many wrong passwords for this account. Please try again in 15 minutes.');
-  return withLock_(() => {
+  const ticket = withLock_(() => {
     if (!key || !real || String(password == null ? '' : password) !== real) {
       cache.put(wrongKey, String(wrong + 1), 15 * 60);
       // An unknown username is not written down (it could be a mistyped owner username)
@@ -179,8 +190,9 @@ function login(username, password, device) {
     props.setProperty(SESSION_PREFIX + hash_(ticket), JSON.stringify({ u: key, start: now, seen: now, device: String(device || '').slice(0, 120) }));
     user_ = account_(key);
     logActivity_('Login', '', '', String(device || '').slice(0, 120));
-    return { ticket: ticket };
+    return ticket;
   });
+  return { ticket: ticket, data: getInitialData_() };
 }
 
 // The account a session belongs to (a team username or OWNER_KEY), with the projects it sees
@@ -274,16 +286,23 @@ const ACTIVITY_SHEET = 'Activity';
 const ACTIVITY_HEADERS = ['Time', 'Who', 'Action', 'Project', 'Task', 'Details'];
 const MAX_ACTIVITY_SHOWN = 500;
 
-// Always called inside withLock_. who: only for a failed login (otherwise the current account).
+// Always called inside withLock_, which writes the rows when it ends (one write for a move of 4 tasks).
+// who: only for a failed login (otherwise the current account).
 function logActivity_(action, project, task, details, who) {
+  activityRows_.push([
+    new Date().toISOString(), who || (user_ ? user_.name : ''), action, project || '', task || '', String(details || '').slice(0, 1000)
+  ].map(safe_));
+}
+function writeActivity_() {
+  const rows = activityRows_;
+  activityRows_ = [];
+  if (!rows.length) return;
   try {
     const sheet = getSheet_(ACTIVITY_SHEET, ACTIVITY_HEADERS);
     const row = sheet.getLastRow() + 1;
-    const missing = row - sheet.getMaxRows();
+    const missing = row + rows.length - 1 - sheet.getMaxRows();
     if (missing > 0) sheet.insertRowsAfter(sheet.getMaxRows(), missing);
-    sheet.getRange(row, 1, 1, ACTIVITY_HEADERS.length).setNumberFormat('@').setValues([[
-      new Date().toISOString(), who || (user_ ? user_.name : ''), action, project || '', task || '', String(details || '').slice(0, 1000)
-    ].map(safe_)]);
+    sheet.getRange(row, 1, rows.length, ACTIVITY_HEADERS.length).setNumberFormat('@').setValues(rows);
   } catch (e) {
     // The log never stops the change itself
   }
@@ -829,6 +848,8 @@ function rowToTask_(r) {
 function getSheet_(name, headers) {
   name = name || SHEET_NAME;
   headers = headers || HEADERS;
+  // Looked up and checked once per run (every check reads the spreadsheet, which is slow)
+  if (sheets_[name]) return sheets_[name];
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   // (Re)create the header row if the sheet is new or was emptied by hand
@@ -841,7 +862,7 @@ function getSheet_(name, headers) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
   }
   protectSheet_(sheet, headers, fresh);
-  return sheet;
+  return sheets_[name] = sheet;
 }
 
 // Columns only the website should change. Editing them by hand in the sheet shows an
@@ -880,12 +901,14 @@ function writeRows_(sheet, startRow, rows) {
   sheet.getRange(startRow, 1, rows.length, HEADERS.length).setValues(rows);
 }
 
+// One change at a time; the activity of the change is written before the next one may start
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
     return fn();
   } finally {
+    writeActivity_();
     lock.releaseLock();
   }
 }

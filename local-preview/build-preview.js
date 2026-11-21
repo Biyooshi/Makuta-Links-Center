@@ -130,7 +130,10 @@ const Utilities = {
 <script>const GAS = (function () {
 ${read("Code.gs")}
 // actAs: run the server functions directly as that account (the demo data and the tests use it)
-return Object.assign({ api, login, actAs: key => { user_ = account_(key === "owner" ? OWNER_KEY : key); } }, API);
+// Every direct call is one run, like a call from the page on the real server (see startRun_)
+const run = fn => (...args) => { startRun_(); return fn(...args); };
+return Object.assign({ api, login, actAs: key => { user_ = account_(key === "owner" ? OWNER_KEY : key); } },
+  Object.fromEntries(Object.keys(API).map(k => [k, run(API[k])])));
 })();</script>
 <script>
 const google = { script: {

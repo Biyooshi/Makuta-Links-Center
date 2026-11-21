@@ -798,7 +798,23 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   /* ---------- 4. Dashboard: Home, sidebar, New menu, link panel ---------- */
   console.log("Dashboard");
   await page.evaluate(() => lockApp());
+  // Logging in takes one call to the server: the login answer already holds the data
+  await page.evaluate(() => { window.apiCalls = []; window.realApi = GAS.api; GAS.api = (t, fn, ...rest) => (apiCalls.push(fn), realApi(t, fn, ...rest)); });
   await loginAs("obi");
+  ok(await page.evaluate(() => { GAS.api = realApi; return apiCalls.length === 0 && state.tasks.length > 0; }), "login loads the app in one call (no second getInitialData)");
+  // A move of several tasks writes its activity rows together, all with the right names
+  const logged = await page.evaluate(() => {
+    GAS.actAs("owner");
+    const t = GAS.addTasks([{ title: "BRIEF ORG MARCH VTB", project: "VTB", type: "Static" }, { title: "VIDEO CTC ORG MARCH VTB", project: "VTB", type: "Video (Shooting)" }], "2027-02");
+    const before = mockSheet("Activity").data.length;
+    GAS.actAs("obi");
+    GAS.moveTask(t[0].id, "advance", { link: "https://docs.google.com/document/d/march" });
+    const rows = mockSheet("Activity").data.slice(before);
+    GAS.actAs("owner");
+    t.forEach(x => GAS.deleteTask(x.id));
+    return rows.map(r => r[1] + ":" + r[2] + ":" + r[4]).join(" | ");
+  });
+  ok(logged === "Obi:Moved:BRIEF ORG MARCH VTB | Obi:Moved:VIDEO CTC ORG MARCH VTB", "a move of 2 tasks logs both, by name -> " + logged);
   ok(await page.evaluate(() => state.page === "home" && !document.getElementById("viewHome").hidden && document.getElementById("pageTitle").textContent === "Home"), "after login the app opens on Home");
   const home = await page.evaluate(() => {
     const rows = [...document.querySelectorAll("#homeTurn .turn-row")];

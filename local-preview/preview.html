@@ -3,6 +3,8 @@
 <head>
   <base target="_top">
   <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
     // Apply the saved theme (or system preference) and a narrow sidebar before the page paints
@@ -515,6 +517,9 @@
   /* Milestones */
   .modal.modal-wide { max-width: 640px; }
   .btn-ok { background: var(--success); color: #fff; }
+  /* A step being saved: a small spinner on its button */
+  button.is-busy { cursor: progress; opacity: .8; }
+  button.is-busy::after { content: ""; width: 12px; height: 12px; margin-left: 6px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
   .btn-ok:hover { background: #15803d; }
   .chan { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: .4px; color: #fff; background: #0891b2; }
   .chan-ads { background: #7c3aed; }
@@ -1561,10 +1566,19 @@ const OWNER_API = ['getAdminData', 'endSessions'];
 
 // The account making the current call (set by api and login)
 let user_ = null;
+// Each call from the page is one run of this script. Within a run the sheets are looked up and checked
+// once (see getSheet_), and the activity rows are written together at the end (see logActivity_).
+let sheets_ = {};
+let activityRows_ = [];
+function startRun_() {
+  sheets_ = {};
+  activityRows_ = [];
+}
 
 // The only entry point for the page: api(ticket, "addLink", [data]). viewAs: the owner sees the app
 // as that team account, read-only.
 function api(ticket, fn, args, viewAs) {
+  startRun_();
   user_ = checkSession_(ticket);
   if (!API.hasOwnProperty(fn)) throw new Error('Unknown action.');
   if (OWNER_API.indexOf(fn) >= 0 && user_.role !== 'owner') throw new Error('Only the owner can do this.');
@@ -1576,9 +1590,11 @@ function api(ticket, fn, args, viewAs) {
   return API[fn].apply(null, Array.isArray(args) ? args : []);
 }
 
-// Called by the login screen: checks the username and password and returns a new ticket for this browser.
+// Called by the login screen: checks the username and password and returns a new ticket for this browser,
+// with everything the page shows (so opening the app takes one call, not two).
 // Errors starting with "LOCKED:" make the page show the login screen.
 function login(username, password, device) {
+  startRun_();
   const props = PropertiesService.getScriptProperties();
   const suffix = props.getProperty('PASSWORD_SUFFIX');
   if (!suffix) throw new Error('LOCKED: The accounts are not set up yet. Add ' + ACCOUNT_PROPERTIES.join(', ') + ' in Apps Script > Project Settings > Script Properties.');
@@ -1591,7 +1607,7 @@ function login(username, password, device) {
   const wrongKey = 'wrongLogin_' + (key || '?');
   const wrong = Number(cache.get(wrongKey) || 0);
   if (wrong >= MAX_WRONG_PASSWORDS) throw new Error('LOCKED: Too many wrong passwords for this account. Please try again in 15 minutes.');
-  return withLock_(() => {
+  const ticket = withLock_(() => {
     if (!key || !real || String(password == null ? '' : password) !== real) {
       cache.put(wrongKey, String(wrong + 1), 15 * 60);
       // An unknown username is not written down (it could be a mistyped owner username)
@@ -1605,8 +1621,9 @@ function login(username, password, device) {
     props.setProperty(SESSION_PREFIX + hash_(ticket), JSON.stringify({ u: key, start: now, seen: now, device: String(device || '').slice(0, 120) }));
     user_ = account_(key);
     logActivity_('Login', '', '', String(device || '').slice(0, 120));
-    return { ticket: ticket };
+    return ticket;
   });
+  return { ticket: ticket, data: getInitialData_() };
 }
 
 // The account a session belongs to (a team username or OWNER_KEY), with the projects it sees
@@ -1700,16 +1717,23 @@ const ACTIVITY_SHEET = 'Activity';
 const ACTIVITY_HEADERS = ['Time', 'Who', 'Action', 'Project', 'Task', 'Details'];
 const MAX_ACTIVITY_SHOWN = 500;
 
-// Always called inside withLock_. who: only for a failed login (otherwise the current account).
+// Always called inside withLock_, which writes the rows when it ends (one write for a move of 4 tasks).
+// who: only for a failed login (otherwise the current account).
 function logActivity_(action, project, task, details, who) {
+  activityRows_.push([
+    new Date().toISOString(), who || (user_ ? user_.name : ''), action, project || '', task || '', String(details || '').slice(0, 1000)
+  ].map(safe_));
+}
+function writeActivity_() {
+  const rows = activityRows_;
+  activityRows_ = [];
+  if (!rows.length) return;
   try {
     const sheet = getSheet_(ACTIVITY_SHEET, ACTIVITY_HEADERS);
     const row = sheet.getLastRow() + 1;
-    const missing = row - sheet.getMaxRows();
+    const missing = row + rows.length - 1 - sheet.getMaxRows();
     if (missing > 0) sheet.insertRowsAfter(sheet.getMaxRows(), missing);
-    sheet.getRange(row, 1, 1, ACTIVITY_HEADERS.length).setNumberFormat('@').setValues([[
-      new Date().toISOString(), who || (user_ ? user_.name : ''), action, project || '', task || '', String(details || '').slice(0, 1000)
-    ].map(safe_)]);
+    sheet.getRange(row, 1, rows.length, ACTIVITY_HEADERS.length).setNumberFormat('@').setValues(rows);
   } catch (e) {
     // The log never stops the change itself
   }
@@ -2255,6 +2279,8 @@ function rowToTask_(r) {
 function getSheet_(name, headers) {
   name = name || SHEET_NAME;
   headers = headers || HEADERS;
+  // Looked up and checked once per run (every check reads the spreadsheet, which is slow)
+  if (sheets_[name]) return sheets_[name];
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   // (Re)create the header row if the sheet is new or was emptied by hand
@@ -2267,7 +2293,7 @@ function getSheet_(name, headers) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
   }
   protectSheet_(sheet, headers, fresh);
-  return sheet;
+  return sheets_[name] = sheet;
 }
 
 // Columns only the website should change. Editing them by hand in the sheet shows an
@@ -2306,12 +2332,14 @@ function writeRows_(sheet, startRow, rows) {
   sheet.getRange(startRow, 1, rows.length, HEADERS.length).setValues(rows);
 }
 
+// One change at a time; the activity of the change is written before the next one may start
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
     return fn();
   } finally {
+    writeActivity_();
     lock.releaseLock();
   }
 }
@@ -2477,7 +2505,10 @@ function rowToLink_(r) {
 }
 
 // actAs: run the server functions directly as that account (the demo data and the tests use it)
-return Object.assign({ api, login, actAs: key => { user_ = account_(key === "owner" ? OWNER_KEY : key); } }, API);
+// Every direct call is one run, like a call from the page on the real server (see startRun_)
+const run = fn => (...args) => { startRun_(); return fn(...args); };
+return Object.assign({ api, login, actAs: key => { user_ = account_(key === "owner" ? OWNER_KEY : key); } },
+  Object.fromEntries(Object.keys(API).map(k => [k, run(API[k])])));
 })();</script>
 <script>
 const google = { script: {
@@ -2770,12 +2801,14 @@ if ((() => { try { return localStorage.getItem(PREVIEW_KEY + ":version"); } catc
     if (!username || !password) return ($("lockErr").textContent = "Fill in your username and password.", $("lockErr").hidden = false);
     $("lockBtn").disabled = true;
     try {
+      // The login answer already holds everything the page shows (one call instead of two)
       const res = await callServer("login", username, password, deviceName());
       ticket = res.ticket;
       try { localStorage.setItem(TICKET_KEY, ticket); } catch (err) {}
       closeModal("lockModal");
+      useData(res.data);
       // Every login starts on Home (not on the page the previous account left open)
-      loadData().then(() => state.loaded && showView("home"));
+      showView("home");
     } catch (err) {
       // showLock already shows the reason (wrong password, account locked)
       if (!/^Locked:/.test(err.message)) showLock(err.message);
@@ -3034,24 +3067,27 @@ if ((() => { try { return localStorage.getItem(PREVIEW_KEY + ":version"); } catc
   /* ---------- Data loading ---------- */
   function loadData() {
     $("results").innerHTML = `<div class="loading"><div class="spinner"></div>Loading...</div>`;
-    return api("getInitialData").then(data => {
-      state.links = data.links;
-      state.tasks = data.tasks;
-      state.cfg = data.taskConfig;
-      state.user = data.user;
-      state.app = data;
-      state.loaded = true;
-      if (data.sheetUrl) $("sheetLink").href = data.sheetUrl;
-      showUser();
-      refreshOptions();
-      setupTaskOptions();
-      render();
-      renderTasks();
-      checkDuplicate();
-    }).catch(err => {
+    return api("getInitialData").then(useData).catch(err => {
       const msg = `<div class="empty">Could not load data: ${escapeHtml(err.message)}<br><br><button class="btn-soft btn-sm" onclick="loadData()">Try again</button></div>`;
       $("results").innerHTML = $("taskResults").innerHTML = msg;
     });
+  }
+
+  // Everything the page shows, from getInitialData (or from the login answer)
+  function useData(data) {
+    state.links = data.links;
+    state.tasks = data.tasks;
+    state.cfg = data.taskConfig;
+    state.user = data.user;
+    state.app = data;
+    state.loaded = true;
+    if (data.sheetUrl) $("sheetLink").href = data.sheetUrl;
+    showUser();
+    refreshOptions();
+    setupTaskOptions();
+    render();
+    renderTasks();
+    checkDuplicate();
   }
 
   function uniqueValues(key) {
@@ -4389,8 +4425,9 @@ if ((() => { try { return localStorage.getItem(PREVIEW_KEY + ":version"); } catc
   }
 
   /* ---------- Milestones: actions ---------- */
+  // The pressed button spins right away, so it is clear the step is being saved
   function moveTask(t, action, opts, btn) {
-    if (btn) btn.disabled = true;
+    if (btn) { btn.disabled = true; btn.classList.add("is-busy"); }
     return api("moveTask", t.id, action, Object.assign({ from: t.stage }, opts))
       .then(saved => {
         // Monthly Brief tasks that moved together with this one
@@ -4411,7 +4448,7 @@ if ((() => { try { return localStorage.getItem(PREVIEW_KEY + ":version"); } catc
         return true;
       })
       .catch(err => {
-        if (btn) btn.disabled = false;
+        if (btn) { btn.disabled = false; btn.classList.remove("is-busy"); }
         toast(err.message, true);
         return false;
       });

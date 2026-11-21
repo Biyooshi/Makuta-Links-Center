@@ -77,12 +77,14 @@
     if (!username || !password) return ($("lockErr").textContent = "Fill in your username and password.", $("lockErr").hidden = false);
     $("lockBtn").disabled = true;
     try {
+      // The login answer already holds everything the page shows (one call instead of two)
       const res = await callServer("login", username, password, deviceName());
       ticket = res.ticket;
       try { localStorage.setItem(TICKET_KEY, ticket); } catch (err) {}
       closeModal("lockModal");
+      useData(res.data);
       // Every login starts on Home (not on the page the previous account left open)
-      loadData().then(() => state.loaded && showView("home"));
+      showView("home");
     } catch (err) {
       // showLock already shows the reason (wrong password, account locked)
       if (!/^Locked:/.test(err.message)) showLock(err.message);
@@ -341,24 +343,27 @@
   /* ---------- Data loading ---------- */
   function loadData() {
     $("results").innerHTML = `<div class="loading"><div class="spinner"></div>Loading...</div>`;
-    return api("getInitialData").then(data => {
-      state.links = data.links;
-      state.tasks = data.tasks;
-      state.cfg = data.taskConfig;
-      state.user = data.user;
-      state.app = data;
-      state.loaded = true;
-      if (data.sheetUrl) $("sheetLink").href = data.sheetUrl;
-      showUser();
-      refreshOptions();
-      setupTaskOptions();
-      render();
-      renderTasks();
-      checkDuplicate();
-    }).catch(err => {
+    return api("getInitialData").then(useData).catch(err => {
       const msg = `<div class="empty">Could not load data: ${escapeHtml(err.message)}<br><br><button class="btn-soft btn-sm" onclick="loadData()">Try again</button></div>`;
       $("results").innerHTML = $("taskResults").innerHTML = msg;
     });
+  }
+
+  // Everything the page shows, from getInitialData (or from the login answer)
+  function useData(data) {
+    state.links = data.links;
+    state.tasks = data.tasks;
+    state.cfg = data.taskConfig;
+    state.user = data.user;
+    state.app = data;
+    state.loaded = true;
+    if (data.sheetUrl) $("sheetLink").href = data.sheetUrl;
+    showUser();
+    refreshOptions();
+    setupTaskOptions();
+    render();
+    renderTasks();
+    checkDuplicate();
   }
 
   function uniqueValues(key) {
@@ -1696,8 +1701,9 @@
   }
 
   /* ---------- Milestones: actions ---------- */
+  // The pressed button spins right away, so it is clear the step is being saved
   function moveTask(t, action, opts, btn) {
-    if (btn) btn.disabled = true;
+    if (btn) { btn.disabled = true; btn.classList.add("is-busy"); }
     return api("moveTask", t.id, action, Object.assign({ from: t.stage }, opts))
       .then(saved => {
         // Monthly Brief tasks that moved together with this one
@@ -1718,7 +1724,7 @@
         return true;
       })
       .catch(err => {
-        if (btn) btn.disabled = false;
+        if (btn) { btn.disabled = false; btn.classList.remove("is-busy"); }
         toast(err.message, true);
         return false;
       });
