@@ -726,6 +726,14 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.evaluate(() => lockApp());
   await page.waitForFunction(() => !localStorage.getItem("makutaTicket"));
   ok(await page.$eval("#lockModal", e => e.classList.contains("show")) && !(await page.evaluate(() => state.links.length)), "Logout shows the login screen and hides the data");
+  // A page of its own: nothing of the app (or the last account's name) is visible behind it, on a laptop or a phone
+  for (const [w, h] of [[1300, 900], [390, 844]]) {
+    await page.setViewport({ width: w, height: h });
+    ok(await page.evaluate(() => getComputedStyle(document.querySelector(".app")).display === "none" &&
+      document.querySelector(".login-box").getBoundingClientRect().width > 300 && document.documentElement.scrollWidth <= innerWidth),
+      `login page at ${w}px: the app is hidden, the form fits`);
+  }
+  await page.setViewport({ width: 1300, height: 900 });
   await page.keyboard.press("Escape");
   await page.mouse.click(5, 5);
   ok(await page.$eval("#lockModal", e => e.classList.contains("show")), "login screen cannot be closed with Esc or a click outside");
