@@ -157,9 +157,9 @@ let html = read("Index.html")
   .replace("<?!= include('Styles'); ?>", read("Styles.html"))
   .replace("<?!= include('JavaScript'); ?>", mock + read("JavaScript.html"));
 if (version) {
-  // Own login per version, a tab title that says which demo it is, and kept out of search engines
+  // Own login per version, the app's name as the tab title, and kept out of search engines
   html = html.replace(/"makutaTicket"/g, `"makutaTicket-${version}"`)
-    .replace("<head>", `<head>\n  <title>Makuta Links Center · Demo ${version}</title>\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="robots" content="noindex">`);
+    .replace("<head>", `<head>\n  <title>Makuta Links Center</title>\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="robots" content="noindex">`);
   if (!html.includes(`"makutaTicket-${version}"`)) throw new Error("login key not found");
 }
 fs.writeFileSync(out, html);
