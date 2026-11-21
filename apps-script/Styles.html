@@ -302,7 +302,17 @@
   .modal-lock { padding: 0; background: var(--app-bg); backdrop-filter: none; align-items: stretch; overflow-y: auto; }
   body:has(#lockModal.show) .app { display: none; }
   .login-page { flex: 1; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); min-height: 100%; }
-  .login-brand { display: flex; flex-direction: column; justify-content: space-between; gap: 40px; padding: 40px 48px; background: var(--ink); color: var(--ink-text); }
+  /* Brand side: logo, then the pitch right under it; a circuit-board vector fills the space below */
+  .login-brand { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-start; gap: 56px; padding: 40px 48px; color: var(--ink-text);
+    background:
+      radial-gradient(circle at 100% 100%, rgba(217, 154, 43, .22), transparent 50%),
+      radial-gradient(circle at 0% 85%, rgba(56, 132, 230, .2), transparent 45%),
+      var(--ink); }
+  .login-brand > * { position: relative; z-index: 1; }
+  .login-brand::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' fill='none' stroke-width='1.5'%3E%3Cg stroke='rgba(255,255,255,.09)'%3E%3Cpath d='M0 40h40l20 20h40l20-20h40'/%3E%3Cpath d='M120 0v40'/%3E%3Cpath d='M120 160v-20'/%3E%3Cpath d='M20 0v30'/%3E%3Cpath d='M20 160v-30l-20-20'/%3E%3Cpath d='M160 110h-20'/%3E%3C/g%3E%3Cpath stroke='rgba(217,154,43,.4)' d='M60 160v-40l20-20h20M60 0v15'/%3E%3Cg fill='rgba(255,255,255,.18)'%3E%3Ccircle cx='20' cy='30' r='3'/%3E%3Ccircle cx='120' cy='140' r='3'/%3E%3Ccircle cx='140' cy='110' r='3'/%3E%3C/g%3E%3Cg fill='rgba(217,154,43,.75)'%3E%3Ccircle cx='100' cy='100' r='3.5'/%3E%3Ccircle cx='60' cy='15' r='3'/%3E%3C/g%3E%3C/svg%3E");
+    /* Strong at the bottom, gone behind the logo and the pitch so the text stays clean */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 40%, #000 80%); mask-image: linear-gradient(to bottom, transparent 40%, #000 80%); }
   .login-logo { display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 700; color: #fff; line-height: 1.15; }
   .login-logo span:last-child { display: flex; flex-direction: column; }
   .login-logo small { font-size: 12px; font-weight: 500; color: var(--ink-muted); }
@@ -318,8 +328,11 @@
   .login-steps li.on i { background: var(--accent); border-color: var(--accent); }
   .login-steps li.now i { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(217, 154, 43, .25); }
   .login-steps li.on, .login-steps li.now { color: #fff; }
-  .login-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 40px 24px; }
-  .login-box { width: 100%; max-width: 380px; text-align: left; }
+  /* Form side: a faint dot grid behind; the form itself sits on a solid card so every field reads clearly */
+  .login-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 40px 24px;
+    background: radial-gradient(color-mix(in srgb, var(--muted) 28%, transparent) 1.2px, transparent 1.6px) 0 0 / 22px 22px, var(--app-bg); }
+  .login-box { width: 100%; max-width: 400px; padding: 32px; text-align: left; background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); }
+  .login-credit { padding: 4px 10px; border-radius: 999px; background: var(--app-bg); }
   .login-box h2 { font-size: 26px; color: var(--heading); }
   .login-sub { margin: 4px 0 24px; font-size: 14px; color: var(--muted); }
   .login-box label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
@@ -331,6 +344,8 @@
   @media (max-width: 720px) {
     .login-page { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
     .login-brand { gap: 20px; padding: 24px 20px 28px; }
+    .login-brand::before { -webkit-mask-image: linear-gradient(to bottom, transparent, #000); mask-image: linear-gradient(to bottom, transparent, #000); opacity: .6; }
+    .login-box { padding: 24px 20px; }
     .login-pitch h1 { font-size: 20px; }
     .login-steps { margin-top: 20px; }
     .login-panel { justify-content: flex-start; padding: 28px 20px; }
