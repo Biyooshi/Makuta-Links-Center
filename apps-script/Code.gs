@@ -328,11 +328,14 @@ function dir_() {
   if (team_) return team_;
   let raw = null;
   try { raw = JSON.parse(CacheService.getScriptCache().get(TEAM_CACHE) || 'null'); } catch (e) {}
-  if (!raw) {
+  // Read under the lock: a read that started before a change on the page could otherwise put the old team
+  // back in the cache for 10 minutes
+  if (!raw) raw = withLock_(() => {
     if (!PropertiesService.getScriptProperties().getProperty(TEAM_SEEDED)) seedTeam_();
-    raw = readTeam_();
-    cacheTeam_(raw);
-  }
+    const fresh = readTeam_();
+    cacheTeam_(fresh);
+    return fresh;
+  });
   return team_ = buildDir_(raw);
 }
 
@@ -413,6 +416,14 @@ function pageProjects_() {
   return out;
 }
 
+// The emoji of every project, also archived ones (used for their links in Resources)
+function projectIcons_() {
+  const d = dir_();
+  const out = {};
+  Object.keys(d.projects).forEach(c => out[c] = d.projects[c].icon);
+  return out;
+}
+
 // Names of the active videographers
 const videographers_ = () => dir_().raw.videographers.filter(v => v.active).map(v => v.name);
 
@@ -470,6 +481,8 @@ function writeTeamRow_(name, headers, key, values) {
   sheet.getRange(row, 1, 1, headers.length).setNumberFormat('@').setValues([values.concat([added, now]).map(safe_)]);
 }
 
+// Words of task titles ("BRIEF ORG DECEMBER KRR"): a project code can't be one, or the title would be read wrongly
+const titleWords_ = () => ['ORG', 'ADS', 'BRIEF', 'VIDEO', 'CTC', 'NON', 'SHOOTING', 'EVENT', 'COLLATERAL', 'STATIC'].concat(MONTH_NAMES, Object.keys(MONTH_WORDS));
 const ROLE_JOBS = { writer: 'the content writer', designer: 'the graphic designer' };
 // "Obi is still the content writer of VTB and KRR."
 function stillOnProjects_(raw, member) {
@@ -554,7 +567,8 @@ function saveProject_(data, isNew) {
     const code = String(data.code == null ? '' : data.code).trim();
     const old = raw.projects.filter(p => p.code === code)[0];
     if (isNew === true) {
-      if (!/^[A-Za-z0-9][A-Za-z0-9-]{1,11}$/.test(code)) throw new Error('The project code must be 2 to 12 letters or digits (e.g. BSD).');
+      if (!/^[A-Za-z0-9]{2,12}$/.test(code)) throw new Error('The project code must be 2 to 12 letters or digits, without spaces (e.g. BSD).');
+      if (titleWords_().indexOf(code.toUpperCase()) >= 0) throw new Error('"' + code + '" is a word used in task titles (like ORG, ADS or a month), so it can\'t be a project code.');
       const taken = raw.projects.filter(p => p.code.toLowerCase() === code.toLowerCase())[0];
       if (taken || code.toUpperCase() === REFERENCE_PROJECT) throw new Error('The project code "' + code + '" is already used' + (taken && !taken.active ? ' by an archived project. Restore that one instead.' : '. Choose another one.'));
     } else if (!old) {
@@ -671,7 +685,7 @@ function canPress_(u, t) {
 // existed have no name: the project's content writer too)
 function canUndo_(u, t) {
   const last = t.history[t.history.length - 1] || {};
-  return isBoss_(u) || (last.by ? last.by === u.name : managesProject_(u, t.project));
+  return isBoss_(u) || (last.byKey ? last.byKey === u.key : last.by ? last.by === u.name : managesProject_(u, t.project));
 }
 // Tick Event Attribute deliverables: the content writer and graphic designer of the project, managerial, the owner
 const canTick_ = (u, t) => managesProject_(u, t.project) || (u.role === 'designer' && (projectOf_(t.project) || {}).designerKey === u.key);
@@ -697,10 +711,11 @@ function getInitialData_() {
   return {
     links: getLinks_(),
     tasks: getTasks_(),
-    taskConfig: { stages: stages_(), projects: pageProjects_(), videographers: videographers_(), contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS, linkSteps: LINK_STEPS, assistantName: assistantName_() },
+    taskConfig: { stages: stages_(), projects: pageProjects_(), projectIcons: projectIcons_(), videographers: videographers_(), contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS, linkSteps: LINK_STEPS, assistantName: assistantName_() },
     // Who is logged in (the owner's username is never sent)
-    user: { name: user_.name, role: user_.role, roleName: ROLE_NAMES[user_.role], projects: user_.projects, all: user_.all, readOnly: !!user_.readOnly,
-      canManageTeam: isBoss_(user_) && !user_.readOnly },
+    // key: the team username (for Undo); never sent for the owner
+    user: Object.assign(user_.role === 'owner' ? {} : { key: user_.key }, { name: user_.name, role: user_.role, roleName: ROLE_NAMES[user_.role],
+      projects: user_.projects, all: user_.all, readOnly: !!user_.readOnly, canManageTeam: isBoss_(user_) && !user_.readOnly }),
     sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl()
   };
 }
@@ -810,7 +825,7 @@ function addTasks_(list, workMonth) {
     const first = sheet.getLastRow() + 1;
     return tasks.map((t, i) => {
       Object.assign(t, { id: newId_('T'), createdAt: now, updatedAt: now, stage: 'brief', checklist: [] });
-      t.history = [{ at: now, action: 'created', from: '', to: 'brief', note: '', by: user_.name }];
+      t.history = [{ at: now, action: 'created', from: '', to: 'brief', note: '', by: user_.name, byKey: user_.key }];
       logActivity_('Created task', t.project, t.title, month ? 'Monthly Brief ' + month : t.type);
       return writeTask_(sheet, first + i, t);
     });
@@ -944,7 +959,7 @@ function stepTask_(task, action, opts, now, sync) {
   const steps = pipeline_(task.type, task.channel);
   const i = steps.indexOf(task.stage);
   const entry = (act, to) => {
-    const e = { at: now, action: act, from: task.stage, to: to, note: opts.note, by: user_.name };
+    const e = { at: now, action: act, from: task.stage, to: to, note: opts.note, by: user_.name, byKey: user_.key };
     if (sync) e.sync = sync;
     if (opts.link) e.link = opts.link;
     task.history.push(e);

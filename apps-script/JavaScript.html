@@ -328,7 +328,7 @@
     const u = state.user;
     $("userChip").hidden = false;
     $("userName").textContent = u.name;
-    $("userAvatar").textContent = u.name.replace(/^(Kak|Bu) /, "").slice(0, 1).toUpperCase();
+    $("userAvatar").textContent = u.name.replace(/^(Kak|Bu|Pak|Mas|Mbak) /, "").slice(0, 1).toUpperCase();
     // "Obi Content Writer", but just "Owner" for the owner
     $("userRole").textContent = u.roleName === u.name ? "" : u.roleName;
     // While viewing as someone else the Admin tab is hidden too (the banner's Exit brings it back)
@@ -633,7 +633,9 @@
   function projectIcon(name) {
     const projects = (state.cfg && state.cfg.projects) || {};
     const key = Object.keys(projects).find(p => p.toLowerCase() === String(name || "").trim().toLowerCase());
-    return key ? projects[key].icon : name === REFERENCE_PROJECT ? CATEGORY_ICONS.Reference : "📁";
+    const icons = (state.cfg && state.cfg.projectIcons) || {};
+    const archived = Object.keys(icons).find(p => p.toLowerCase() === String(name || "").trim().toLowerCase());
+    return key ? projects[key].icon : archived ? icons[archived] : name === REFERENCE_PROJECT ? CATEGORY_ICONS.Reference : "📁";
   }
   const projectAvatar = name => name
     ? `<span class="avatar" style="--h:${projectHue(name)}">${projectIcon(name)}</span>`
@@ -916,7 +918,7 @@
   }
   function canUndo(t) {
     const last = t.history[t.history.length - 1] || {};
-    return !me().readOnly && (isBoss() || (last.by ? last.by === me().name : managesProject(t.project)));
+    return !me().readOnly && (isBoss() || (last.byKey ? last.byKey === me().key : last.by ? last.by === me().name : managesProject(t.project)));
   }
   const canTick = t => managesProject(t.project) || (!me().readOnly && me().role === "designer" && (state.cfg.projects[t.project] || {}).designer === me().name);
   // My Tasks: the steps I am responsible for (not every step managerial could press). The managerial account
@@ -1892,7 +1894,14 @@
     state.team = team;
     renderTeam();
     toast(message);
-    api("getInitialData").then(useData).catch(() => {});
+    api("getInitialData").then(data => {
+      const step = $("tStep").value;
+      useData(data);
+      if (step !== $("tStep").value && [...$("tStep").options].some(o => o.value === step)) {
+        $("tStep").value = step;
+        renderTasks();
+      }
+    }).catch(() => {});
   }
 
   function renderTeam() {
@@ -2043,7 +2052,7 @@
       types: [...document.querySelectorAll("#pfTypes input:checked")].map(i => i.value),
     };
     const editing = state.editingProject;
-    const problem = !/^[A-Za-z0-9][A-Za-z0-9-]{1,11}$/.test(data.code) ? ["pfCode", "The project code must be 2 to 12 letters or digits (e.g. BSD)."]
+    const problem = !/^[A-Za-z0-9]{2,12}$/.test(data.code) ? ["pfCode", "The project code must be 2 to 12 letters or digits, without spaces (e.g. BSD)."]
       : !data.writer ? ["pfWriter", "Please choose the content writer."]
       : !data.designer ? ["pfDesigner", "Please choose the graphic designer."]
       : !data.types.length ? [null, "Tick at least one content type."] : null;

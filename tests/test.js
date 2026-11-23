@@ -1062,8 +1062,20 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     call(hendra, "saveProject", { code: "BSD", icon: "🏬", writer: "puput", designer: "wawan", videographer: "Anno", types: ["Static"], channel: "both" }, false);
     out.oldVideoEdit = call(puput, "updateTask", v.id, { title: v.title, project: "BSD", type: v.type, videographer: v.videographer, deadline: "2026-12-21" }).deadline;
     out.newVideo = err(() => call(puput, "addTask", { title: "VIDEO CTC ORG JANUARY BSD", project: "BSD", type: "Video (Shooting)" }));
+    // Codes that are words of task titles would make the title read wrongly
+    out.reservedCodes = ["ORG", "ads", "December", "Dec", "Video", "B-SD", "B SD"].map(code =>
+      err(() => call(hendra, "saveProject", { code, icon: "🏢", writer: "puput", designer: "dimas", types: ["Static"], channel: "both" }, true)));
+    // Undo still works for the person who moved, after their name changed
+    const u1 = call(puput, "addTask", { title: "BRIEF ORG JANUARY BSD", project: "BSD", type: "Static" });
+    call(puput, "moveTask", u1.id, "advance", { link: "https://docs.google.com/document/d/u1" });
+    call(owner, "saveMember", { username: "puput", name: "Puput Ayu", role: "writer" }, false);
+    out.undoAfterRename = call(puput, "moveTask", u1.id, "undo", {}).stage;
+    out.otherCantUndo = (() => { call(puput, "moveTask", u1.id, "advance", { link: "https://docs.google.com/document/d/u1" }); return err(() => call(obi, "moveTask", u1.id, "undo", {})); })();
+    call(owner, "saveMember", { username: "puput", name: "Puput", role: "writer" }, false);
+    call(puput, "deleteTask", u1.id);
     // Archived project: hidden with its tasks, no new tasks; restored: back
     call(hendra, "setProjectActive", "BSD", false);
+    out.archivedIcon = call(owner, "getInitialData").taskConfig.projectIcons.BSD;
     out.hiddenOwner = call(owner, "getTasks").some(x => x.project === "BSD");
     out.hiddenPuput = call(puput, "getInitialData").user.projects.includes("BSD");
     out.notInConfig = "BSD" in call(owner, "getInitialData").taskConfig.projects;
@@ -1113,6 +1125,10 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   ok(tm.qcPerson === "Kak Hendra / Bu Riska S" && tm.voPerson === "Bu Riska S","QC and Voice Over show the current names from the Team sheet");
   ok(/still the graphic designer of BSD/.test(tm.archiveBusy) && /still the graphic designer of BSD/.test(tm.roleBusy), "someone still set on a project can't be archived or change role");
   ok(tm.taskDesignerNow === "Wawan" && tm.iconNow === "🏬", "a new designer for a project: its tasks follow at once");
+  ok(tm.reservedCodes.slice(0, 5).every(e => /used in task titles/.test(e)) && tm.reservedCodes.slice(5).every(e => /letters or digits/.test(e)),
+    "project codes can't be title words (ORG, ADS, months, VIDEO) or have spaces / dashes");
+  ok(tm.undoAfterRename === "brief" && /not found/.test(tm.otherCantUndo), "Undo by the person who moved still works after their name changes");
+  ok(tm.archivedIcon === "🏬", "an archived project keeps its emoji (for its links in Resources)");
   ok(/^LOCKED/.test(tm.dimasSessionEnded) && /^LOCKED: Wrong/.test(tm.dimasCantLogin) && !tm.notInViewAs && tm.dimasBack, "archived: logged out at once and can't log in (not in View as); restored: can log in again");
   ok(tm.oldVideoEdit === "2026-12-21" && /has no Video \(Shooting\)/.test(tm.newVideo), "a content type the project no longer makes: older tasks can still be edited, no new ones");
   ok(!tm.hiddenOwner && !tm.hiddenPuput && !tm.notInConfig && /choose the project/.test(tm.noNewTask) && /not found/.test(tm.archivedCantMove) && tm.keptInSheet === 2 && tm.backTasks === 2,
