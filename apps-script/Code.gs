@@ -711,7 +711,7 @@ function getInitialData_() {
   return {
     links: getLinks_(),
     tasks: getTasks_(),
-    taskConfig: { stages: stages_(), projects: pageProjects_(), projectIcons: projectIcons_(), videographers: videographers_(), contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS, linkSteps: LINK_STEPS, assistantName: assistantName_() },
+    taskConfig: { stages: stages_(), projects: pageProjects_(), projectOrder: Object.keys(pageProjects_()), projectIcons: projectIcons_(), videographers: videographers_(), contentTypes: CONTENT_TYPES, channels: CHANNELS, briefMonthsAhead: BRIEF_MONTHS_AHEAD, eventType: EVENT_TYPE, eventItems: EVENT_ITEMS, collateralType: COLLATERAL_TYPE, collateralItems: COLLATERAL_ITEMS, stepActors: STEP_ACTORS, linkSteps: LINK_STEPS, assistantName: assistantName_() },
     // Who is logged in (the owner's username is never sent)
     // key: the team username (for Undo); never sent for the owner
     user: Object.assign(user_.role === 'owner' ? {} : { key: user_.key }, { name: user_.name, role: user_.role, roleName: ROLE_NAMES[user_.role],

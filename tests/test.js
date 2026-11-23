@@ -1000,7 +1000,8 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     out.seeded = team0.members.length === 8 && team0.projects.length === 7 && team0.videographers.length === 2 &&
       mockSheet("Team").data[0].join() === "Username,Name,Role,Status,Added,Updated" && mockSheet("Team").data[1][2] === "Managerial" &&
       mockSheet("Projects").data.find(r => r[0] === "Makuta")[6] === "ORG only";
-    out.seededConfig = JSON.stringify(call(owner, "getInitialData").taskConfig.projects.KRR);
+    out.order = call(owner, "getInitialData").taskConfig.projectOrder.join();
+    out.seededConfig =JSON.stringify(call(owner, "getInitialData").taskConfig.projects.KRR);
     out.writerRefused = err(() => call(obi, "getTeam"));
     out.ownerRoles = team0.roles.map(r => r.key).join();
     out.managerRoles = call(hendra, "getTeam").roles.map(r => r.key).join();
@@ -1106,7 +1107,8 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     out.viewAsWrite = err(() => GAS.api(owner, "saveVideographer", ["Cici"], "hendra"));
     return out;
   });
-  ok(tm.seeded, "Team sheets are filled the first time with the 8 accounts, 7 projects and 2 videographers (readable in the sheet)");
+  ok(tm.order === "VTB,KRR,Makuta,GTR,GM,HC,LUX", "projects keep the order of the Projects sheet (sent as a list, not only as an object)");
+  ok(tm.seeded,"Team sheets are filled the first time with the 8 accounts, 7 projects and 2 videographers (readable in the sheet)");
   ok(tm.seededConfig === JSON.stringify({ writer: "Obi", designer: "Alfid", videographer: "Anno", icon: "🌴", types: ["Static", "Video (Shooting)", "Event Attribute"], orgOnly: false, adsOnly: false }),
     "projects from the sheet are the same as before (KRR: Obi, Alfid, Anno, its types)");
   ok(/managerial and the owner/.test(tm.writerRefused) && tm.writerApi.every(e => /managerial and the owner/.test(e)), "content writers can't open or change Team & Projects");
@@ -1202,6 +1204,11 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   });
   await loginAs("owner", "owner");
   ok(await page.evaluate(() => Object.keys(state.cfg.projects).join() === "VTB,KRR,Makuta,GTR,GM,HC,LUX"), "the team sheets fill again from the start when emptied (test clean-up)");
+  // Home: the "Late tasks" count is the same number as the Late card (linked Monthly Brief tasks share a row)
+  await page.evaluate(() => showView("home"));
+  ok(await page.evaluate(() => parseInt($("turnCount").textContent) === parseInt(document.querySelector('[data-stat="late"] .stat-n').textContent) &&
+    [...document.querySelectorAll("#sideProjects [data-project]")].map(b => b.dataset.project).join() === "VTB,KRR,Makuta,GTR,GM,HC,LUX"),
+    "Home: Late tasks count = the Late card; the sidebar follows the Projects sheet order");
 
   // Apps Script cuts "//" inside template literals as if it started a comment (write "\/\/" instead)
   const js = fs.readFileSync(path.join(__dirname, "..", "apps-script", "JavaScript.html"), "utf8");

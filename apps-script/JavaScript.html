@@ -981,7 +981,7 @@
     $("tfVideographer").innerHTML = `<option value="">-- Select --</option>` + cfg.videographers.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)} (VG-${escapeHtml(v)})</option>`).join("");
     // New tasks only for the projects this account looks after
     $("tfProject").innerHTML = $("bfProject").innerHTML = `<option value="">-- Select --</option>` +
-      Object.keys(cfg.projects).filter(managesProject).map(p => `<option value="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}</option>`).join("");
+      projectCodes().filter(managesProject).map(p => `<option value="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}</option>`).join("");
     $("bfVideographer").innerHTML = $("tfVideographer").innerHTML;
     // Resources: whose edit a CTC-Video is (the one being edited keeps its videographer, also an archived one)
     const source = $("videoSource").value;
@@ -1000,9 +1000,11 @@
   // Graphic designers start on their own steps; everyone else on all current work
   const defaultStep = () => me().role === "designer" ? "mine" : "current";
 
+  // The projects in the order of the Projects sheet (an object sent by Apps Script loses its key order)
+  const projectCodes = () => (state.cfg.projectOrder || Object.keys(state.cfg.projects)).filter(p => p in state.cfg.projects);
   // This account's projects first (VTB, KRR, ...), then any other project used in a task it can see
   function taskProjects() {
-    const known = Object.keys(state.cfg.projects).filter(p => me().projects.includes(p));
+    const known = projectCodes().filter(p => me().projects.includes(p));
     const extra = [...new Set(state.tasks.map(t => t.project))].filter(p => p && !known.includes(p)).sort((a, b) => a.localeCompare(b));
     return known.concat(extra);
   }
@@ -1644,7 +1646,8 @@
     const turn = active.filter(t => owner ? late(t) : isMyStep(t)).sort(byDeadline)
       .filter((t, i, list) => !list.slice(0, i).some(o => linkedTasks(o).includes(t)));
     $("turnTitle").textContent = owner ? "Late tasks" : "Waiting for you";
-    $("turnCount").textContent = turn.length ? plural(turn.length, "task") : "";
+    const turnTasks = active.filter(t => owner ? late(t) : isMyStep(t)).length;
+    $("turnCount").textContent = turnTasks ? plural(turnTasks, "task") : "";
     $("turnNote").textContent = owner ? "Tasks past their deadline, with who they are waiting for."
       : "Press the button when your step is done. The task then moves on to the next person.";
     $("homeTurn").innerHTML = turn.length ? turn.map(t => `<div class="turn-row${late(t) ? " is-late" : ""}">
