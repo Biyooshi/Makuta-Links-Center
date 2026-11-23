@@ -31,6 +31,7 @@
         <button type="button" id="tabHome" class="active" onclick="showView('home')" title="Home"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span class="nav-label">Home</span></button>
         <button type="button" id="tabTasks" onclick="openMilestones()" title="Milestones"><svg class="icon" viewBox="0 0 24 24"><path d="M4 22V4M4 4h12l-2 4 2 4H4"/></svg><span class="nav-label">Milestones</span><span class="nav-count" id="navTurn" hidden></span></button>
         <button type="button" id="tabLinks" onclick="showView('links')" title="Resources"><svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg><span class="nav-label">Resources</span></button>
+        <button type="button" id="tabTeam" onclick="showView('team')" title="Team & Projects" hidden><svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14a6.5 6.5 0 0 1 3 6"/></svg><span class="nav-label">Team &amp; Projects</span></button>
         <button type="button" id="tabAdmin" onclick="showView('admin')" title="Admin" hidden><svg class="icon" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/></svg><span class="nav-label">Admin</span></button>
       </nav>
       <div class="side-section">
@@ -165,8 +166,6 @@
                   <label for="videoSource">Video Source <span class="req">*</span></label>
                   <select id="videoSource">
                     <option value="">-- Who edited this video? --</option>
-                    <option value="VG-Arif">[VG-Arif]</option>
-                    <option value="VG-Anno">[VG-Anno]</option>
                   </select>
                   <div class="error" id="videoSourceErr" hidden>Please choose the video source.</div>
                 </div>
@@ -281,6 +280,36 @@
         </div>
 
         <div id="taskResults"><div class="loading"><div class="spinner"></div>Loading your tasks...</div></div>
+      </div>
+
+      <!-- ============ TEAM & PROJECTS (managerial and the owner) ============ -->
+      <div id="viewTeam" hidden>
+        <div class="page-tabs" role="tablist" aria-label="Team & Projects">
+          <button type="button" role="tab" class="active" data-ttab="team" aria-selected="true">Team</button>
+          <button type="button" role="tab" data-ttab="projects" aria-selected="false">Projects</button>
+        </div>
+        <p class="block-note" id="teamNote"></p>
+        <div class="meta-bar">
+          <div class="meta-left">
+            <button type="button" class="btn-accent btn-sm" id="teamAddBtn">+ Add person</button>
+            <span id="teamCount"></span>
+          </div>
+          <div class="actions">
+            <label class="check-row"><input type="checkbox" id="teamArchived"> Show archived</label>
+          </div>
+        </div>
+        <div id="teamResults"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+        <section class="admin-card vg-card" id="vgCard" hidden>
+          <div class="admin-head">
+            <h3>🎥 Videographers</h3>
+            <span class="muted">Freelancers without a login: picked per project or per video task, and "VG-Name" in Resources.</span>
+          </div>
+          <ul class="vg-list" id="vgList"></ul>
+          <form class="admin-row vg-form" id="vgForm" novalidate>
+            <input id="vgName" maxlength="30" placeholder="Name, e.g. Anno" aria-label="New videographer's name">
+            <button type="submit" class="btn-soft btn-sm" id="vgAdd">+ Add videographer</button>
+          </form>
+        </section>
       </div>
 
       <!-- ============ ADMIN VIEW (owner only) ============ -->
@@ -421,6 +450,82 @@
         <div class="actions" style="margin-top:16px">
           <button type="button" class="btn-soft" onclick="closeModal('batchModal')">Cancel</button>
           <button type="submit" class="btn-accent" id="batchSaveBtn">Create Tasks</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Team & Projects: add / edit a person -->
+  <div class="modal-bg" id="memberModal">
+    <div class="modal modal-left">
+      <h3 id="memberTitle">Add person</h3>
+      <form id="memberForm" novalidate>
+        <div class="field">
+          <label for="mfName">Name <span class="req">*</span></label>
+          <input id="mfName" maxlength="40" placeholder="e.g. Kak Dimas" autocomplete="off">
+          <div class="help">Shown everywhere in the app, e.g. in History and "Waiting for".</div>
+        </div>
+        <div class="field">
+          <label for="mfUsername">Username <span class="req">*</span></label>
+          <input id="mfUsername" maxlength="20" placeholder="e.g. dimas" autocomplete="off" autocapitalize="none" spellcheck="false">
+          <div class="help" id="mfUserHelp"></div>
+        </div>
+        <div class="field">
+          <label for="mfRole">Role <span class="req">*</span></label>
+          <select id="mfRole"></select>
+          <div class="help" id="mfRoleHelp"></div>
+        </div>
+        <div class="error" id="memberErr" hidden></div>
+        <div class="actions" style="margin-top:16px">
+          <button type="button" class="btn-soft" onclick="closeModal('memberModal')">Cancel</button>
+          <button type="submit" class="btn-accent" id="memberSave">Add person</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Team & Projects: add / edit a project -->
+  <div class="modal-bg" id="projectModal">
+    <div class="modal modal-left modal-wide">
+      <h3 id="projectTitle">Add project</h3>
+      <form id="projectForm" novalidate>
+        <div class="grid-2">
+          <div class="field">
+            <label for="pfCode">Project code <span class="req">*</span></label>
+            <input id="pfCode" maxlength="12" placeholder="e.g. BSD" autocomplete="off" autocapitalize="characters" spellcheck="false">
+            <div class="help" id="pfCodeHelp"></div>
+          </div>
+          <div class="field">
+            <label for="pfIcon">Icon</label>
+            <input id="pfIcon" maxlength="8" placeholder="e.g. 🏢" autocomplete="off">
+            <div class="help">One emoji, shown next to the project everywhere.</div>
+          </div>
+          <div class="field">
+            <label for="pfWriter">Content Writer <span class="req">*</span></label>
+            <select id="pfWriter"></select>
+          </div>
+          <div class="field">
+            <label for="pfDesigner">Graphic Designer <span class="req">*</span></label>
+            <select id="pfDesigner"></select>
+          </div>
+          <div class="field">
+            <label for="pfVideographer">Videographer</label>
+            <select id="pfVideographer"></select>
+          </div>
+          <div class="field">
+            <label for="pfChannel">ORG / ADS <span class="req">*</span></label>
+            <select id="pfChannel"></select>
+          </div>
+        </div>
+        <div class="field" style="margin-top:16px">
+          <label>Content types <span class="req">*</span></label>
+          <div class="type-checks" id="pfTypes"></div>
+          <div class="help">Collateral can be made for every project.</div>
+        </div>
+        <div class="error" id="projectErr" hidden></div>
+        <div class="actions" style="margin-top:16px">
+          <button type="button" class="btn-soft" onclick="closeModal('projectModal')">Cancel</button>
+          <button type="submit" class="btn-accent" id="projectSave">Add project</button>
         </div>
       </form>
     </div>

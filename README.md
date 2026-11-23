@@ -5,6 +5,8 @@ Website tim konten Makuta: **Milestones** (timeline setiap task konten, dengan l
 ## Akun & hak akses
 Password tidak ditulis di kode (repo ini publik). Password akun tim = **username + `PASSWORD_SUFFIX`** (Script Properties), owner memakai `OWNER_USERNAME` / `OWNER_PASSWORD`. Tidak ada fitur lupa / ganti password: untuk mengganti, ubah Script Properties.
 
+Tim awal (sekarang diatur di halaman **Team & Projects**, lihat di bawah):
+
 | Username | Nama | Peran | Project |
 |---|---|---|---|
 | hendra | Kak Hendra | Managerial | semua |
@@ -21,7 +23,17 @@ Password tidak ditulis di kode (repo ini publik). Password akun tim = **username
 - **Graphic designer:** Design dan Motion / ToV (wajib menempelkan link result).
 - **Kak Faza:** Send to Client, QC Client, Run Ads (Musthofa).
 - **Managerial:** semua QC Internal, dan boleh menekan semua langkah. **Owner:** semuanya, plus tab Admin (siapa yang login, activity log, View as).
-- Login diingat 30 hari di browser itu. Salah password 10 kali → akun itu terkunci 15 menit. Daftar akun dan perannya ada di `USERS` dan `PROJECTS` (`Code.gs`).
+- Login diingat 30 hari di browser itu. Salah password 10 kali → akun itu terkunci 15 menit.
+
+## Team & Projects (managerial dan owner)
+Menu **Team & Projects** di sidebar dipakai untuk menambah orang, project, dan videografer tanpa mengubah kode. Isinya tersimpan di sheet **Team**, **Projects**, dan **Videographers**. Saat pertama kali dibuka, ketiga sheet ini otomatis diisi dengan tim di atas (tercatat di Script Properties `TEAM_SEEDED`).
+- **Tab Team:** tambah orang (nama, username, role). Role yang bisa dipilih: Managerial, Assistant Manager, Content Writer, Graphic Designer. Owner tidak tampil dan tidak bisa ditambah. Password orang baru otomatis **username + `PASSWORD_SUFFIX`**, sama seperti yang lain. Username tidak bisa diganti setelah dibuat; nama dan role bisa.
+- **Hanya owner** yang bisa menambah, mengubah, atau mengarsipkan akun **Managerial**. Managerial bisa mengatur role lainnya.
+- **Archive, bukan hapus.** Orang yang diarsipkan langsung logout dan tidak bisa login lagi, tetapi riwayatnya tetap ada. **Restore** mengembalikannya. Seseorang tidak bisa diarsipkan (atau diganti role-nya) selama masih menjadi content writer / graphic designer sebuah project aktif. Akun sendiri dan Managerial terakhir juga tidak bisa diarsipkan.
+- **Tab Projects:** tambah atau edit project: kode (tidak bisa diganti setelah dibuat), emoji, Content Writer, Graphic Designer, Videographer (atau dipilih per video), content type, dan ORG + ADS / ORG only / ADS only. Mengganti writer atau designer langsung berlaku ke task yang sedang berjalan. Project yang diarsipkan disembunyikan bersama task-nya (tetap ada di sheet Tasks), dan kembali saat di-**Restore**.
+- **Videographers** (di tab Projects): videografer freelance tanpa login, dipakai di project, task video, dan kategori `CTC-Video [VG-Nama]` di Resources.
+- Nama QC (`Kak Hendra / Bu Riska`), "via Kak Faza", dan Voice Over (selalu akun `riska`) diambil dari sheet Team, jadi ikut berubah kalau namanya diganti.
+- Semua perubahan tercatat di Activity. Kalau sheet Team / Projects / Videographers diedit langsung, perubahannya terlihat di aplikasi paling lambat 10 menit; perubahan lewat halaman Team & Projects langsung terlihat.
 
 ## Isi folder
 
@@ -197,7 +209,7 @@ Tab **Milestones** berisi setiap task konten, dikelompokkan per project, lengkap
   - **Undo** membatalkan langkah terakhir kalau salah klik. **History** menampilkan semua langkah + tanggal + catatan revisi.
 - Task yang sudah selesai tetap tampil (abu-abu, di bawah, tidak bisa di-Edit; step terakhir **Live on Ads / Scheduled / Posted** tetap hijau) selama 30 hari setelah selesai (`RECENT_DONE_DAYS` di `JavaScript.html`). Setelah itu hanya tampil lewat filter **Show → Done / All tasks**.
 - Filter Milestones: **Show** (Active, My Tasks, Late, Due in 7 days, Done, All, atau per tahap), **Project**, **Month**, dan pencarian (ketik ORG, ADS, Collateral, Event Attribute, nama orang, dll.).
-- Nama orang, emoji, content type, dan organic only per project diatur di bagian atas `Code.gs` (`PROJECTS`, `VIDEOGRAPHERS`, `STAGES`). Edit di sana kalau tim berubah, lalu deploy **New version**.
+- Orang, project (emoji, content type, ORG / ADS), dan videografer diatur di halaman **Team & Projects**. Langkah-langkah timeline ada di `STAGE_LIST` (`Code.gs`).
 - Di sheet **Tasks**, kolom **Current Step** dan **Revisions** hanya untuk dibaca; perubahan step dilakukan lewat tombol di website (kolom **History** dan **Checklist** jangan diedit manual). Kolom **Work Month** dan **For Month** diisi oleh Monthly Brief dan menghubungkan task-task satu bulan; jangan diubah manual. Task lama yang dibuat satu per satu (misalnya `BRIEF ORG DES KRR`) otomatis diubah sekali ke format Monthly Brief saat aplikasi pertama dibuka setelah update: judul dirapikan (`BRIEF ORG DECEMBER KRR`) dan Work Month diisi. Event Attribute dan judul di luar format tidak diubah. Hasilnya tercatat di Script Properties `UPGRADED_MONTHLY_BRIEF`.
 
 ## Tentang data di Google Sheet
@@ -211,6 +223,7 @@ Tab **Milestones** berisi setiap task konten, dikelompokkan per project, lengkap
 - Teks disimpan sebagai teks biasa, jadi nilai seperti `001`, `50%`, atau `12/11` tidak akan diubah otomatis oleh Google Sheets.
 - Kalau sheet **Links** terhapus atau dikosongkan, website akan membuatnya lagi (dengan judul kolom) secara otomatis.
 - Sheet **Activity** mencatat setiap login dan perubahan (siapa, kapan, apa). Owner melihatnya di tab **Admin**.
+- Sheet **Team**, **Projects**, dan **Videographers** diisi lewat halaman Team & Projects. Kolom **Username** / **Code** / **Name** (kolom pertama) jangan diubah manual: task dan login memakainya.
 
 ## Troubleshooting
 - **"Sorry, unable to open the file at present"** → biasanya karena login lebih dari 1 akun Google di browser. Buka URL-nya di jendela Incognito / profil Chrome yang hanya login ke akun pemilik.

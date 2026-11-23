@@ -9,7 +9,8 @@
     return m ? { base: m[1], source: m[2] } : { base: c, source: "" };
   }
   const categoryLabel = c => `${CATEGORY_ICONS[splitCategory(c).base] || "📌"} ${c}`;
-  const state = { links: [], tasks: [], cfg: null, app: {}, user: null, viewAs: "", loaded: false, editingId: null, dupId: null, view: "table", linkTab: "resources", editingTaskId: null, stepLinkTask: null, openHistory: new Set(), justMoved: null, justTicked: null, page: "home" };
+  const state = { links: [], tasks: [], cfg: null, app: {}, user: null, viewAs: "", loaded: false, editingId: null, dupId: null, view: "table", linkTab: "resources", editingTaskId: null, stepLinkTask: null, openHistory: new Set(), justMoved: null, justTicked: null, page: "home",
+    team: null, teamTab: "team", editingMember: null, editingProject: null };
 
   const SORTERS = {
     newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
@@ -242,8 +243,8 @@
   }
 
   /* ---------- Pages ---------- */
-  const VIEWS = { home: "Home", tasks: "Tasks", links: "Links", admin: "Admin" };
-  const PAGE_TITLES = { home: "Home", tasks: "Milestones", links: "Resources", admin: "Admin" };
+  const VIEWS = { home: "Home", tasks: "Tasks", links: "Links", team: "Team", admin: "Admin" };
+  const PAGE_TITLES = { home: "Home", tasks: "Milestones", links: "Resources", team: "Team & Projects", admin: "Admin" };
   function showView(name) {
     // The link form opens as a side panel over the page you are on
     if (name === "submit") return openLinkPanel();
@@ -259,6 +260,7 @@
     if (name === "links") render();
     if (name === "tasks") renderTasks();
     if (name === "admin") loadAdmin();
+    if (name === "team") loadTeam();
     window.scrollTo(0, 0);
     // Restart the fade-in of the page that just opened
     const view = $("view" + VIEWS[name]);
@@ -332,12 +334,15 @@
     // While viewing as someone else the Admin tab is hidden too (the banner's Exit brings it back)
     const owner = u.role === "owner";
     $("tabAdmin").hidden = !owner;
+    // Team & Projects: managerial and the owner (not while viewing as someone else)
+    $("tabTeam").hidden = !canManageTeam();
+    if (!canManageTeam()) state.team = null;
     // The Google Sheet holds every project, so only managerial and the owner get its button
     $("sheetLink").hidden = !["owner", "manager"].includes(u.role);
     $("viewAsBanner").hidden = !state.viewAs;
     if (state.viewAs) $("viewAsName").textContent = `${u.name} (${u.roleName})`;
     document.body.classList.toggle("read-only", !!u.readOnly);
-    if (!owner && !$("viewAdmin").hidden) showView("home");
+    if ((!owner && !$("viewAdmin").hidden) || (!canManageTeam() && !$("viewTeam").hidden)) showView("home");
   }
 
   /* ---------- Data loading ---------- */
@@ -914,15 +919,15 @@
     return !me().readOnly && (isBoss() || (last.by ? last.by === me().name : managesProject(t.project)));
   }
   const canTick = t => managesProject(t.project) || (!me().readOnly && me().role === "designer" && (state.cfg.projects[t.project] || {}).designer === me().name);
-  // My Tasks: the steps I am responsible for (not every step managerial could press). Bu Riska also
-  // has the Voice Over steps, which carry her name.
+  // My Tasks: the steps I am responsible for (not every step managerial could press). The managerial account
+  // that does the Voice Over (Bu Riska) also has those steps, which carry her name.
   function isMyStep(t) {
     if (t.stage === "done") return false;
     const actor = stepActor(t.stage), u = me();
     if (u.role === "manager") return actor === "manager" || stageOf(t.stage).person === u.name;
     return actsOn(u, actor, t);
   }
-  // "Alfid", "Client (via Kak Faza)", "QC (Kak Hendra / Bu Riska)" (mirrors waitingFor_ in Code.gs)
+  // "Alfid", "Client (via Kak Faza)", "QC (Kak Hendra / Bu Riska)" (mirrors waitingFor_ in Code.gs; the names come from the Team sheet)
   function waitingFor(t) {
     const owner = stageOwner(stageOf(t.stage), t), actor = stepActor(t.stage);
     if (actor === "manager") return `QC (${owner})`;
@@ -976,6 +981,11 @@
     $("tfProject").innerHTML = $("bfProject").innerHTML = `<option value="">-- Select --</option>` +
       Object.keys(cfg.projects).filter(managesProject).map(p => `<option value="${escapeHtml(p)}">${projectIcon(p)} ${escapeHtml(p)}</option>`).join("");
     $("bfVideographer").innerHTML = $("tfVideographer").innerHTML;
+    // Resources: whose edit a CTC-Video is (the one being edited keeps its videographer, also an archived one)
+    const source = $("videoSource").value;
+    $("videoSource").innerHTML = `<option value="">-- Who edited this video? --</option>` + cfg.videographers.map(v => `<option value="VG-${escapeHtml(v)}">[VG-${escapeHtml(v)}]</option>`).join("");
+    ensureOption($("videoSource"), source);
+    $("videoSource").value = source;
     // The owner has no steps of their own, so no My Tasks
     const groups = Object.keys(STEP_GROUPS).filter(k => k !== "mine" || me().role !== "owner");
     const options = show => groups.filter(k => !!STEP_GROUPS[k].show === show).map(k => `<option value="${k}">${STEP_GROUPS[k].label}</option>`).join("");
@@ -1140,15 +1150,17 @@
       item: $("tfItemField").hidden ? "" : $("tfItem").value,
     };
     const collateral = isCollateralType(data.type);
+    // What the task being edited already is stays allowed (e.g. a type its project no longer makes; mirrors cleanTask_)
+    const old = state.tasks.find(t => t.id === state.editingTaskId && t.project === data.project) || {};
     // A Collateral title is written from its item, so ask for the item first
     const problem = collateral && !data.item ? ["tfItem", "Please choose the collateral item (e.g. Flyer, Billboard)."]
       : !data.title ? ["tfTitle", "Title is required."]
       : !collateral && !channelFromTitle(data.title) ? ["tfTitle", 'Write either ORG or ADS in the title, e.g. "BRIEF ORG DECEMBER KRR".']
       : !data.project ? ["tfProject", "Please choose the project."]
-      : !collateral && (state.cfg.projects[data.project] || {}).orgOnly && channelFromTitle(data.title) !== "ORG" ? ["tfTitle", `${data.project} is organic only. Use ORG in the title.`]
-      : !collateral && (state.cfg.projects[data.project] || {}).adsOnly && channelFromTitle(data.title) !== "ADS" ? ["tfTitle", `${data.project} runs ADS only. Use ADS in the title.`]
+      : !collateral && (state.cfg.projects[data.project] || {}).orgOnly && channelFromTitle(data.title) !== "ORG" && channelFromTitle(data.title) !== old.channel ? ["tfTitle", `${data.project} is organic only. Use ORG in the title.`]
+      : !collateral && (state.cfg.projects[data.project] || {}).adsOnly && channelFromTitle(data.title) !== "ADS" && channelFromTitle(data.title) !== old.channel ? ["tfTitle", `${data.project} runs ADS only. Use ADS in the title.`]
       : !data.type ? ["tfType", "Please choose the content type."]
-      : !projectTypes(state.cfg.projects[data.project]).includes(data.type) ? ["tfType", `${data.project} has no ${data.type} content.`]
+      : !projectTypes(state.cfg.projects[data.project]).includes(data.type) && data.type !== old.type ? ["tfType", `${data.project} has no ${data.type} content.`]
       : !$("tfVideographerField").hidden && !data.videographer ? ["tfVideographer", `Please choose the videographer (${state.cfg.videographers.join(" or ")}).`]
       : isEventType(data.type) && !data.deadline ? ["tfDeadline", "Please fill in the event date (D-Day)."]
       : data.briefLink && !isValidUrl(data.briefLink) ? ["tfBriefLink", "Please enter a valid brief link, or leave it empty."]
@@ -1756,7 +1768,7 @@
     const fromClient = t.stage === "qcClient";
     $("reviseToField").hidden = fromClient;
     $("reviseText").textContent = fromClient
-      ? `"${t.title}": the client's revision goes back to ${projectWriter(t)} first, who then sends it to ${fixSteps(t).includes("video") ? "the videographer (CTC) or the graphic designer" : "the graphic designer"}. After the fix it goes through QC Internal again, then Kak Faza sends it to the client.`
+      ? `"${t.title}": the client's revision goes back to ${projectWriter(t)} first, who then sends it to ${fixSteps(t).includes("video") ? "the videographer (CTC) or the graphic designer" : "the graphic designer"}. After the fix it goes through QC Internal again, then ${state.cfg.assistantName} sends it to the client.`
       : `"${t.title}" at ${stageOf(t.stage).name}. Which step has to fix it? After the fix, it goes straight back to QC.`;
     $("reviseTo").innerHTML = targets.map(k => `<option value="${k}">${escapeHtml(stageOf(k).name)} (${escapeHtml(stageOwner(stageOf(k), t))})</option>`).join("");
     $("reviseTo").value = targets[targets.length - 1];
@@ -1840,6 +1852,252 @@
       } catch (err) {
         toast("Delete failed: " + err.message, true);
       }
+    }
+  }
+
+  /* ---------- Team & Projects (managerial and the owner; only the owner changes managerial accounts) ---------- */
+  const canManageTeam = () => !!(state.user && state.user.canManageTeam);
+  // What each role does, shown under the Role field
+  const ROLE_HELP = {
+    manager: "QC Internal of every task. Sees every project and can change the team and the projects.",
+    assistant: "Send to Client, QC Client and Run Ads, in every project.",
+    writer: "Briefs, client revisions and posting, for the projects where they are the content writer.",
+    designer: "Design and Motion / ToV, for the projects where they are the graphic designer.",
+  };
+  const ALL_PROJECT_ROLES = ["manager", "assistant"];
+
+  async function loadTeam() {
+    if (!canManageTeam()) return;
+    if (!state.team) $("teamResults").innerHTML = `<div class="loading"><div class="spinner"></div>Loading...</div>`;
+    try {
+      state.team = await api("getTeam");
+    } catch (err) {
+      $("teamResults").innerHTML = `<div class="empty">Could not load: ${escapeHtml(err.message)}<br><br><button class="btn-soft btn-sm" onclick="loadTeam()">Try again</button></div>`;
+      return;
+    }
+    renderTeam();
+  }
+
+  function showTeamTab(tab) {
+    state.teamTab = tab;
+    document.querySelectorAll("[data-ttab]").forEach(b => {
+      b.classList.toggle("active", b.dataset.ttab === tab);
+      b.setAttribute("aria-selected", String(b.dataset.ttab === tab));
+    });
+    renderTeam();
+  }
+
+  // A change saved on this page: the page's lists, and the rest of the app (projects, names, who presses what)
+  function useTeam(team, message) {
+    state.team = team;
+    renderTeam();
+    toast(message);
+    api("getInitialData").then(useData).catch(() => {});
+  }
+
+  function renderTeam() {
+    const t = state.team;
+    if (!t) return;
+    const tab = state.teamTab, showArchived = $("teamArchived").checked;
+    const people = tab === "team";
+    $("teamAddBtn").textContent = people ? "+ Add person" : "+ Add project";
+    $("vgCard").hidden = people;
+    $("teamNote").textContent = people
+      ? "Everyone who can log in. A password is always the username followed by the team's usual ending. Archived people can't log in; their history stays."
+      : "The content writer and graphic designer of a project press its steps. Archived projects are hidden with their tasks (kept in the sheet) until they are restored.";
+    const list = people ? t.members : t.projects;
+    const shown = list.filter(x => showArchived || x.active);
+    const archived = list.length - list.filter(x => x.active).length;
+    $("teamCount").textContent = `${plural(list.length - archived, people ? "person" : "project").replace("persons", "people")}${archived ? ` · ${archived} archived` : ""}`;
+    $("teamResults").innerHTML = !shown.length ? `<div class="empty">Nothing here yet.</div>`
+      : `<ul class="team-list">${shown.map(people ? memberRow : projectRow).join("")}</ul>`;
+    renderVideographers();
+  }
+
+  const teamButtons = (kind, key, active, editable = true) => !editable
+    ? `<span class="muted team-lock">Only the owner can change this account</span>`
+    : `<button type="button" class="btn-soft btn-sm" data-tact="edit-${kind}" data-key="${escapeHtml(key)}">Edit</button>` +
+      `<button type="button" class="btn-soft btn-sm" data-tact="${active ? "archive" : "restore"}-${kind}" data-key="${escapeHtml(key)}">${active ? "Archive" : "Restore"}</button>`;
+
+  function memberRow(m) {
+    const projects = ALL_PROJECT_ROLES.includes(m.role) ? `<span class="muted">Every project</span>`
+      : m.projects.length ? m.projects.map(p => projectChip(p)).join(" ") : `<span class="muted">No project yet</span>`;
+    return `<li class="team-row${m.active ? "" : " is-archived"}">
+      <span class="team-avatar">${escapeHtml(m.name.replace(/^(Kak|Bu|Pak|Mas|Mbak) /, "").slice(0, 1).toUpperCase())}</span>
+      <span class="team-main"><b>${escapeHtml(m.name)}</b><span class="muted">${escapeHtml(m.username)}</span></span>
+      <span class="team-role"><span class="tag">${escapeHtml(m.roleName)}</span>${m.active ? "" : ` <span class="tag tag-archived">Archived</span>`}</span>
+      <span class="team-projects">${projects}</span>
+      <span class="team-actions">${teamButtons("member", m.username, m.active, m.editable)}</span>
+    </li>`;
+  }
+
+  function projectRow(p) {
+    const channel = { both: "ORG + ADS", org: "ORG only", ads: "ADS only" }[p.channel];
+    return `<li class="team-row project-row${p.active ? "" : " is-archived"}">
+      <span class="team-avatar team-icon">${escapeHtml(p.icon)}</span>
+      <span class="team-main"><b>${escapeHtml(p.code)}${p.active ? "" : ` <span class="tag tag-archived">Archived</span>`}</b><span class="muted">${escapeHtml(channel)}</span></span>
+      <span class="team-projects"><span>Content Writer: <b>${escapeHtml(p.writerName)}</b> · Graphic Designer: <b>${escapeHtml(p.designerName)}</b> · Videographer: <b>${p.videographer ? escapeHtml(p.videographer) : "chosen per video"}</b></span>
+        <span class="muted">${p.types.map(escapeHtml).join(" · ")}</span></span>
+      <span class="team-actions">${teamButtons("project", p.code, p.active)}</span>
+    </li>`;
+  }
+
+  function renderVideographers() {
+    const list = (state.team.videographers || []).filter(v => v.active || $("teamArchived").checked);
+    $("vgList").innerHTML = list.length ? list.map(v => `<li class="${v.active ? "" : "is-archived"}"><span>🎥 VG-${escapeHtml(v.name)}${v.active ? "" : ` <span class="tag tag-archived">Archived</span>`}</span>
+      <button type="button" class="btn-soft btn-sm" data-tact="${v.active ? "archive" : "restore"}-vg" data-key="${escapeHtml(v.name)}">${v.active ? "Archive" : "Restore"}</button></li>`).join("")
+      : `<li class="muted">No videographers yet.</li>`;
+  }
+
+  // Add / edit person
+  function openMemberForm(username) {
+    const t = state.team, m = username ? t.members.find(x => x.username === username) : null;
+    state.editingMember = m ? m.username : null;
+    $("memberForm").reset();
+    $("memberErr").hidden = true;
+    $("memberTitle").textContent = m ? `Edit ${m.name}` : "Add person";
+    $("memberSave").textContent = m ? "Save changes" : "Add person";
+    $("mfRole").innerHTML = `<option value="">-- Select --</option>` + t.roles.map(r => `<option value="${r.key}">${escapeHtml(r.name)}</option>`).join("");
+    $("mfUsername").readOnly = !!m;
+    $("mfUserHelp").textContent = m ? "The username can't change: it is part of the password."
+      : "Small letters and digits, e.g. dimas. Their password is this username followed by the team's usual ending, like everyone's.";
+    if (m) {
+      $("mfName").value = m.name;
+      $("mfUsername").value = m.username;
+      $("mfRole").value = m.role;
+    }
+    updateMemberForm();
+    openModal("memberModal");
+    $("mfName").focus();
+  }
+  function updateMemberForm() {
+    const role = $("mfRole").value;
+    $("mfRoleHelp").textContent = ROLE_HELP[role] || "";
+  }
+  async function submitMemberForm(e) {
+    e.preventDefault();
+    const data = { name: $("mfName").value.trim(), username: $("mfUsername").value.trim().toLowerCase(), role: $("mfRole").value };
+    const editing = state.editingMember;
+    const problem = !data.name ? ["mfName", "Please fill in the name."]
+      : !/^[a-z][a-z0-9]{1,19}$/.test(data.username) ? ["mfUsername", "The username must be 2 to 20 small letters or digits, starting with a letter."]
+      : !data.role ? ["mfRole", "Please choose the role."] : null;
+    if (problem) return teamFormError("memberErr", problem);
+    $("memberSave").disabled = true;
+    try {
+      const team = await api("saveMember", data, !editing);
+      closeModal("memberModal");
+      useTeam(team, editing ? `${data.name} saved` : `${data.name} added`);
+    } catch (err) {
+      teamFormError("memberErr", [null, err.message]);
+    } finally {
+      $("memberSave").disabled = false;
+    }
+  }
+  function teamFormError(id, [field, message]) {
+    $(id).textContent = message;
+    $(id).hidden = false;
+    if (field) $(field).focus();
+  }
+
+  // Add / edit project
+  function openProjectForm(code) {
+    const t = state.team, p = code ? t.projects.find(x => x.code === code) : null;
+    state.editingProject = p ? p.code : null;
+    $("projectForm").reset();
+    $("projectErr").hidden = true;
+    $("projectTitle").textContent = p ? `Edit ${p.code}` : "Add project";
+    $("projectSave").textContent = p ? "Save changes" : "Add project";
+    $("pfCode").readOnly = !!p;
+    $("pfCodeHelp").textContent = p ? "The code can't change: every task and title uses it." : "Short, as written in task titles, e.g. BRIEF ORG DECEMBER BSD. It can't change later.";
+    // Active people of that role (plus whoever the project has now, even if archived)
+    const people = (role, current) => `<option value="">-- Select --</option>` + t.members
+      .filter(m => m.role === role && (m.active || m.username === current))
+      .map(m => `<option value="${escapeHtml(m.username)}">${escapeHtml(m.name)}${m.active ? "" : " (archived)"}</option>`).join("");
+    $("pfWriter").innerHTML = people("writer", p && p.writer);
+    $("pfDesigner").innerHTML = people("designer", p && p.designer);
+    $("pfVideographer").innerHTML = `<option value="">None: chosen for every video task</option>` + t.videographers
+      .filter(v => v.active || (p && v.name === p.videographer))
+      .map(v => `<option value="${escapeHtml(v.name)}">${escapeHtml(v.name)} (VG-${escapeHtml(v.name)})${v.active ? "" : " (archived)"}</option>`).join("");
+    $("pfTypes").innerHTML = t.projectTypes.map(type => `<label class="check-row"><input type="checkbox" value="${escapeHtml(type)}"> ${escapeHtml(type)}</label>`).join("");
+    $("pfChannel").innerHTML = Object.keys(t.channels).map(c => `<option value="${c}">${escapeHtml(t.channels[c])}</option>`).join("");
+    if (p) {
+      $("pfCode").value = p.code;
+      $("pfIcon").value = p.icon;
+      $("pfWriter").value = p.writer;
+      $("pfDesigner").value = p.designer;
+      $("pfVideographer").value = p.videographer;
+      $("pfChannel").value = p.channel;
+      document.querySelectorAll("#pfTypes input").forEach(i => i.checked = p.types.includes(i.value));
+    } else {
+      $("pfChannel").value = "both";
+      document.querySelectorAll("#pfTypes input").forEach(i => i.checked = i.value === "Static");
+    }
+    openModal("projectModal");
+    (p ? $("pfIcon") : $("pfCode")).focus();
+  }
+  async function submitProjectForm(e) {
+    e.preventDefault();
+    const data = {
+      code: $("pfCode").value.trim(), icon: $("pfIcon").value.trim(), writer: $("pfWriter").value, designer: $("pfDesigner").value,
+      videographer: $("pfVideographer").value, channel: $("pfChannel").value,
+      types: [...document.querySelectorAll("#pfTypes input:checked")].map(i => i.value),
+    };
+    const editing = state.editingProject;
+    const problem = !/^[A-Za-z0-9][A-Za-z0-9-]{1,11}$/.test(data.code) ? ["pfCode", "The project code must be 2 to 12 letters or digits (e.g. BSD)."]
+      : !data.writer ? ["pfWriter", "Please choose the content writer."]
+      : !data.designer ? ["pfDesigner", "Please choose the graphic designer."]
+      : !data.types.length ? [null, "Tick at least one content type."] : null;
+    if (problem) return teamFormError("projectErr", problem);
+    $("projectSave").disabled = true;
+    try {
+      const team = await api("saveProject", data, !editing);
+      closeModal("projectModal");
+      useTeam(team, editing ? `${data.code} saved` : `${data.code} added`);
+    } catch (err) {
+      teamFormError("projectErr", [null, err.message]);
+    } finally {
+      $("projectSave").disabled = false;
+    }
+  }
+
+  async function addVideographer(e) {
+    e.preventDefault();
+    const name = $("vgName").value.trim();
+    if (!name) return $("vgName").focus();
+    $("vgAdd").disabled = true;
+    try {
+      const team = await api("saveVideographer", name);
+      $("vgName").value = "";
+      useTeam(team, `VG-${name} added`);
+    } catch (err) {
+      toast(err.message, true);
+    } finally {
+      $("vgAdd").disabled = false;
+    }
+  }
+
+  // Edit / Archive / Restore buttons of the lists
+  async function handleTeamAction(e) {
+    const b = e.target.closest("[data-tact]");
+    if (!b || b.disabled) return;
+    const [act, kind] = b.dataset.tact.split("-"), key = b.dataset.key, t = state.team;
+    if (act === "edit") return kind === "member" ? openMemberForm(key) : openProjectForm(key);
+    const archive = act === "archive";
+    const item = kind === "member" ? t.members.find(m => m.username === key) : kind === "project" ? t.projects.find(p => p.code === key) : { name: `VG-${key}` };
+    const label = item.name || item.code;
+    const message = kind === "member" ? (archive ? `${label} can't log in anymore and is logged out now. Their tasks' history stays. You can restore them later.` : `${label} can log in again with the same username and password.`)
+      : kind === "project" ? (archive ? `${label} and its tasks are hidden from the app (they stay in the sheet). You can restore it later.` : `${label} and its tasks show again.`)
+      : (archive ? `${label} can't be picked for new video tasks. Older tasks keep their name.` : `${label} can be picked again.`);
+    if (archive && !await confirmDialog({ emoji: "🗄️", title: `Archive ${label}?`, message, ok: "Archive" })) return;
+    const fn = { member: "setMemberActive", project: "setProjectActive", vg: "setVideographerActive" }[kind];
+    b.disabled = true;
+    b.classList.add("is-busy");
+    try {
+      useTeam(await api(fn, key, !archive), `${label} ${archive ? "archived" : "restored"}`);
+    } catch (err) {
+      toast(err.message, true);
+      b.disabled = false;
+      b.classList.remove("is-busy");
     }
   }
 
@@ -1961,6 +2219,15 @@
     if (btn) endSessions([btn.dataset.session]);
   });
   ["actWho", "actProject"].forEach(id => $(id).addEventListener("input", renderActivity));
+  // Team & Projects
+  document.querySelectorAll("[data-ttab]").forEach(b => b.addEventListener("click", () => showTeamTab(b.dataset.ttab)));
+  $("teamAddBtn").addEventListener("click", () => state.team && (state.teamTab === "team" ? openMemberForm() : openProjectForm()));
+  $("teamArchived").addEventListener("input", renderTeam);
+  $("viewTeam").addEventListener("click", handleTeamAction);
+  $("memberForm").addEventListener("submit", submitMemberForm);
+  $("mfRole").addEventListener("input", updateMemberForm);
+  $("projectForm").addEventListener("submit", submitProjectForm);
+  $("vgForm").addEventListener("submit", addVideographer);
 
   $("lockForm").addEventListener("submit", unlock);
   if (ticket) loadData(); else showLock();

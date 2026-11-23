@@ -985,6 +985,208 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
   await page.select("#tfType", "Event Attribute");
   await page.screenshot({ path: `${shots}/dark-form.png` });
 
+  /* ---------- 5. Team & Projects: managerial and the owner add people and projects ---------- */
+  console.log("Team & Projects");
+  await page.evaluate(() => { document.querySelectorAll(".modal-bg.show").forEach(m => m.classList.remove("show")); document.documentElement.dataset.theme = "light"; });
+  const tm = await page.evaluate(() => {
+    const err = fn => { try { fn(); return ""; } catch (e) { return e.message; } };
+    const out = {};
+    const owner = GAS.login("owner", "owner", "test").ticket;
+    const hendra = GAS.login("hendra", "hendrademo", "test").ticket;
+    const obi = GAS.login("obi", "obidemo", "test").ticket;
+    const puput = GAS.login("puput", "puputdemo", "test").ticket;
+    const call = (t, fn, ...args) => GAS.api(t, fn, args);
+    const team0 = call(owner, "getTeam");
+    out.seeded = team0.members.length === 8 && team0.projects.length === 7 && team0.videographers.length === 2 &&
+      mockSheet("Team").data[0].join() === "Username,Name,Role,Status,Added,Updated" && mockSheet("Team").data[1][2] === "Managerial" &&
+      mockSheet("Projects").data.find(r => r[0] === "Makuta")[6] === "ORG only";
+    out.seededConfig = JSON.stringify(call(owner, "getInitialData").taskConfig.projects.KRR);
+    out.writerRefused = err(() => call(obi, "getTeam"));
+    out.ownerRoles = team0.roles.map(r => r.key).join();
+    out.managerRoles = call(hendra, "getTeam").roles.map(r => r.key).join();
+    out.riskaLocked = call(hendra, "getTeam").members.find(m => m.username === "riska").editable;
+    out.managerAddManager = err(() => call(hendra, "saveMember", { username: "dimas", name: "Kak Dimas", role: "manager" }, true));
+    out.managerEditManager = err(() => call(hendra, "saveMember", { username: "riska", name: "Bu Riska", role: "assistant" }, false));
+    out.managerArchiveManager = err(() => call(hendra, "setMemberActive", "riska", false));
+    out.badUsername = err(() => call(hendra, "saveMember", { username: "Di mas", name: "Dimas", role: "designer" }, true));
+    out.takenUsername = err(() => call(hendra, "saveMember", { username: "obi", name: "Obi Dua", role: "designer" }, true));
+    out.ownerUsername = err(() => call(hendra, "saveMember", { username: "owner", name: "Somebody", role: "designer" }, true));
+    out.sameName = err(() => call(hendra, "saveMember", { username: "obi2", name: "obi", role: "designer" }, true));
+    out.noRole = err(() => call(hendra, "saveMember", { username: "dimas", name: "Dimas", role: "owner" }, true));
+    out.selfArchive = err(() => call(hendra, "setMemberActive", "hendra", false));
+    // A new graphic designer: logs in with username + the usual ending, no project yet
+    call(hendra, "saveMember", { username: "dimas", name: "Dimas", role: "designer" }, true);
+    const dimas = GAS.login(" Dimas ", "dimasdemo", "test");
+    out.dimasUser = dimas.data.user.roleName + ":" + dimas.data.user.projects.length;
+    // A new project with him as its designer
+    out.designerMustBeDesigner = err(() => call(hendra, "saveProject", { code: "BSD", icon: "🏢", writer: "puput", designer: "obi", types: ["Static"], channel: "both" }, true));
+    out.badIcon = err(() => call(hendra, "saveProject", { code: "BSD", icon: "BSD", writer: "puput", designer: "dimas", types: ["Static"], channel: "both" }, true));
+    out.noTypes = err(() => call(hendra, "saveProject", { code: "BSD", icon: "🏢", writer: "puput", designer: "dimas", types: [], channel: "both" }, true));
+    call(hendra, "saveProject", { code: "BSD", icon: "🏢", writer: "puput", designer: "dimas", videographer: "Anno", types: ["Static", "Video (Shooting)"], channel: "both" }, true);
+    out.dupCode = err(() => call(hendra, "saveProject", { code: "bsd", icon: "🏢", writer: "puput", designer: "dimas", types: ["Static"], channel: "both" }, true));
+    out.referenceCode = err(() => call(hendra, "saveProject", { code: "Reference", icon: "🔖", writer: "puput", designer: "dimas", types: ["Static"], channel: "both" }, true));
+    out.dimasProjects = call(dimas.ticket, "getInitialData").user.projects.join();
+    out.puputProjects = call(puput, "getInitialData").user.projects.join();
+    // The project works like the others: Puput writes, managerial does QC, Dimas designs, Wawan can't
+    let t = call(puput, "addTask", { title: "BRIEF ORG DECEMBER BSD", project: "BSD", type: "Static", deadline: "2026-12-20" });
+    const v = call(puput, "addTask", { title: "VIDEO CTC ORG DECEMBER BSD", project: "BSD", type: "Video (Shooting)", deadline: "2026-12-20" });
+    out.videoGetsVg = v.videographer;
+    out.obiCantCreate = err(() => call(obi, "addTask", { title: "BRIEF ORG DECEMBER BSD", project: "BSD", type: "Static" }));
+    t = call(puput, "moveTask", t.id, "advance", { link: "https://docs.google.com/document/d/bsd" });
+    t = call(hendra, "moveTask", t.id, "advance", {});
+    out.atDesign = t.stage + ":" + t.designer;
+    out.wawanCantPress = err(() => call(GAS.login("wawan", "wawandemo", "test").ticket, "moveTask", t.id, "advance", { link: "https://drive.google.com/r" }));
+    t = call(dimas.ticket, "moveTask", t.id, "advance", { link: "https://drive.google.com/bsd-result" });
+    out.afterDesign = t.stage;
+    // Names come from the Team sheet: QC, Voice Over and "via" follow a rename
+    call(owner, "saveMember", { username: "riska", name: "Bu Riska S", role: "manager" }, false);
+    const stages = call(owner, "getInitialData").taskConfig.stages;
+    out.qcPerson = stages.find(s => s.key === "qcBrief").person;
+    out.voPerson = stages.find(s => s.key === "vo").person;
+    call(owner, "saveMember", { username: "riska", name: "Bu Riska", role: "manager" }, false);
+    // Someone still set on a project can't be archived or change role
+    out.archiveBusy = err(() => call(hendra, "setMemberActive", "dimas", false));
+    out.roleBusy = err(() => call(hendra, "saveMember", { username: "dimas", name: "Dimas", role: "writer" }, false));
+    // A new designer for the project: its open tasks follow at once
+    call(hendra, "saveProject", { code: "BSD", icon: "🏬", writer: "puput", designer: "wawan", videographer: "Anno", types: ["Static", "Video (Shooting)"], channel: "both" }, false);
+    out.taskDesignerNow = call(owner, "getTasks").find(x => x.id === v.id).designer;
+    out.iconNow = call(owner, "getInitialData").taskConfig.projects.BSD.icon;
+    // Archived: logged out now, can't log in again; restored: can
+    call(hendra, "setMemberActive", "dimas", false);
+    out.dimasSessionEnded = err(() => call(dimas.ticket, "getInitialData"));
+    out.dimasCantLogin = err(() => GAS.login("dimas", "dimasdemo", "test"));
+    out.notInViewAs = call(owner, "getAdminData", ).users.some(u => u.username === "dimas");
+    call(hendra, "setMemberActive", "dimas", true);
+    out.dimasBack = !!GAS.login("dimas", "dimasdemo", "test").ticket;
+    // A content type the project no longer makes: older tasks can still be edited, new ones can't use it
+    call(hendra, "saveProject", { code: "BSD", icon: "🏬", writer: "puput", designer: "wawan", videographer: "Anno", types: ["Static"], channel: "both" }, false);
+    out.oldVideoEdit = call(puput, "updateTask", v.id, { title: v.title, project: "BSD", type: v.type, videographer: v.videographer, deadline: "2026-12-21" }).deadline;
+    out.newVideo = err(() => call(puput, "addTask", { title: "VIDEO CTC ORG JANUARY BSD", project: "BSD", type: "Video (Shooting)" }));
+    // Archived project: hidden with its tasks, no new tasks; restored: back
+    call(hendra, "setProjectActive", "BSD", false);
+    out.hiddenOwner = call(owner, "getTasks").some(x => x.project === "BSD");
+    out.hiddenPuput = call(puput, "getInitialData").user.projects.includes("BSD");
+    out.notInConfig = "BSD" in call(owner, "getInitialData").taskConfig.projects;
+    out.noNewTask = err(() => call(puput, "addTask", { title: "BRIEF ORG JANUARY BSD", project: "BSD", type: "Static" }));
+    out.archivedCantMove = err(() => call(hendra, "moveTask", t.id, "advance", {}));
+    out.keptInSheet = mockSheet("Tasks").data.filter(r => r[4] === "BSD").length;
+    call(hendra, "setProjectActive", "BSD", true);
+    out.backTasks = call(owner, "getTasks").filter(x => x.project === "BSD").length;
+    // Videographers
+    out.vgList = call(hendra, "saveVideographer", "Budi").videographers.map(x => x.name).join();
+    out.vgDup = err(() => call(hendra, "saveVideographer", "budi"));
+    out.vgBad = err(() => call(hendra, "saveVideographer", "<b>"));
+    out.vgInUse = err(() => call(hendra, "setVideographerActive", "Anno", false));
+    out.vgPick = call(owner, "addTask", { title: "VIDEO CTC ORG DECEMBER MAKUTA", project: "Makuta", type: "Video (Shooting)", videographer: "Budi" }).videographer;
+    out.vgResource = call(owner, "addLink", { title: "Budi cut", url: "https://drive.google.com/budi", category: "CTC-Video [VG-Budi]" }).category;
+    call(hendra, "setVideographerActive", "Budi", false);
+    out.vgArchivedPick = err(() => call(owner, "addTask", { title: "VIDEO CTC ORG DECEMBER MAKUTA", project: "Makuta", type: "Video (Shooting)", videographer: "Budi" }));
+    out.vgConfig = call(owner, "getInitialData").taskConfig.videographers.join();
+    // The last managerial account stays
+    call(owner, "setMemberActive", "riska", false);
+    out.lastManager = err(() => call(owner, "setMemberActive", "hendra", false));
+    out.lastManagerRole = err(() => call(owner, "saveMember", { username: "hendra", name: "Kak Hendra", role: "assistant" }, false));
+    out.qcAlone = call(owner, "getInitialData").taskConfig.stages.find(s => s.key === "qcCut").person;
+    call(owner, "setMemberActive", "riska", true);
+    // Every change is in the Activity log
+    out.activity = call(owner, "getAdminData").activity.map(e => e.who + ":" + e.action + ":" + (e.project || e.task));
+    out.writerApi = [err(() => call(obi, "saveMember", { username: "x1", name: "X One", role: "designer" }, true)), err(() => call(puput, "setProjectActive", "BSD", false))];
+    out.viewAsWrite = err(() => GAS.api(owner, "saveVideographer", ["Cici"], "hendra"));
+    return out;
+  });
+  ok(tm.seeded, "Team sheets are filled the first time with the 8 accounts, 7 projects and 2 videographers (readable in the sheet)");
+  ok(tm.seededConfig === JSON.stringify({ writer: "Obi", designer: "Alfid", videographer: "Anno", icon: "🌴", types: ["Static", "Video (Shooting)", "Event Attribute"], orgOnly: false, adsOnly: false }),
+    "projects from the sheet are the same as before (KRR: Obi, Alfid, Anno, its types)");
+  ok(/managerial and the owner/.test(tm.writerRefused) && tm.writerApi.every(e => /managerial and the owner/.test(e)), "content writers can't open or change Team & Projects");
+  ok(tm.ownerRoles === "manager,assistant,writer,designer" && tm.managerRoles === "assistant,writer,designer", "roles: no Owner; managerial can't give the Managerial role");
+  ok(tm.riskaLocked === false && /Only the owner/.test(tm.managerAddManager) && /Only the owner/.test(tm.managerEditManager) && /Only the owner/.test(tm.managerArchiveManager),
+    "managerial can't add, change or archive another managerial account (only the owner)");
+  ok(/small letters/.test(tm.badUsername) && /already taken/.test(tm.takenUsername) && /already taken/.test(tm.ownerUsername) && /already called/.test(tm.sameName) && /choose the role/.test(tm.noRole),
+    "new person: username format, taken usernames (also the owner's), unique names, a valid role");
+  ok(/own account/.test(tm.selfArchive), "nobody can archive their own account");
+  ok(tm.dimasUser === "Graphic Designer:0", "a new person logs in with username + the usual ending (Dimas, designer, no project yet)");
+  ok(/graphic designer/.test(tm.designerMustBeDesigner) && /emoji/.test(tm.badIcon) && /content type/.test(tm.noTypes) && /already used/.test(tm.dupCode) && /already used/.test(tm.referenceCode),
+    "new project: the right roles, an emoji icon, a content type, a code not used yet (any case, not REFERENCE)");
+  ok(tm.dimasProjects === "BSD" && tm.puputProjects.split(",").includes("BSD") && tm.videoGetsVg === "Anno", "the new project is in its writer's and designer's projects; its videographer fills new video tasks");
+  ok(/content writer of BSD/.test(tm.obiCantCreate) && tm.atDesign === "design:Dimas" && /not found/.test(tm.wawanCantPress) && tm.afterDesign === "qcContent",
+    "the new project's steps: only its writer creates tasks, only its designer presses Design (others don't even see it)");
+  ok(tm.qcPerson === "Kak Hendra / Bu Riska S" && tm.voPerson === "Bu Riska S","QC and Voice Over show the current names from the Team sheet");
+  ok(/still the graphic designer of BSD/.test(tm.archiveBusy) && /still the graphic designer of BSD/.test(tm.roleBusy), "someone still set on a project can't be archived or change role");
+  ok(tm.taskDesignerNow === "Wawan" && tm.iconNow === "🏬", "a new designer for a project: its tasks follow at once");
+  ok(/^LOCKED/.test(tm.dimasSessionEnded) && /^LOCKED: Wrong/.test(tm.dimasCantLogin) && !tm.notInViewAs && tm.dimasBack, "archived: logged out at once and can't log in (not in View as); restored: can log in again");
+  ok(tm.oldVideoEdit === "2026-12-21" && /has no Video \(Shooting\)/.test(tm.newVideo), "a content type the project no longer makes: older tasks can still be edited, no new ones");
+  ok(!tm.hiddenOwner && !tm.hiddenPuput && !tm.notInConfig && /choose the project/.test(tm.noNewTask) && /not found/.test(tm.archivedCantMove) && tm.keptInSheet === 2 && tm.backTasks === 2,
+    "archived project: hidden with its tasks (kept in the sheet), no new tasks; restored: back");
+  ok(tm.vgList === "Anno,Arif,Budi" && /already in the list/.test(tm.vgDup) && /2 to 30 letters/.test(tm.vgBad) && /still the videographer of/.test(tm.vgInUse) &&
+    tm.vgPick === "Budi" && tm.vgResource === "CTC-Video [VG-Budi]" && /choose the videographer/.test(tm.vgArchivedPick) && tm.vgConfig === "Anno,Arif",
+    "videographers: added (tasks and Resources use them), no doubles, not archived while a project uses them");
+  ok(/only managerial account left/.test(tm.lastManager) && /only managerial account left/.test(tm.lastManagerRole) && tm.qcAlone === "Kak Hendra", "the last managerial account can't be archived or change role");
+  ok(["Kak Hendra:Added person:Dimas", "Kak Hendra:Added project:BSD", "Kak Hendra:Archived person:Dimas", "Kak Hendra:Archived project:BSD", "Kak Hendra:Added videographer:Budi", "Owner:Edited person:Bu Riska S"]
+    .every(a => tm.activity.includes(a)), "Activity log records every Team & Projects change");
+  ok(/read-only/.test(tm.viewAsWrite), "View as can't change the team");
+
+  // The page: Kak Hendra adds a person and a project
+  await page.evaluate(() => forgetLogin());
+  await loginAs("hendra");
+  ok(await page.evaluate(() => !$("tabTeam").hidden && $("tabAdmin").hidden), "managerial sees Team & Projects (not Admin)");
+  await page.evaluate(() => showView("team"));
+  await page.waitForSelector("#teamResults .team-row");
+  ok(await page.evaluate(() => $("pageTitle").textContent === "Team & Projects" && document.querySelectorAll("#teamResults .team-row").length === 9 &&
+    [...document.querySelectorAll("#teamResults .team-row")].find(r => r.textContent.includes("Bu Riska")).querySelector(".team-lock") &&
+    ![...document.querySelectorAll("#teamResults .team-row")].some(r => /Owner/.test(r.querySelector(".team-role").textContent))),
+    "Team tab: everyone (no Owner); managerial accounts say only the owner can change them");
+  await page.screenshot({ path: `${shots}/team.png` });
+  await page.click("#teamAddBtn");
+  ok(await page.evaluate(() => [...$("mfRole").options].map(o => o.value).join() === ",assistant,writer,designer"), "Add person: managerial can't pick Managerial");
+  await page.type("#mfName", "Kak Sinta");
+  await page.type("#mfUsername", "sinta");
+  await page.select("#mfRole", "writer");
+  ok(await page.evaluate(() => /Briefs/.test($("mfRoleHelp").textContent)), "Add person: the role says what it does");
+  await page.click("#memberSave");
+  await page.waitForFunction(() => !$("memberModal").classList.contains("show") && [...document.querySelectorAll("#teamResults .team-row")].some(r => r.textContent.includes("Kak Sinta")));
+  ok(true, "Add person from the page");
+  await page.click("[data-ttab=projects]");
+  ok(await page.evaluate(() => document.querySelectorAll("#teamResults .team-row").length === 8 && !$("vgCard").hidden && $("teamAddBtn").textContent === "+ Add project"), "Projects tab: the projects and the videographers");
+  await page.click("#teamAddBtn");
+  await page.type("#pfCode", "PIK");
+  await page.$eval("#pfIcon", e => e.value = "🌊");
+  await page.select("#pfWriter", "sinta");
+  await page.select("#pfDesigner", "ilham");
+  await page.select("#pfChannel", "org");
+  await page.click("#pfTypes input[value='Video (Non-Shooting)']");
+  await page.click("#projectSave");
+  await page.waitForFunction(() => !$("projectModal").classList.contains("show") && state.cfg.projects.PIK && [...document.querySelectorAll("#sideProjects [data-project]")].some(b => b.dataset.project === "PIK"));
+  ok(await page.evaluate(() => JSON.stringify(state.cfg.projects.PIK) === JSON.stringify({ writer: "Kak Sinta", designer: "Ilham", videographer: "", icon: "🌊", types: ["Static", "Video (Non-Shooting)"], orgOnly: true, adsOnly: false })),
+    "Add project from the page: the app (sidebar, New task) has it at once");
+  await page.screenshot({ path: `${shots}/team-projects.png` });
+  // Archive from the page (asks first), hidden until "Show archived"
+  await page.click("[data-tact='archive-project'][data-key='PIK']");
+  await page.waitForSelector("#confirmModal.show");
+  await page.click("#confirmOk");
+  await page.waitForFunction(() => !state.cfg.projects.PIK && ![...document.querySelectorAll("#teamResults .team-row")].some(r => r.textContent.includes("PIK")));
+  await page.click("#teamArchived");
+  ok(await page.evaluate(() => [...document.querySelectorAll("#teamResults .team-row.is-archived")].some(r => r.textContent.includes("PIK") && r.querySelector("[data-tact='restore-project']"))),
+    "Archive a project from the page (asks first); Show archived lists it with Restore");
+  await page.evaluate(() => { $("teamArchived").checked = false; });
+  // A content writer has no Team & Projects
+  await page.evaluate(() => forgetLogin());
+  await loginAs("obi");
+  ok(await page.evaluate(() => $("tabTeam").hidden && (showView("team"), true)), "content writers don't see Team & Projects");
+
+  // Back to the team the other tests use
+  await page.evaluate(() => {
+    ["Team", "Projects", "Videographers"].forEach(n => { mockSheet(n).data = []; mockSheet(n).save(); });
+    mockSheet("Tasks").data = mockSheet("Tasks").data.filter(r => !["BSD", "PIK"].includes(r[4]) && !(r[3] === "VIDEO CTC ORG DECEMBER MAKUTA" && r[8] === "Budi"));
+    mockSheet("Tasks").save();
+    mockSheet("Links").data = mockSheet("Links").data.filter(r => r[3] !== "Budi cut");
+    mockSheet("Links").save();
+    PropertiesService.getScriptProperties().deleteProperty("TEAM_SEEDED");
+    delete mockCache.team_v1;
+    forgetLogin();
+  });
+  await loginAs("owner", "owner");
+  ok(await page.evaluate(() => Object.keys(state.cfg.projects).join() === "VTB,KRR,Makuta,GTR,GM,HC,LUX"), "the team sheets fill again from the start when emptied (test clean-up)");
+
   // Apps Script cuts "//" inside template literals as if it started a comment (write "\/\/" instead)
   const js = fs.readFileSync(path.join(__dirname, "..", "apps-script", "JavaScript.html"), "utf8");
   ok(!(js.match(/`[^`]*`/g) || []).some(t => t.includes("//")), "no // inside template literals (Apps Script would cut the line)");
