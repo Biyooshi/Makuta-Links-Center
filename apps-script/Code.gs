@@ -722,9 +722,7 @@ function getInitialData_() {
 
 function getLinks_() {
   const sheet = getSheet_();
-  const last = sheet.getLastRow();
-  if (last < 2) return [];
-  return sheet.getRange(2, 1, last - 1, HEADERS.length).getValues()
+  return uniqueIds_(sheet, HEADERS.length, 'L', 6)
     .filter(r => r[0] !== '')
     .map(r => publicLink_(rowToLink_(r)));
 }
@@ -782,9 +780,7 @@ function deleteLink_(id) {
 
 function getTasks_() {
   const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
-  const last = sheet.getLastRow();
-  if (last < 2) return [];
-  return sheet.getRange(2, 1, last - 1, TASK_HEADERS.length).getValues()
+  return uniqueIds_(sheet, TASK_HEADERS.length, 'T', 4)
     .filter(r => r[0] !== '')
     .map(rowToTask_)
     .filter(t => seesProject_(user_, t.project));
@@ -876,8 +872,7 @@ function moveTask_(id, action, opts) {
     const sheet = getSheet_(TASK_SHEET, TASK_HEADERS);
     const rows = {};
     const all = [];
-    const last = sheet.getLastRow();
-    if (last >= 2) sheet.getRange(2, 1, last - 1, TASK_HEADERS.length).getValues().forEach((r, i) => {
+    uniqueIds_(sheet, TASK_HEADERS.length, 'T', 4).forEach((r, i) => {
       if (r[0] === '') return;
       const t = rowToTask_(r);
       rows[t.id] = i + 2;
@@ -1201,7 +1196,8 @@ function rowToTask_(r) {
     updatedAt: toIso_(r[2]),
     title: text_(r[3]),
     project: text_(r[4]),
-    type: text_(r[5]),
+    // A type typed by hand ("static ", "Video (shooting)") still gets its steps
+    type: CONTENT_TYPES.filter(c => c.toLowerCase() === text_(r[5]).trim().toLowerCase())[0] || text_(r[5]).trim(),
     channel: text_(r[6]).trim().toUpperCase(),
     designer: (projectOf_(text_(r[4])) || {}).designer || text_(r[7]),
     videographer: text_(r[8]),
@@ -1216,6 +1212,9 @@ function rowToTask_(r) {
     forMonth: /^\d{4}-\d{2}$/.test(text_(r[18]).trim()) ? text_(r[18]).trim() : '',
     item: text_(r[19]).trim()
   };
+  // An ORG / ADS cell emptied or mistyped by hand: read it from the title again (Collateral has none),
+  // otherwise an ADS task would lose its Run Ads step and fall back a step on every read
+  if (!has_(CHANNELS, task.channel)) task.channel = task.type === COLLATERAL_TYPE ? '' : channelFromTitle_(task.title);
   task.stage = fitStage_(task);
   task.steps = pipeline_(task.type, task.channel);
   return task;
@@ -1295,8 +1294,44 @@ function withLock_(fn) {
   } finally {
     inLock_ = false;
     writeActivity_();
+    // Sheets keeps writes in a buffer; they must be in the sheet before the next change may read it
+    try { SpreadsheetApp.flush(); } catch (e) {}
     lock.releaseLock();
   }
+}
+
+// The rows of a Links / Tasks sheet. A row copied by hand has the same ID as the row it came from, so a
+// change was read from one row and saved into the other: the page said "saved", but after a refresh the
+// first row came back unchanged. Each copy gets an ID of its own (once, written in the Activity log).
+// projectCol: the column (from 0) of the project, for the log.
+function uniqueIds_(sheet, width, prefix, projectCol) {
+  const read = () => {
+    const last = sheet.getLastRow();
+    return last < 2 ? [] : sheet.getRange(2, 1, last - 1, width).getValues();
+  };
+  const copies = rows => {
+    const seen = {};
+    const out = [];
+    rows.forEach((r, i) => {
+      const id = String(r[0]);
+      if (id !== '' && has_(seen, id)) out.push(i);
+      seen[id] = true;
+    });
+    return out;
+  };
+  const rows = read();
+  if (!copies(rows).length) return rows;
+  return withLock_(() => {
+    const fresh = read();
+    copies(fresh).forEach(i => {
+      const id = newId_(prefix);
+      sheet.getRange(i + 2, 1).setNumberFormat('@').setValue(id);
+      logActivity_('Fixed copied row', text_(fresh[i][projectCol]), text_(fresh[i][3]),
+        'Row ' + (i + 2) + ' had the same ID as another row (' + text_(fresh[i][0]) + '); it now has its own: ' + id, 'Website (auto-fix)');
+      fresh[i][0] = id;
+    });
+    return fresh;
+  });
 }
 
 const has_ = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);

@@ -1743,6 +1743,8 @@
       .catch(err => {
         if (btn) { btn.disabled = false; btn.classList.remove("is-busy"); }
         toast(err.message, true);
+        // Someone else (or another tab) changed it: show the tasks as they are now, without a manual refresh
+        if (/already updated|not found/i.test(err.message)) reloadData();
         return false;
       });
   }
@@ -1897,7 +1899,12 @@
     state.team = team;
     renderTeam();
     toast(message);
-    api("getInitialData").then(data => {
+    reloadData();
+  }
+
+  // Reads everything again in the background, keeping the step filter the person chose
+  function reloadData() {
+    return api("getInitialData").then(data => {
       const step = $("tStep").value;
       useData(data);
       if (step !== $("tStep").value && [...$("tStep").options].some(o => o.value === step)) {

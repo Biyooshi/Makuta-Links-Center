@@ -55,7 +55,7 @@ function mockSheet(name) {
 }
 // Sheets drops the leading apostrophe used to force plain text
 function storeValue(v) { return typeof v === "string" && v.startsWith("'") ? v.slice(1) : v; }
-const SpreadsheetApp = { getActiveSpreadsheet: () => ({
+const SpreadsheetApp = { flush() {}, getActiveSpreadsheet: () => ({
   getSheetByName: mockSheet,
   insertSheet: mockSheet,
   getUrl: () => "",  // no real sheet in the preview; the page shows a notice instead

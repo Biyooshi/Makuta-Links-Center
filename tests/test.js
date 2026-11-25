@@ -1210,6 +1210,66 @@ const ok = (cond, name) => { cond ? pass++ : fail++; console.log((cond ? "  PASS
     [...document.querySelectorAll("#sideProjects [data-project]")].map(b => b.dataset.project).join() === "VTB,KRR,Makuta,GTR,GM,HC,LUX"),
     "Home: Late tasks count = the Late card; the sidebar follows the Projects sheet order");
 
+  /* ---------- 6. Rows copied by hand in the sheet ---------- */
+  console.log("Copied rows");
+  // A copied row has the same ID: a step was read from the first row and saved into the copy, so the page
+  // said "Moved" but a refresh showed the old step again
+  const cp = await page.evaluate(() => {
+    GAS.actAs("owner");
+    const t = GAS.addTask({ title: "BRIEF ADS NOVEMBER KRR", project: "KRR", type: "Static" });
+    const tasks = mockSheet("Tasks"), links = mockSheet("Links");
+    tasks.data.push(tasks.data.find(r => r[0] === t.id).slice());
+    links.data.push(links.data[1].slice());
+    const linkId = links.data[1][0];
+    const moved = GAS.moveTask(t.id, "advance", { from: "brief", link: "https://example.com/brief" });
+    const out = {
+      said: moved.stage,
+      reread: GAS.getTasks().filter(x => x.createdAt === t.createdAt).map(x => x.id === t.id ? "orig:" + x.stage : "copy:" + x.stage).sort().join(),
+      taskIds: new Set(tasks.data.slice(1).map(r => r[0])).size === tasks.data.length - 1,
+      linkIds: GAS.getLinks().filter(l => l.id === linkId).length === 1 && new Set(links.data.slice(1).map(r => r[0])).size === links.data.length - 1,
+      log: mockSheet("Activity").data.filter(r => r[2] === "Fixed copied row").length,
+    };
+    // A content type typed by hand with a space keeps the task on its step
+    const v = GAS.addTask({ title: "VIDEO CTC ADS NOVEMBER KRR", project: "KRR", type: "Video (Shooting)" });
+    const row = tasks.data.find(r => r[0] === v.id);
+    row[5] = "video (shooting) ";
+    row[10] = "shoot";
+    out.typed = GAS.getTasks().find(x => x.id === v.id).stage;
+    // An ORG / ADS cell emptied by hand: read from the title, so the task stays at Run Ads
+    const a = GAS.addTask({ title: "BRIEF ADS DECEMBER KRR", project: "KRR", type: "Static" });
+    const aRow = tasks.data.find(r => r[0] === a.id);
+    aRow[6] = "";
+    aRow[10] = "ads";
+    const aRead = GAS.getTasks().find(x => x.id === a.id);
+    out.blankChannel = aRead.channel + ":" + aRead.stage;
+    // Clean up
+    tasks.data = tasks.data.filter(r => r[1] !== t.createdAt && r[0] !== v.id && r[0] !== a.id);
+    tasks.save();
+    links.data.pop();
+    links.save();
+    return out;
+  });
+  ok(cp.said === "qcBrief" && cp.reread === "copy:brief,orig:qcBrief", "a step on a task whose row was copied stays saved after a refresh (" + cp.reread + ")");
+  ok(cp.taskIds && cp.linkIds && cp.log === 2, "copied task and link rows get their own ID, written in the Activity log");
+  ok(cp.typed === "shoot", "a content type typed by hand (other case, extra space) keeps the task's step");
+  ok(cp.blankChannel === "ADS:ads", "an emptied ORG / ADS cell is read from the title (the task stays at Run Ads)");
+  // The page is out of date (the task was moved elsewhere): pressing the step says so and shows the task as it is now
+  const stale = await page.evaluate(async () => {
+    await reloadData();
+    const t = state.tasks.find(x => x.stage === "qcBrief");
+    const row = mockSheet("Tasks").data.find(r => r[0] === t.id);
+    const was = row[10];
+    row[10] = "design";
+    await moveTask(t, "advance", {});
+    await new Promise(r => setTimeout(r, 300));
+    const now = state.tasks.find(x => x.id === t.id).stage;
+    row[10] = was;
+    mockSheet("Tasks").save();
+    await reloadData();
+    return { now, toast: $("toast").textContent };
+  });
+  ok(stale.now === "design" && /already updated/.test(stale.toast), "a step pressed on an out-of-date page reloads the tasks by itself");
+
   // Apps Script cuts "//" inside template literals as if it started a comment (write "\/\/" instead)
   const js = fs.readFileSync(path.join(__dirname, "..", "apps-script", "JavaScript.html"), "utf8");
   ok(!(js.match(/`[^`]*`/g) || []).some(t => t.includes("//")), "no // inside template literals (Apps Script would cut the line)");
