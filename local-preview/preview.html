@@ -2461,7 +2461,14 @@ function moveTask_(id, action, opts) {
     });
     const task = all.filter(t => t.id === String(id))[0];
     if (!task || !seesProject_(user_, task.project)) throw new Error('Task not found. It may have been deleted - please refresh the page.');
-    if (opts.from && opts.from !== task.stage) throw new Error('This task was already updated. Please refresh the page.');
+    // Says where the task really is and who moved it last, so a page that is out of date can be explained
+    if (opts.from && opts.from !== task.stage) {
+      const lastMove = task.history[task.history.length - 1] || {};
+      const at = lastMove.at ? Utilities.formatDate(new Date(lastMove.at), getTimeZone_(), 'd MMM HH:mm') : '';
+      throw new Error('This task was already updated: it is now at "' + (task.stage === 'done' ? 'Done' : stageInfo_(task.stage).name) + '"' +
+        (lastMove.by || at ? ' (last change' + (lastMove.by ? ' by ' + lastMove.by : '') + (at ? ', ' + at : '') + ')' : '') +
+        '. The page now shows it as it is.');
+    }
     // Linked Monthly Brief tasks share the project, so the same people may move them
     if (action === 'undo' ? !canUndo_(user_, task) : !canPress_(user_, task)) {
       throw new Error(action === 'undo' ? 'Only the person who made the last move (or managerial) can undo it.'
